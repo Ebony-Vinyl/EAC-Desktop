@@ -14,7 +14,9 @@ const execFileP = promisify(execFile);
 // meta.diffs（每个元素 = { path, oldText, newText }，来自 ctx.fs 写前锁内全文）。
 // 零写入、零格式变更 —— 只读复用官方已落盘的数据，因此对 dsh 升级完全稳定。
 //
-// 另外提供四组 webServer 路由（均仅接受回环地址请求）：
+// 另外提供四组 webServer 路由（均仅接受回环地址请求，且执行前先过内核信任围栏
+// connection.requestRejection —— 本插件注册在 /api 之下的更长前缀，会遮蔽内核
+// 自己的鉴权网关，因此必须自行转交判定）：
 //   GET /api/dsh-files/list?path=...     —— 一层目录列表（「全部文件」树）
 //   GET /dsh-files/static/<绝对路径>     —— 静态文件服务（HTML 站内侧边预览，
 //                                           相对资源引用随 URL 路径自然解析）
@@ -92,6 +94,69 @@ const LIST_ROUTE = "/api/dsh-files/list";
 function isLoopback(req) {
   const ra = req.socket && req.socket.remoteAddress;
   return ra === "127.0.0.1" || ra === "::1" || ra === "::ffff:127.0.0.1";
+}
+
+// ---------------------------------------------------------------------------
+// 内核信任围栏。
+//
+// webServer 按「最长前缀优先」匹配，本插件一旦注册 /api/dsh-files/* ，内核挂在
+// 较短前缀 /api 上的鉴权网关就再也收不到这些请求（register() 自身不附加任何
+// 围栏），于是每条路由都必须自己向内核 connection 服务索取判定结果。
+//
+// 服务在每次请求时现取（不在 apply 时缓存），以便晚绑定的服务能被感知；失败方向
+// 是 fail-closed —— 取不到或调用异常一律 503，绝不静默放行。
+// ---------------------------------------------------------------------------
+
+/** 围栏判定不可得时：503 + 空响应体，不泄露内部信息。 */
+function fenceUnavailable(res) {
+  res.writeHead(503, { "cache-control": "no-store" });
+  res.end();
+  return true;
+}
+
+/**
+ * 取内核 connection 服务。
+ *
+ * 必须用 ctx.get()，不能用 Reflect.get()：cordis 的 Context 是 Proxy，
+ * 通过 Proxy 取服务时要求该服务已写进 inject 声明，否则抛
+ * `cannot get property "..." without inject`。本插件刻意不把 connection 写进
+ * inject（那是硬依赖，宿主缺该服务时 apply 根本不会执行、整个插件不加载），
+ * 所以只能走 ctx.get()：服务在就返回实例，不在就返回 undefined。
+ *
+ * @returns {object|undefined} 服务实例；宿主过旧无 ctx.get 时返回 undefined（走 503）。
+ */
+function connectionOf(ctx) {
+  if (!ctx || typeof ctx.get !== "function") return undefined;
+  return ctx.get("connection");
+}
+
+/** @returns {boolean} true 表示已拒绝并结束响应。 */
+function rejected(ctx, req, res) {
+  let connection;
+  try {
+    connection = connectionOf(ctx);
+  } catch {
+    return fenceUnavailable(res);
+  }
+  if (!connection || typeof connection.requestRejection !== "function") return fenceUnavailable(res);
+  let rejection;
+  try {
+    rejection = connection.requestRejection(req);
+  } catch {
+    return fenceUnavailable(res);
+  }
+  if (rejection === undefined) return false;
+  res.writeHead(rejection, { "cache-control": "no-store" });
+  res.end();
+  return true;
+}
+
+/** 注册前先过围栏：受保护 handler 执行前即可拒绝。 */
+function fenced(ctx, handler) {
+  return (req, res) => {
+    if (rejected(ctx, req, res)) return;
+    return handler(req, res);
+  };
 }
 
 function sendJson(res, status, body) {
@@ -507,12 +572,12 @@ const inject = ["sessionProjections", "webServer"];
 function apply(ctx) {
   ctx.sessionProjections.register(fileChangesProjectionDefinition);
   const disposers = [
-    ctx.webServer.register({ kind: "exact", path: LIST_ROUTE, handler: handleListRoute }),
-    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/ports", handler: handlePortsRoute }),
-    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/check", handler: handleCheckRoute }),
-    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/session-cwd", handler: handleSessionCwdRoute }),
+    ctx.webServer.register({ kind: "exact", path: LIST_ROUTE, handler: fenced(ctx, handleListRoute) }),
+    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/ports", handler: fenced(ctx, handlePortsRoute) }),
+    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/check", handler: fenced(ctx, handleCheckRoute) }),
+    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/session-cwd", handler: fenced(ctx, handleSessionCwdRoute) }),
     // 注意：prefix 不能带尾部斜杠（webserver 按 prefix + "/" 匹配）。
-    ctx.webServer.register({ kind: "prefix", path: STATIC_PREFIX.replace(/\/+$/, ""), handler: handleStaticRoute })
+    ctx.webServer.register({ kind: "prefix", path: STATIC_PREFIX.replace(/\/+$/, ""), handler: fenced(ctx, handleStaticRoute) })
   ];
   return () => { for (const d of disposers) d(); };
 }
