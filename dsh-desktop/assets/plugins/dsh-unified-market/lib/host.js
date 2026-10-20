@@ -232,6 +232,58 @@ function sameOrigin(req) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 内核信任围栏（webServer 按「最长前缀优先」匹配，本插件注册的 /api/dsh-unified-market
+// 与 /api/dsh-market 会遮蔽内核挂在较短前缀 /api 上的鉴权网关；register() 自身不附加
+// 围栏，因此必须自行向内核 connection 服务转交判定）。
+//
+// sameOrigin() 只比较 Origin 与 Host 是否一致：它既不校验 Host 是否可信，也不校验
+// 登录态，因此弱于内核的 requestRejection（Host/Origin 围栏 + 浏览器鉴权），只作为
+// 第二层防御保留。服务每次请求现取；失败方向 fail-closed —— 取不到或异常一律 503。
+// ---------------------------------------------------------------------------
+
+/** 围栏判定不可得时：503 + 空响应体，不泄露内部信息。 */
+function fenceUnavailable(res) {
+  res.writeHead(503, { 'Cache-Control': 'no-store' })
+  res.end()
+  return true
+}
+
+/**
+ * 取内核 connection 服务。
+ *
+ * 必须用 ctx.get()，不能用 Reflect.get()：cordis 的 Context 是 Proxy，通过
+ * Proxy 取服务时要求该服务已写进 inject 声明，否则抛
+ * `cannot get property "..." without inject`。本插件刻意不把 connection 写进
+ * inject（硬依赖会在宿主缺该服务时让 apply 不执行、整个插件不加载），所以走
+ * ctx.get()：服务在就返回实例，不在就返回 undefined。
+ */
+function connectionOf(ctx) {
+  if (!ctx || typeof ctx.get !== 'function') return undefined
+  return ctx.get('connection')
+}
+
+/** @returns {boolean} true 表示已拒绝并结束响应。 */
+function rejected(ctx, req, res) {
+  let connection
+  try {
+    connection = connectionOf(ctx)
+  } catch {
+    return fenceUnavailable(res)
+  }
+  if (!connection || typeof connection.requestRejection !== 'function') return fenceUnavailable(res)
+  let rejection
+  try {
+    rejection = connection.requestRejection(req)
+  } catch {
+    return fenceUnavailable(res)
+  }
+  if (rejection === undefined) return false
+  res.writeHead(rejection, { 'Cache-Control': 'no-store' })
+  res.end()
+  return true
+}
+
 function sendJson(res, status, obj) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' })
   res.end(JSON.stringify(obj))
@@ -1945,6 +1997,7 @@ export function apply(ctx) {
   // 统一市场主路径；并兼容注册底座遗留的 /api/dsh-market（防旧引用）。
   // 客户端统一走 /api/dsh-unified-market。
   const routeHandler = async (req, res) => {
+      if (rejected(ctx, req, res)) return
       try {
         const body = await readBody(req)
         const method = String(body.method || '')
