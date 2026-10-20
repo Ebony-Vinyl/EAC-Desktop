@@ -52,30 +52,46 @@
 - NSIS 与便携包都要验证真实目录结构。
 - 不能只验证 `target/release`，必须验证安装后或解压后的运行树。
 - **体积与裁剪预算见 [ADR 0011](../../../../docs/adr/0011-packaging-budget-and-trimming.md)**：
-  lite ≤ 260 MB / ≤ 20000 文件，full ≤ 1.1 GB / ≤ 40000 文件。改产物形态前先读该 ADR。
+  lite ZIP ≤ 260 MiB / ≤ 20000 文件，full ZIP ≤ 1.1 GiB / ≤ 40000 文件。
+  文件数按普通文件计、不计目录；安装载荷树也执行文件数预算，Setup 大小另行记录。
+  改产物形态前先读该 ADR；新规则尚待实现，不能把文档更新视为产物验收通过。
 
 ### 体积红线
 
-- **WebView2 不得随包。** 只允许 `downloadBootstrapper`（默认）、`offlineInstaller`
-  （+127 MB，可断网）或 `fixedRuntime`（+180 MB，Tauri 原生模式）。
-  禁止「`skip` + 手工拷固定版运行时目录」—— 那条路径只搬文件不接线，
-  6.0.1 因此白占 294.7 MB（wry 传 `PCWSTR::null()`，永远用系统运行时）。
-- **平台裁剪三平台对称。** `stage-resources.mjs` 的 `linux` / `darwin` 分支各自
-  裁剪跨平台 payload，`win32` 分支曾长期缺失，实测 Windows 产物夹带 48 个
-  异平台 prebuilds（15.92 MB），其中 `node-pty/prebuilds/win32-arm64` 单目录 11.22 MB。
+- **默认使用系统 WebView2，禁止携带未接线的副本。** 安装版默认
+  `downloadBootstrapper`，也可用 `embedBootstrapper` 或离线安装器 `offlineInstaller`。
+  这些安装器行为不会在便携版直接启动时执行：默认便携版要求系统已安装兼容运行时，
+  必须提供使用说明和不依赖 WebView 的缺失提示。固定版例外须配置 `fixedRuntime`，
+  验证安装树及便携树实际使用随包运行时，并实测体积；不自动豁免预算。
+- **平台裁剪三平台分别验收。** 当前 Windows 装配缺少对称的裁剪分支，
+  历史源树含 48 个异平台 prebuilds（15.92 MB）。各平台保留实际目标的
+  `${targetPlatform}-${arch}`，核对二进制格式与架构；未知项先报告核对，不猜测删除。
 - **`assertNoUnexpectedNativePlatform` 只看包名**，对包内 `prebuilds/` 子目录无效，
-  不能当作平台裁剪的替代品。
-- **死重文件不进 staged 树**：`.d.ts` / `.map` / `.md` 直接排除；`.ts` 仅当未被
-  `exports` 引用时排除（当前 13 处例外）。裁剪只作用于 staging，不改源树。
+  不能替代平台裁剪或原生模块加载验证。
+- **裁剪先保护运行资产。** `.md` 不得全删，必须保留技能正文、引用资源及其他
+  文件系统读取的资产。声明文件、sourcemap 也先检查必需项和随包工具的读取需求；
+  只删除已确认无用的路径，未知用途先保留。
+- **TypeScript 保留完整依赖闭包。** 解析所有导出条件及通配符，并保留入口的内部
+  导入、导出及资源；无法准确分析时保留对应源码目录，不能只保留旧扫描的 13 个入口。
+- **用途与扩展名裁剪仅作用于 staged `dsh-desktop/node_modules`。** 不修改源依赖树、
+  Pack 源仓库，也不把该规则套到插件资产或 `vendor/`；平台资源另按目标裁剪。
+  三平台资源与 Lite 重复供给不能据此从 Pack 源仓库删除。
+- **复制计数通过不等于功能完整。** 独立验证 Office / ACL 技能注册及正文读取、Badge
+  调用和 TypeScript 入口加载，并用误删夹具证明检查能报错。不能要求整个 staged 树
+  的 Markdown 归零，也不能用内核插件总数等于随包目录数代替逐插件状态核对。
+- **预算检查必须共用仓库内实现。** 仓库内便携入口、任务根 Lite 脚本、Full 及安装包
+  验收都要接入；超限阻止发布，缺少某个入口的检查记录即未验收。
+  字节阈值和最终运行树计量详见 ADR §4；旧稿 193 MB / 17124 文件的预测已撤回。
 
 ### 编排脚本必须从配置派生
 
 任务根的 `make-lite-staged.mjs` / `make-portable-lite.mjs` / `bundle-lite.mjs`
 **在仓库外，`npm test` 覆盖不到**，因此更容易腐化。它们不得硬编码：
 
-- `tauri.conf.json` 的 `bundle.resources` 键集
-- 随包内置插件数（`BUILTIN_PLUGIN_DIRS` 长度）
-- 资源目录清单（`LITE_RESOURCE_DIRS`）
+- 合并目标配置后的实际资源映射，不断言固定项数
+- 随包内置插件数（从 `BUILTIN_PLUGIN_DIRS` 权威清单读取）
+- 从资源映射及产品排除规则派生的目录清单，差异必须报告，不能只取交集
+- WebView2 模式对应的资源要求，系统运行时方案不强制存在固定版目录
 
 硬编码的代价已经发生过一次：代码把 WebView2 去掉、builtin 从 9 改到 10 之后，
 四处断言全部失效，构建链第一步就断，而没有任何测试能提前发现。
