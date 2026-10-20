@@ -72,4 +72,6 @@ updates/
 # verify-delete-session.js 运行产物
 tmp-verify-delete/
 
-vendor/
+# 只忽略仓库根的 vendor/（该目录不存在时为空转）。锚定以避免连带忽略
+# dsh-desktop/assets/plugins/*/vendor/（插件随包资产，须可入库）。
+/vendor/
