@@ -72,6 +72,7 @@ test('装配清单只包含当前运行闭包与构建期职责', () => {
     LIB_DESKTOP: [
       'proc.js', 'platform.js', 'runtime-paths.js', 'environment.js', 'profile.js',
       'runtime-patches.js', 'boot-server.js',
+      'client-update.js', 'update-sources.js', 'update-signature.js', 'update-platform.js', 'update-linux.js', 'update-linux-root.js', 'update-linux-helper.js', 'update-appimage.js', 'update-appimage-helper.js',
       // Task 3.3 三件套 + lib/desktop 依赖
       'guard-box.js', 'companion-sync.js', 'plugin-ops.js',
       'install-profile.js', 'plugin-sync-registry.js',
@@ -79,6 +80,7 @@ test('装配清单只包含当前运行闭包与构建期职责', () => {
     LIB_VNEXT: ['atomic-json.js', 'plugin-copy.js'],
     SCRIPTS: ['patch-session-manage.js', 'patch-deps.js', 'onboarding.js', 'plugin-manager-patch.js'],
   };
+  assert.ok(lists.ROOT_FILES.includes('client-update-defaults.json'), '发布信任根必须随包装配');
   for (const [listName, required] of Object.entries(mustHave)) {
     for (const entry of required) {
       assert.ok(lists[listName].includes(entry), `${listName} 缺少必需项 ${entry}`);
@@ -90,7 +92,7 @@ test('装配清单只包含当前运行闭包与构建期职责', () => {
   for (const dead of retiredRoot) {
     assert.ok(!lists.ROOT_FILES.includes(dead), `${dead} 不得出现在 ROOT_FILES`);
   }
-  const retiredDesktop = ['client-update.js', 'market.js', 'feature-pack.js',
+  const retiredDesktop = ['market.js', 'feature-pack.js',
     'shortcuts.js', 'static-preview.js', 'junction-patrol.js'];
   for (const dead of retiredDesktop) {
     assert.ok(!lists.LIB_DESKTOP.includes(dead), `${dead} 不得出现在 LIB_DESKTOP`);
@@ -136,4 +138,8 @@ test('generated plugin registry is included in the staged desktop runtime', () =
   const lists = stageLists();
   assert.ok(lists.LIB_DESKTOP.includes('plugin-sync-registry.js'),
     'plugin-sync-registry.js 必须装配（companion-sync 的生成注册表依赖）');
+});
+
+test('staging replays the owned session patch before generating the package integrity manifest',()=>{
+ const source=fs.readFileSync(join(stageRoot,'stage-resources.mjs'),'utf8');const session=source.indexOf("execSync('node scripts/patch-session-manage.js'");const manifest=source.indexOf('bi.buildBundleManifest(nmDest)');assert.ok(session>=0&&manifest>session);
 });

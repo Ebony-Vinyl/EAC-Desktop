@@ -1,6 +1,6 @@
 [package]
 name = "dsh-eac-tauri-shell"
-version = "6.0.0"
+version = "6.1.0"
 description = "Deepseek Harness EAC — Tauri ShellHost PoC (ADR 0002 L1)"
 edition = "2021"
 

@@ -183,9 +183,9 @@ test('SYNC-007: masterless faces must not regress（官方无此面的键一律�
     '__DSH_LOCALE__.read must remain (replaces locale())');
   assert.equal(typeof window.__DSH_HOST_PATHS__?.pathFor, 'function',
     '__DSH_HOST_PATHS__.pathFor must remain (replaces getPathForFile)');
-  // updates 面恰为官方三方法，open 保持退役 reject。
+  // updates 面恰为官方三方法，open 接回受控壳页。
   assert.deepEqual(Object.keys(dsh.updates).sort(), ['open', 'status', 'subscribe']);
-  await assert.rejects(dsh.updates.open(), /capability "client-update"/);
+  assert.equal(await dsh.updates.open(), undefined);
 });
 
 test('KERN-004: deviceInfo returns the official 0.2.0 machine-description form', async () => {
@@ -607,7 +607,7 @@ test('rc.2 settings update consumer can initialize with the desktop bridge', asy
   assert.equal(consumer.store.getSnapshot().presentation.phase, 'idle');
   assert.equal(consumer.store.getSnapshot().failed, false);
   assert.equal(typeof updates.open, 'function');
-  await assert.rejects(updates.open(), /capability "client-update"/);
+  assert.equal(await updates.open(), undefined);
   assert.equal(updates.check, undefined,
     'updates.check must stay removed（SYNC-007：官方无此面，消费者仅用 status/subscribe/open）');
   consumer.dispose();
@@ -620,13 +620,13 @@ test('SYNC-005: shortcuts namespace locked to the official DesktopShortcutsApi c
   assert.match(bridge, /\bshortcuts: \{/, 'bridge must expose window.dshDesktop.shortcuts（官方 ipc.ts:75 同名同层）');
   assert.deepEqual([...bridgeTree.shortcuts].sort(), ['edit', 'get', 'recording', 'subscribe'],
     `shortcuts namespace drift: ${bridgeTree.shortcuts.join(',')}`);
-  // updates 键面不漂移：真实 status/subscribe（SYNC-005）+ 退役 open；
+  // updates 键面不漂移：真实 status/subscribe（SYNC-005）+ 受控更新页 open；
   // 无主面 check/install 已由 SYNC-007 删除（官方 updates 恰为三方法）。
   assert.deepEqual([...bridgeTree.updates].sort(), ['open', 'status', 'subscribe'],
     `updates namespace drift: ${bridgeTree.updates.join(',')}`);
-  // updates.open 退役语义锁定（不得改回任何实现形态）。
-  assert.match(bridge, /open: function \(\) \{ return unavailable\('client-update'\); \}/,
-    'updates.open must stay retired (unavailable reject)');
+  // updates.open uses the official three-method contract.
+  assert.match(bridge, /open: function \(\) \{ return call\('updates.open'/,
+    'updates.open must open the shell-owned update window');
 });
 
 test('SYNC-005: shortcuts bridge round-trips snapshots and links the keyboard revision', async () => {
@@ -792,8 +792,9 @@ test('SYNC-005: updates status/subscribe carry the real presentation stream', as
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.ok(calls.some((c) => c.method === 'updates.unsubscribe'), 'last unsubscribe must stop the sidecar watcher');
 
-  // open：退役语义（原生更新主面未接回），保持 reject。
-  await assert.rejects(updates.open(), /capability "client-update"/);
+  // open opens the native update window without exposing install commands.
+  assert.equal(await updates.open(), undefined);
+  assert.ok(calls.some((c) => c.method === 'updates.open'));
 });
 
 // ---------------------------------------------------------------------------
@@ -997,3 +998,18 @@ test('SYNC-006: browser bridge round-trips real leases, disposer semantics, and 
   assert.ok(events.includes('destroyed'), 'guest-destroyed frame must dispatch the destroyed event');
 });
 
+
+test('update window cannot drive main window chrome or viewport repair',async()=>{
+  const sent: string[]=[];const domReady: Array<()=>void>=[];let intervals=0;
+  const window:any={__DSH_WINDOW_LABEL__:'client-update',addEventListener(){},__DSH_WS_RPC__:()=>({
+    onNotify(){},send:(method:string)=>sent.push(method),call:async()=>({}),
+  })};
+  runInNewContext(stripTypeScriptTypes(bridge),{window,
+    document:{readyState:'loading',documentElement:{setAttribute(){}},addEventListener:(event:string,fn:()=>void)=>{if(event==='DOMContentLoaded')domReady.push(fn);}},
+    navigator:{platform:'Win32',userAgent:''},setInterval(){intervals++;},setTimeout(){},
+  });
+  for(const fn of domReady)fn();
+  assert.equal(intervals,0);assert.ok(!sent.includes('win.viewport-beat'));
+  assert.equal(typeof window.dshDesktop.updates.open,'function');
+  assert.equal(typeof window.__DSH_DIRECTORY_PICKER__.pick,'function');
+});

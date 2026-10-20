@@ -223,8 +223,8 @@ test('preflight 在 PREINSTALL 内、写入与接管之前 fail-closed 执行', 
   const body = hook[0];
   assert.match(body, /!insertmacro\s+DSH_InstallLocationGuard/, 'PREINSTALL 须先校验安装位置');
   const guard = body.indexOf('DSH_InstallLocationGuard');
-  const kill = body.indexOf('DSH_KillAppExe');
-  assert.ok(guard >= 0 && kill > guard, '校验必须先于进程终结/接管（写入前 fail-closed）');
+  const closed = body.indexOf('DSH_RequireClosed');
+  assert.ok(guard >= 0 && closed > guard, '路径校验必须先于目标实例检查与接管');
   assert.match(nsh, /!macro\s+DSH_InstallLocationGuard[\s\S]*?SetErrorLevel\s+2[\s\S]*?Quit[\s\S]*?!macroend/,
     '校验失败须以错误码退出（官方 InstallerBeforeInstall 语义）');
   assert.match(nsh, /MessageBox\s+MB_ICONEXCLAMATION\s+"\$DshLocationError"\s+\/SD\s+IDOK/,

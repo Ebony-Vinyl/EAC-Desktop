@@ -53,12 +53,21 @@ mod native_devtools;
 #[cfg(any(windows, test))]
 mod webview_recovery;
 
+#[cfg(any(windows, target_os = "linux", test))]
+mod update_startup;
+static UPDATE_PREPARING: AtomicBool = AtomicBool::new(false);
+static EXIT_CLEANUP_STARTED: AtomicBool = AtomicBool::new(false);
+static EXIT_CLEANUP_COMPLETE: AtomicBool = AtomicBool::new(false);
+static UPDATE_HEALTH_PENDING: AtomicBool = AtomicBool::new(false);
+static UPDATE_SAFE_EXIT: AtomicBool = AtomicBool::new(false);
+static UPDATE_BOOT_CHECKPOINT: std::sync::Mutex<Option<Value>> = std::sync::Mutex::new(None);
+
 const BRIDGE_JS: &str = include_str!(concat!(env!("OUT_DIR"), "/bridge-bundle.js"));
 const WS_PORT: u16 = 19873;
 
 // 安装环境隔离（ADR 0004）：产品数据根名 + 默认发布通道。
 const EAC_PRODUCT_NAME: &str = "Deepseek Harness EAC";
-const DEFAULT_EAC_CHANNEL: &str = "beta";
+const DEFAULT_EAC_CHANNEL: &str = "stable";
 
 // The manager path is the v6 default. DSH_UI_SKIN_MANAGER_ROLLBACK is a
 // one-release emergency switch for operators; it only selects the embedded fallback
@@ -138,6 +147,13 @@ fn bridge_init_script() -> String {
         skin_css,
         manager,
         BRIDGE_JS,
+    )
+}
+
+fn update_bridge_init_script() -> String {
+    format!(
+        "window.__DSH_WINDOW_LABEL__='client-update';\nwindow.__DSH_BRIDGE_WS__='ws://127.0.0.1:{}/ws';\n{}",
+        ws_port(), BRIDGE_JS,
     )
 }
 
@@ -959,7 +975,17 @@ fn trace_window_state(message: impl std::fmt::Display) {
     }
 }
 
+fn validated_storage_override(value: Option<PathBuf>) -> Result<Option<PathBuf>, &'static str> {
+    if value.as_ref().is_some_and(|path| !path.is_absolute()) {return Err("update-storage-override-invalid");}
+    Ok(value)
+}
+
+fn explicit_storage_dir(name: &str) -> Option<PathBuf> {
+    validated_storage_override(std::env::var_os(name).map(PathBuf::from)).ok().flatten()
+}
+
 fn window_state_path(app: &tauri::AppHandle) -> Option<PathBuf> {
+    if let Some(root) = explicit_storage_dir("DSH_EAC_SHELL_CONFIG_DIR") {return Some(root.join("window-state.json"));}
     use tauri::Manager;
     let original = app.path().app_config_dir();
     if let Some(dir) = window_state_audit_dir() {
@@ -2050,8 +2076,14 @@ fn resolve_node() -> String {
     executable.to_string()
 }
 
+fn is_long_update_rpc(method: &str) -> bool {
+    ["client-update.prepare", "client-update.download"].contains(&method)
+}
+
 fn sidecar_rpc_timeout_secs(method: &str, params: &Value) -> u64 {
-    if method == "guard.action" && params.get("action").and_then(Value::as_str) == Some("restore") {
+    if is_long_update_rpc(method) {
+        1800
+    } else if method == "guard.action" && params.get("action").and_then(Value::as_str) == Some("restore") {
         650
     } else {
         180
@@ -2076,6 +2108,9 @@ mod restore_rpc_timeout_tests {
             180
         );
         assert_eq!(sidecar_rpc_timeout_secs("guard.action", &Value::Null), 180);
+        assert_eq!(sidecar_rpc_timeout_secs("client-update.prepare", &Value::Null),1800);
+        assert_eq!(sidecar_rpc_timeout_secs("client-update.download", &Value::Null),1800);
+        assert_eq!(sidecar_rpc_timeout_secs("client-update.cancel", &Value::Null),180);
     }
 }
 
@@ -2091,7 +2126,7 @@ struct Sidecar {
 }
 
 impl Sidecar {
-    async fn spawn() -> Result<Self, String> {
+    async fn spawn(app: Option<&tauri::AppHandle>) -> Result<Self, String> {
         let node = resolve_node();
         let script = sidecar_script();
         eprintln!(
@@ -2100,6 +2135,13 @@ impl Sidecar {
             script.display()
         );
         let mut cmd = Command::new(&node);
+        if !UPDATE_HEALTH_PENDING.load(Ordering::SeqCst) {
+            // A sidecar restarted after health acceptance must not re-enter the
+            // already committed transaction through the shell's inherited env.
+            for name in ["DSH_EAC_UPDATE_TRANSACTION_DIR", "DSH_EAC_UPDATE_HEALTH_TOKEN", "DSH_EAC_UPDATE_HEALTH_BOOT"] {
+                cmd.env_remove(name);
+            }
+        }
         cmd.arg(&script)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -2120,12 +2162,32 @@ impl Sidecar {
         }
         // 壳进程 PID：便携自更新助手的等待目标（等待壳退出后做目录树交换）。
         cmd.env("DSH_SHELL_PID", std::process::id().to_string());
+        cmd.env("DSH_SHELL_VERSION", env!("CARGO_PKG_VERSION"));
         cmd.env("DSH_RESOURCE_ROOT", resource_root());
         // 安装环境隔离（ADR 0004）：正式壳启动始终注入隔离根 —— 只给产品数据根
         // 与通道，dpx 的 storageRoot/环境名/环境根由 L2 调 dsh-dpx 推导。
         let channel = eac_channel();
         cmd.env("DSH_EAC_DATA_ROOT", eac_data_root());
-        cmd.env("DSH_EAC_CHANNEL", channel);
+        cmd.env("DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL", channel);
+        // A release default must not impersonate an explicit environment choice.
+        // L2 resolves the persisted binding and dpx's existing beta identity first.
+        if let Some(app) = app {
+            use tauri::Manager;
+            let webview = std::env::var_os("DSH_EAC_WEBVIEW_DATA_DIR")
+                .map(PathBuf::from)
+                .or_else(|| app.path().app_local_data_dir().ok());
+            if let Some(root) = webview {
+                cmd.env("DSH_SHELL_WEBVIEW_ROOT", root);
+            }
+            if let Some(file) = window_state_path(app) {
+                if let Some(parent) = file.parent() {
+                    cmd.env("DSH_SHELL_CONFIG_ROOT", parent);
+                }
+            }
+            if let Some(root) = browser_guest_root(app) {
+                cmd.env("DSH_SHELL_GUEST_ROOT", root);
+            }
+        }
         let mut child = cmd
             .spawn()
             .map_err(|e| format!("spawn node({}) failed: {}", node, e))?;
@@ -2576,15 +2638,20 @@ fn browser_partition_for_workspace(workspace: &str) -> String {
 
 /// guest 用户数据目录：<app_data_dir>/browser-guests/<名称>。
 fn browser_guest_data_dir(app: &tauri::AppHandle, dir_name: &str) -> Option<PathBuf> {
+    browser_guest_root(app).map(|root| root.join(dir_name))
+}
+
+fn browser_guest_root(app: &tauri::AppHandle) -> Option<PathBuf> {
     use tauri::Manager;
+    if let Some(root) = explicit_storage_dir("DSH_EAC_GUEST_DATA_DIR") {return Some(root);}
     // Keep audit guest profiles inside the same debug-only isolated root.
     if let Some(base) = window_state_audit_dir() {
-        return Some(base.join("browser-guests").join(dir_name));
+        return Some(base.join("browser-guests"));
     }
     app.path()
         .app_data_dir()
         .ok()
-        .map(|base| base.join("browser-guests").join(dir_name))
+        .map(|base| base.join("browser-guests"))
 }
 
 /// 应用自身源判定（隔离策略第二条款：guest 绝不承载内核 Web UI）。
@@ -2887,6 +2954,32 @@ async fn handle_shell_method(
             .to_string()
     };
     match method {
+        "updates.open" => {
+            if let Some(window) = app.get_webview_window("client-update") {
+                let _ = window.show();
+                let _ = window.set_focus();
+                return Ok(Some(reply(serde_json::json!({"ok": true}))));
+            }
+            let url = tauri::Url::parse(&format!("http://127.0.0.1:{}/client-update", ws_port()))
+                .map_err(|_| ())?;
+            let mut builder = tauri::webview::WebviewWindowBuilder::new(
+                app,
+                "client-update",
+                tauri::WebviewUrl::External(url),
+            )
+            .title(ui_text("客户端更新", "Client updates"))
+            .inner_size(760.0, 740.0)
+            .min_inner_size(520.0, 500.0)
+            .initialization_script(&update_bridge_init_script());
+            if let Some(directory) = std::env::var_os("DSH_EAC_WEBVIEW_DATA_DIR") {
+                builder = builder.data_directory(PathBuf::from(directory));
+            }
+            let result = builder.build();
+            Ok(Some(match result {
+                Ok(_) => reply(serde_json::json!({"ok": true})),
+                Err(_) => reply_error("update-window-unavailable".to_string()),
+            }))
+        }
         "win.minimize" => {
             if let Some(w) = app.get_window("main") {
                 let _ = w.minimize();
@@ -3552,6 +3645,29 @@ fn apply_window_icon(win: &tauri::WebviewWindow, app: &tauri::AppHandle) {
 ///     （127.0.0.1 / localhost / [::1] / tauri.localhost，WebView2 的
 ///     tauri 源与内核 web 源均落在这些名下）；
 ///   - Host 头同理校验（防 DNS rebinding 把外部域名解析到回环后命中本桥）。
+fn update_origin_allowed(head_lower: &str, port: u16) -> bool {
+    head_lower
+        .lines()
+        .find_map(|line| line.strip_prefix("origin:"))
+        .and_then(|origin| tauri::Url::parse(origin.trim()).ok())
+        .is_some_and(|origin| {
+            origin.scheme() == "http"
+                && origin.host_str() == Some("127.0.0.1")
+                && origin.port() == Some(port)
+        })
+}
+
+fn update_rpc_origin_allowed(method: &str, head_lower: &str, port: u16) -> bool {
+    if update_origin_allowed(head_lower, port) {
+        return true;
+    }
+    ["client-update.ui-checkpoint", "client-update.ui-restore-checkpoint"].contains(&method)
+        && head_lower
+            .lines()
+            .find_map(|line| line.strip_prefix("origin:"))
+            .is_some_and(|origin| is_app_origin_url(origin.trim()))
+}
+
 fn ws_handshake_allowed(head_lower: &str) -> bool {
     if !head_lower.contains("\r\n\r\n") {
         return false;
@@ -3588,7 +3704,27 @@ fn ws_handshake_allowed(head_lower: &str) -> bool {
 
 #[cfg(test)]
 mod ws_handshake_tests {
-    use super::ws_handshake_allowed;
+    use super::{update_origin_allowed, ws_handshake_allowed};
+
+    #[test]
+    fn update_commands_require_the_exact_shell_origin() {
+        assert!(update_origin_allowed(
+            "origin: http://127.0.0.1:19873\r\n",
+            19873
+        ));
+        for origin in [
+            "http://127.0.0.1:19874",
+            "http://localhost:19873",
+            "https://evil.example",
+            "null",
+        ] {
+            assert!(!update_origin_allowed(
+                &format!("origin: {origin}\r\n"),
+                19873
+            ));
+        }
+        assert!(!update_origin_allowed("get /ws http/1.1\r\n", 19873));
+    }
 
     #[test]
     fn allows_loopback_origins_and_missing_origin() {
@@ -3828,6 +3964,9 @@ async fn handle_conn(
         let _ = out_tx.send(Message::Text(frame));
     }
 
+    // Update preparation can take minutes. Its wait must not block this socket's
+    // status/cancel requests; the L2 controller still owns operation serialization.
+    let long_update_pending = Arc::new(AtomicBool::new(false));
     while let Some(msg) = source.next().await {
         let msg = match msg {
             Ok(m) => m,
@@ -3844,6 +3983,15 @@ async fn handle_conn(
                 .unwrap_or("")
                 .to_string();
             let params = req.get("params").cloned().unwrap_or(Value::Null);
+            // Installation commands belong exclusively to the shell's own origin.
+            if method.starts_with("client-update.")
+                && !update_rpc_origin_allowed(&method, &head.to_lowercase(), ws_port())
+            {
+                let denied = serde_json::json!({"jsonrpc":"2.0", "id":id,
+                    "error":{"code":-32000,"message":"update-shell-origin-required"}});
+                let _ = out_tx.send(Message::Text(denied.to_string()));
+                continue;
+            }
             // 1) 壳层域：本地拦截（窗口/菜单壳动作/日志 send 帧）。
             match handle_shell_method(&app, &method, &params, &id).await {
                 Ok(Some(reply)) => {
@@ -3873,7 +4021,7 @@ async fn handle_conn(
                         let mut slot = state.sidecar.lock().await;
                         match slot.clone() {
                             Some(cur) if !Arc::ptr_eq(&cur, &s) => Some(cur),
-                            _ => match Sidecar::spawn().await {
+                            _ => match Sidecar::spawn(Some(&app)).await {
                                 Ok(fresh) => {
                                     wire_sidecar_notifications(&app, &fresh);
                                     let fresh = Arc::new(fresh);
@@ -3891,17 +4039,25 @@ async fn handle_conn(
                 }
                 None => None,
             };
-            let reply = match sc {
-                Some(sc) => match sc.call(&method, params).await {
-                    Ok(result) => serde_json::json!({"jsonrpc":"2.0","id":id,"result":result}),
-                    Err(e) => {
-                        serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":e}})
-                    }
-                },
-                None => {
-                    serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":"sidecar not running"}})
+            if is_long_update_rpc(&method) {
+                if long_update_pending.swap(true, Ordering::SeqCst) {
+                    let reply = serde_json::json!({"jsonrpc":"2.0","id":id,
+                        "error":{"code":-32000,"message":"update-operation-busy"}});
+                    let _ = out_tx.send(Message::Text(reply.to_string()));
+                    continue;
                 }
-            };
+                let pending = long_update_pending.clone();
+                let tx = out_tx.clone();
+                // Let the reply settle even if the page disconnects. Dropping a
+                // socket cannot cancel an installation after helper commitment.
+                tauri::async_runtime::spawn(async move {
+                    let reply = forward_sidecar_reply(sc, &method, params, id).await;
+                    pending.store(false, Ordering::SeqCst);
+                    let _ = tx.send(Message::Text(reply.to_string()));
+                });
+                continue;
+            }
+            let reply = forward_sidecar_reply(sc, &method, params, id).await;
             let _ = out_tx.send(Message::Text(reply.to_string()));
         }
     }
@@ -3916,6 +4072,16 @@ async fn handle_conn(
     }
     writer_task.abort();
     Ok(())
+}
+
+async fn forward_sidecar_reply(sc: Option<Arc<Sidecar>>, method: &str, params: Value, id: Value) -> Value {
+    match sc {
+        Some(sc) => match sc.call(method, params).await {
+            Ok(result) => serde_json::json!({"jsonrpc":"2.0","id":id,"result":result}),
+            Err(error) => serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":error}}),
+        },
+        None => serde_json::json!({"jsonrpc":"2.0","id":id,"error":{"code":-32000,"message":"sidecar not running"}}),
+    }
 }
 
 /// Skin assets are loaded control first, then the bound style package.
@@ -4320,7 +4486,12 @@ fn shell_http_status(path: &str) -> u16 {
             404
         };
     }
-    if route == "/" || route == "/inject/bridge.js" || route == "/loading" || route == "/died" {
+    if route == "/"
+        || route == "/inject/bridge.js"
+        || route == "/loading"
+        || route == "/died"
+        || route == "/client-update"
+    {
         200
     } else if route
         .strip_prefix("/skin/")
@@ -4378,6 +4549,11 @@ async fn http_serve(mut stream: TcpStream, path: &str) -> std::io::Result<()> {
                 .to_string(),
             "text/html; charset=utf-8",
         )
+    } else if path.split('?').next() == Some("/client-update") {
+        (
+            include_str!("client-update.html").to_string(),
+            "text/html; charset=utf-8",
+        )
     } else if path.starts_with("/loading") {
         (loading_page(), "text/html; charset=utf-8")
     } else if path.starts_with("/died") {
@@ -4421,7 +4597,7 @@ fn run_bridge_test() -> i32 {
         .build()
         .expect("tokio runtime");
     let code = rt.block_on(async move {
-        let sc = match Sidecar::spawn().await {
+        let sc = match Sidecar::spawn(None).await {
             Ok(s) => s,
             Err(e) => {
                 eprintln!("[bridge] FAIL spawn: {}", e);
@@ -4443,6 +4619,16 @@ fn run_bridge_test() -> i32 {
                 "profile.name",
                 serde_json::json!({}),
                 Box::new(|r: &Value| r.get("name") == Some(&serde_json::json!("web-desktop"))),
+            ),
+            (
+                "updates.status",
+                serde_json::json!({}),
+                Box::new(|r: &Value| r.get("phase") == Some(&serde_json::json!("idle"))),
+            ),
+            (
+                "client-update.settings",
+                serde_json::json!({}),
+                Box::new(|r: &Value| r.get("releaseChannel") == Some(&serde_json::json!("stable"))),
             ),
         ];
         let mut ok = 0;
@@ -4610,9 +4796,69 @@ fn wire_sidecar_notifications(app: &tauri::AppHandle, sc: &Sidecar) {
 }
 
 fn handle_sidecar_notify(app: &tauri::AppHandle, v: &Value) {
+    use tauri::Manager;
     let method = v.get("method").and_then(|m| m.as_str()).unwrap_or("");
     let params = v.get("params").cloned().unwrap_or(Value::Null);
     match method {
+        "update.ui-freeze" => {
+            UPDATE_PREPARING.store(true, Ordering::SeqCst);
+            if let Some(nonce) = params.get("nonce").and_then(Value::as_str) {
+                if nonce.len() == 64 && nonce.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+                    if let Some(view) = app.get_webview("main") {
+                        let encoded = serde_json::to_string(nonce).unwrap_or_default();
+                        let _ = view.eval(&format!(
+                            "{}({});",
+                            include_str!("update-ui-checkpoint.js"),
+                            encoded
+                        ));
+                    }
+                }
+            }
+        }
+        "update.ui-release" => {
+            UPDATE_PREPARING.store(false, Ordering::SeqCst);
+            if let Some(view) = app.get_webview("main") {
+                let _ = view.eval("window.__EAC_UPDATE_UI__ && window.__EAC_UPDATE_UI__.release()");
+            }
+        }
+        "update.boot-ui-checkpoint" => {
+            if let Ok(mut checkpoint) = UPDATE_BOOT_CHECKPOINT.lock() {*checkpoint = Some(params.clone());}
+            if let Some(view) = app.get_webview("main") {
+                let encoded = params.to_string();
+                let _ = view.eval(&format!("{}({});", include_str!("update-boot-ui.js"), encoded));
+            }
+        }
+        "update.boot-accepted" => {
+            UPDATE_HEALTH_PENDING.store(false, Ordering::SeqCst);
+            if let Ok(mut checkpoint) = UPDATE_BOOT_CHECKPOINT.lock() {*checkpoint = None;}
+            if let Some(view) = app.get_webview("main") {let _ = view.eval("window.__EAC_UPDATE_BOOT__ && window.__EAC_UPDATE_BOOT__.release()");}
+        }
+        "update.safe-exit" => {
+            UPDATE_PREPARING.store(true, Ordering::SeqCst);
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let Some(state) = BRIDGE.get() else {return};
+                let sc = state.sidecar.lock().await.clone();
+                let Some(sc) = sc else {return};
+                SIDECAR_STOPPING.store(true, Ordering::SeqCst);
+                let confirmed = tokio::time::timeout(std::time::Duration::from_secs(30), sc.call("shutdown", serde_json::json!({}))).await;
+                if !matches!(confirmed, Ok(Ok(_))) {eprintln!("[update] sidecar shutdown unconfirmed");return;}
+                let started = std::time::Instant::now();
+                while started.elapsed() < std::time::Duration::from_secs(30) {
+                    match sc.child.lock().await.try_wait() {
+                        Ok(Some(status)) if status.success() => {
+                            *state.sidecar.lock().await = None;
+                            UPDATE_SAFE_EXIT.store(true, Ordering::SeqCst);
+                            app.exit(0);return;
+                        }
+                        Ok(Some(_)) | Err(_) => {eprintln!("[update] sidecar exit failed");return;}
+                        Ok(None) => {}
+                    }
+                    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+                }
+                eprintln!("[update] sidecar remains alive; install will not proceed");
+            });
+        }
         "boot.web-ready" => {
             if let Some(url) = params.get("webUrl").and_then(|u| u.as_str()) {
                 set_current_web_url(url);
@@ -4692,6 +4938,36 @@ fn handle_sidecar_notify(app: &tauri::AppHandle, v: &Value) {
 }
 
 fn main() {
+    for name in ["DSH_EAC_SHELL_CONFIG_DIR", "DSH_EAC_GUEST_DATA_DIR", "DSH_EAC_WEBVIEW_DATA_DIR"] {
+        if let Err(error) = validated_storage_override(std::env::var_os(name).map(PathBuf::from)) {eprintln!("[update] {error}");std::process::exit(1);}
+    }
+    UPDATE_HEALTH_PENDING.store(std::env::var_os("DSH_EAC_UPDATE_HEALTH_TOKEN").is_some(), Ordering::SeqCst);
+    #[cfg(windows)] {
+        if let Ok(exe) = std::env::current_exe() {
+            match update_startup::gate(&exe, env!("CARGO_PKG_VERSION")) {
+                Ok(mode) if mode == "recovering" => {std::process::exit(0);}
+                Ok(_) => {}
+                Err(error) => {
+                    eprintln!("[update] startup refused: {error}");
+                    if !UPDATE_HEALTH_PENDING.load(Ordering::SeqCst) {
+                        if let Ok(info) = update_startup::repair_info(&exe, env!("CARGO_PKG_VERSION")) {
+                            if let Err(error) = update_startup::show_repair_dialog(&info, shell_prefers_chinese()) {eprintln!("[update] {error}");}
+                        }
+                    }
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+    #[cfg(target_os = "linux")] {
+        if std::env::var_os("APPIMAGE").is_some() || UPDATE_HEALTH_PENDING.load(Ordering::SeqCst) {
+            let result = std::env::current_exe().map_err(|_| "update-startup-root-unavailable".to_string())
+                .and_then(|exe| if std::env::var_os("APPIMAGE").is_some() {
+                    update_startup::appimage_gate(&exe, env!("CARGO_PKG_VERSION"))
+                } else {update_startup::linux_package_gate(&exe, env!("CARGO_PKG_VERSION"))});
+            if let Err(error) = result {eprintln!("[update] startup refused: {error}");std::process::exit(1);}
+        }
+    }
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--bridge-test") {
         std::process::exit(run_bridge_test());
@@ -4750,7 +5026,7 @@ fn main() {
                         eprintln!("[ws] bridge listener bind failed; aborting shell startup");
                         return;
                     };
-                    match Sidecar::spawn().await {
+                    match Sidecar::spawn(Some(&app_handle)).await {
                         Ok(sc) => {
                             println!("[shell] sidecar ready");
                             // sidecar 通知 → 壳层：首生与死后重生共用接线。
@@ -4788,7 +5064,18 @@ fn main() {
                                     // msWebOOUI/msPdfOOUI/msSmartScreenProtection 禁用项，
                                     // 与浮窗（显式拼接该前缀）行为分裂。
                                     .additional_browser_args("--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required")
-                                    .initialization_script(&bridge_init_script());
+                                    .initialization_script(&bridge_init_script())
+                                    .on_page_load(move |webview, payload| {
+                                        if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+                                            let checkpoint = UPDATE_BOOT_CHECKPOINT.lock().ok().and_then(|value| value.clone());
+                                            if let Some(value) = checkpoint {let _ = webview.eval(&format!("{}({});", include_str!("update-boot-ui.js"), value));}
+                                            else if !UPDATE_HEALTH_PENDING.load(Ordering::SeqCst) {let _ = webview.eval("window.__EAC_UPDATE_BOOT__ && window.__EAC_UPDATE_BOOT__.release()");}
+                                        }
+                                    });
+                                    if std::env::var_os("DSH_EAC_UPDATE_HEALTH_TOKEN").is_some() {
+                                        builder = builder.initialization_script(&format!("{}(null);", include_str!("update-boot-ui.js")));
+                                    }
+                                    if let Some(directory) = std::env::var_os("DSH_EAC_WEBVIEW_DATA_DIR") {builder = builder.data_directory(PathBuf::from(directory));}
                                     if let Some((px, py)) = sim_pos {
                                         builder = builder.position(px, py);
                                     }
@@ -4892,6 +5179,7 @@ fn main() {
                                         if let Some((px, py)) = sim_pos {
                                             builder = builder.position(px, py);
                                         }
+                                        if let Some(directory) = std::env::var_os("DSH_EAC_WEBVIEW_DATA_DIR") {builder = builder.data_directory(PathBuf::from(directory));}
                                         match builder.build() {
                                             Ok(win) => {
                                                 apply_window_icon(&win, &app_died);
@@ -5056,16 +5344,23 @@ fn main() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(move |app, event| {
-            if let tauri::RunEvent::ExitRequested { .. } = event {
+            if let tauri::RunEvent::ExitRequested { api, .. } = event {
+                if EXIT_CLEANUP_COMPLETE.load(Ordering::SeqCst) {return;}
+                if (UPDATE_PREPARING.load(Ordering::SeqCst) || UPDATE_HEALTH_PENDING.load(Ordering::SeqCst)) && !UPDATE_SAFE_EXIT.load(Ordering::SeqCst) {
+                    api.prevent_exit();return;
+                }
+                api.prevent_exit();
+                if EXIT_CLEANUP_STARTED.swap(true, Ordering::SeqCst) {return;}
                 // 进程退出前最终落盘一次窗口状态（兜底 CloseRequested 之前的分支）。
                 save_window_state(app);
-                // 优雅退出（同步有界，事件循环内完成，杜绝「调度后进程先退」的孤儿）：
-                // shutdown RPC → sidecar 有界回收 dsh web 进程树 → 兜底 kill。
+                // Keep the GUI loop available while sidecar shutdown and WebView
+                // callbacks settle. Only the completed cleanup can request final exit.
                 let state = BRIDGE.get_or_init(|| BridgeState {
                     sidecar: Arc::new(AMutex::new(None)),
                 });
                 let st = BridgeState { sidecar: state.sidecar.clone() };
-                let _ = tauri::async_runtime::block_on(async move {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
                     let sc = st.sidecar.lock().await.clone();
                     if let Some(sc) = sc {
                         // 优雅退出意图置位：其后的 sidecar 自退 EOF 不再触发
@@ -5103,8 +5398,10 @@ fn main() {
                             sc.kill().await;
                         }
                     }
+                    EXIT_CLEANUP_COMPLETE.store(true, Ordering::SeqCst);
+                    println!("[shell] sidecar reaped; exiting");
+                    app.exit(0);
                 });
-                println!("[shell] sidecar reaped; exiting");
             }
         });
 }
@@ -5243,5 +5540,16 @@ mod eac_channel_tests {
                 "非 Windows 推导应基于 XDG_DATA_HOME：{derived:?}"
             );
         }
+    }
+}
+
+#[cfg(test)] mod update_storage_tests {
+    use super::*;
+    #[test] fn storage_override_is_explicit_and_absolute() {
+        assert_eq!(validated_storage_override(None).unwrap(),None);
+        let absolute=std::env::temp_dir().join("eac-storage-fixture");
+        assert_eq!(validated_storage_override(Some(absolute.clone())).unwrap(),Some(absolute));
+        assert!(validated_storage_override(Some(PathBuf::from("relative-profile"))).is_err());
+        assert!(validated_storage_override(Some(PathBuf::new())).is_err());
     }
 }

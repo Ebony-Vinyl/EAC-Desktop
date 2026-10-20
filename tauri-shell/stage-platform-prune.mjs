@@ -30,21 +30,31 @@ export function isLinuxElfForArch(file, arch) {
   }
 }
 
+export function isMuslPayloadPath(relative) {
+  return relative.split(/[\\/]/).some(part => /linuxmusl|^musl(?:[_-]|$)|[-_]musl(?:[-_]|$)/i.test(part));
+}
+
 export function pruneLinuxPayloads(dir, arch) {
   assertSupportedStageArch(arch);
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const file = path.join(dir, entry.name);
-    if (entry.isDirectory()) {
-      pruneLinuxPayloads(file, arch);
-      if (readdirSync(file).length === 0) rmSync(file, { recursive: true, force: true });
-      continue;
+  const prune = directory => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        prune(file);
+        if (readdirSync(file).length === 0) rmSync(file, { recursive: true, force: true });
+        continue;
+      }
+      if (!entry.isFile()) continue;
+      // musl addons are also ELF for this architecture, including copies in
+      // nested node_modules. Their path identifies the incompatible libc.
+      const musl = isMuslPayloadPath(path.relative(dir, file));
+      if (/\.(?:exe|dll)$/i.test(entry.name)
+        || (/\.node$/i.test(entry.name) && (musl || !isLinuxElfForArch(file, arch)))) {
+        rmSync(file, { force: true });
+      }
     }
-    if (!entry.isFile()) continue;
-    if (/\.(?:exe|dll)$/i.test(entry.name)
-      || (/\.node$/i.test(entry.name) && !isLinuxElfForArch(file, arch))) {
-      rmSync(file, { force: true });
-    }
-  }
+  };
+  prune(dir);
 }
 
 export function pruneNonLinuxPrebuilds(dir, arch) {

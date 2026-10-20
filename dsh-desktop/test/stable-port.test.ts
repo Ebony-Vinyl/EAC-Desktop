@@ -159,3 +159,15 @@ test('chooseStableWebPort: 空闲端口恰好命中受限端口时重试选非�
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('update retention refuses a taken origin without choosing or saving another port',async t=>{
+  const occupied=net.createServer();await new Promise<void>(resolve=>occupied.listen(0,'127.0.0.1',resolve));t.after(()=>new Promise<void>(resolve=>occupied.close(()=>resolve())));
+  const address=occupied.address();assert.ok(address&&typeof address!=='string');const port=address.port;let writes=0;
+  await assert.rejects(chooseStableWebPort({loadSettings:()=>({webPort:port}),saveSettings:()=>{writes++;}},{requiredPort:port}),/update-web-port-unavailable/);
+  assert.equal(writes,0);
+});
+test('update retention validates the saved origin instead of silently changing preferences',async()=>{
+  let writes=0;const ctx={loadSettings:()=>({webPort:19001}),saveSettings:()=>{writes++;}};
+  await assert.rejects(chooseStableWebPort(ctx,{requiredPort:19002}),/update-web-origin-changed/);
+  await assert.rejects(chooseStableWebPort(ctx,{requiredPort:6000}),/update-web-port-invalid/);assert.equal(writes,0);
+});

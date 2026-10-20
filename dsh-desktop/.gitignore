@@ -109,3 +109,42 @@ build/*
 # （约 0.88 GiB / 1.9 万文件，含 profile-seed node_modules 与 payload 分块）。
 # 只随打包装配，不入 Git；重建走 prepare-composition.mjs。
 /assets/full-pack/
+
+# Generated complete-package updater modules
+/lib/desktop/update-sources.js
+/lib/desktop/update-signature.js
+/lib/desktop/update-platform.js
+
+/lib/desktop/update-backup.js
+/lib/desktop/update-host.js
+/lib/desktop/update-host-control.js
+
+/lib/desktop/update-data-binding.js
+
+/lib/desktop/update-package.js
+/lib/desktop/update-portable.js
+
+/lib/desktop/update-archive.js
+
+lib/desktop/update-portable-lock.js
+lib/desktop/update-portable-helper.js
+
+/lib/desktop/update-restart.js
+
+/lib/desktop/update-nsis.js
+
+/lib/desktop/update-process-owners.js
+
+/lib/desktop/update-helper-process.js
+
+/lib/desktop/update-nsis-helper.js
+
+/lib/desktop/update-linux.js
+
+/lib/desktop/update-appimage.js
+
+/lib/desktop/update-appimage-helper.js
+
+/lib/desktop/update-linux-helper.js
+
+/lib/desktop/update-linux-root.js

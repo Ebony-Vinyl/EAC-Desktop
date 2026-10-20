@@ -21,21 +21,35 @@ test('sidecar exposes platform identity and minimal mounted modules over shell.i
       ...process.env,
       DSH_HOME: join(root, 'dsh-home'),
       HOME: join(root, 'home'),
+      USERPROFILE: join(root, 'home'),
+      APPDATA: join(root, 'appdata'),
+      LOCALAPPDATA: join(root, 'localappdata'),
       XDG_CONFIG_HOME: join(root, 'xdg'),
     },
     stdio: ['pipe', 'pipe', 'pipe'],
   });
   const lines = createInterface({ input: child.stdout });
-  const pending = new Map<number, (value: RpcResponse) => void>();
+  const pending = new Map<number, {resolve(value: RpcResponse): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout>}>();
+  let stderr = '';
+  child.stderr.on('data', chunk => { stderr = (stderr + String(chunk)).slice(-8000); });
   lines.on('line', (line) => {
     const message = JSON.parse(line) as RpcResponse;
-    if (typeof message.id === 'number') pending.get(message.id)?.(message);
+    if (typeof message.id === 'number') {
+      const request = pending.get(message.id);
+      if (request) { clearTimeout(request.timer); pending.delete(message.id); request.resolve(message); }
+    }
+  });
+  child.on('exit', code => {
+    for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error('sidecar exited before reply: ' + code + '\n' + stderr)); }
+    pending.clear();
   });
   let id = 0;
   // v6 Task 3.3 修复：支持带参调用（guard.action 等需要 params）。
-  const call = (method: string, params: Record<string, unknown> = {}): Promise<RpcResponse> => new Promise((resolve) => {
+  const call = (method: string, params: Record<string, unknown> = {}): Promise<RpcResponse> => new Promise((resolve, reject) => {
     id += 1;
-    pending.set(id, resolve);
+    const requestId = id;
+    const timer = setTimeout(() => { pending.delete(requestId); reject(new Error('RPC timeout: ' + method + '\n' + stderr)); }, 5000);
+    pending.set(id, {resolve, reject, timer});
     child.stdin.write(JSON.stringify({ jsonrpc: '2.0', id, method, params }) + '\n');
   });
 
@@ -95,10 +109,11 @@ test('sidecar exposes platform identity and minimal mounted modules over shell.i
     const bootState = await call('boot.state');
     assert.ok('staticPort' in (bootState.result || {}), 'boot.state 必须包含 staticPort 字段');
 
-    assert.deepEqual((await call('shutdown')).result, { bye: true });
-    await new Promise<void>((resolve, reject) => {
+    const exited = new Promise<void>((resolve, reject) => {
       child.once('exit', (code) => code === 0 ? resolve() : reject(new Error(`sidecar exited ${String(code)}`)));
     });
+    assert.deepEqual((await call('shutdown')).result, { bye: true });
+    await exited;
   } finally {
     if (child.exitCode === null) child.kill('SIGKILL');
     lines.close();

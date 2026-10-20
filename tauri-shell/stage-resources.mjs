@@ -151,9 +151,9 @@ if (targetPlatform === 'win32') {
 // 依赖（plugin-guard / plugin-updater / plugin-manager-state / builtin-collision /
 // patch-row-heal / profile-module-heal / preset-sync / compact-preset-migrate /
 // router-persona-preset-migrate）——它们由 companion-sync 顶层 require 消费。
-// 更新流（client-updater / client-update）仍属 v6.1 Task 8/9，不在此清单。
+// 完整包客户端更新闭包由 client-update 及窄源/签名模块装配。
 const ROOT_FILES = [
-  'session-watcher.js',
+  'session-watcher.js', 'client-update-defaults.json',
   'bundle-integrity.js', 'stable-port.js', 'stream-write-guard.js',
   // updater.js 保留其 overlay 内核管理面（boot 失败隔离切内置内核的链路，
   // runtime-paths/profile 消费）；更新流函数无人调用，v6.1 Task 8 拆分。
@@ -171,6 +171,8 @@ const LIB_DESKTOP = [
   'install-profile.js', 'plugin-sync-registry.js',
   // Task 3.3 阶段 3：files.revert 的白名单根
   'file-roots.js',
+  'client-update.js', 'update-sources.js', 'update-signature.js', 'update-platform.js',
+  'update-backup.js', 'update-host.js', 'update-host-control.js', 'update-data-binding.js', 'update-package.js', 'update-portable.js', 'update-portable-lock.js', 'update-portable-helper.js', 'update-restart.js', 'update-linux.js', 'update-linux-root.js', 'update-linux-helper.js', 'update-appimage.js', 'update-appimage-helper.js', 'update-nsis.js', 'update-nsis-helper.js', 'update-helper-process.js', 'update-process-owners.js', 'update-archive.js', 'update-portable-archive.ps1',
   // 注意：feature-pack.js 属 ADR 0006「增值功能，后续版本按需」的剥出面，
   // **有意不装配**。调用方（dsh-unified-market 插件）必须据此优雅降级
   // ——见该插件 lib/host.js 的 packCliStatus()：CLI 缺失时隐藏功能包入口，
@@ -387,7 +389,7 @@ writeFileSync(
   JSON.stringify({
     schemaVersion: 1,
     distributionId: 'urn:github:dsh-eac:desktop',
-    channel: process.env.DSH_EAC_CHANNEL || 'beta',
+    channel: process.env.DSH_EAC_CHANNEL || 'stable',
     profile: 'web-desktop',
     builtinBundleSource: 'assets/SOURCES.json',
     migrationPolicy: 'detect-only',
@@ -564,9 +566,6 @@ if (targetPlatform === 'linux') {
   rmSync(path.join(staged, 'dsh-desktop', 'assets', 'plugins', 'computer-user'), { recursive: true, force: true });
   rmSync(path.join(staged, 'dsh-desktop', 'assets', 'plugins', 'dsh-dafeiyu'), { recursive: true, force: true });
   rmSync(path.join(staged, 'dsh-desktop', 'assets', 'agent-presets'), { recursive: true, force: true });
-  pruneLinuxPayloads(path.join(staged, 'dsh-desktop', 'assets'), process.arch);
-  pruneNonLinuxPrebuilds(nmDest, process.arch);
-  pruneLinuxPayloads(nmDest, process.arch);
   pruneMuslPackages(nmDest);
   rmSync(
     path.join(nmDest, '@koromix', `koffi-linux-${process.arch}`, `musl_${process.arch}`),
@@ -576,6 +575,11 @@ if (targetPlatform === 'linux') {
   // 只按 glibc 选择 bin/glibc/system.node（flock.ts 的 glibcVersionRuntime 判定）。
   // 保留 musl 那份会让 linuxdeploy 在 AppImage 阶段对静态 .node 调 ldd 而 abort。
   pruneMuslNodeAddonBinaries(nmDest);
+  // Bundled package managers contain their own native dependencies and tools.
+  // Apply the platform filter to the full desktop payload, including vendor/.
+  const linuxDesktop = path.join(staged, 'dsh-desktop');
+  pruneNonLinuxPrebuilds(linuxDesktop, process.arch);
+  pruneLinuxPayloads(linuxDesktop, process.arch);
 }
 if (targetPlatform === 'darwin') {
   console.log('[stage] 移除 Darwin 不可达的 Windows/Linux payload');
@@ -601,6 +605,9 @@ writeStagedPlatformStamp(platformStamp, targetPlatform, process.arch);
 // 脚本幂等：npm ci 的 postinstall（patch-deps.js 已随 SCRIPTS 入 staged）若已应用则直接跳过。
 console.log('[stage] 重放 dsh-desktop 锚点补丁（patch-deps）');
 execSync('node scripts/patch-deps.js', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
+// Freeze the existing runtime session patch into the owned package before hashing.
+console.log('[stage] 重放既有会话管理补丁（patch-session-manage）');
+execSync('node scripts/patch-session-manage.js', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 
 // 上游修复的 vendored 覆盖（bash 输出折叠，PR #181）——npm ci 会还原成
 // registry 版本，把仓库内的修复副本盖回去。

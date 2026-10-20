@@ -205,6 +205,22 @@ Assert-Fixture -Name 'tauri-packaging-root-files' -Condition (
     @($tauriPackaging.data.unmatchedCodeFiles).Count -eq 0
 ) -Failure ($tauriPackaging.raw)
 
+$clientFullUpdate = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
+    '-RepoPath', $repoRoot,
+    '-FilesJsonBase64',
+    (ConvertTo-FilesJsonBase64 '["tauri-shell/create-update-manifest.mjs","dsh-desktop/lib/desktop/update-sources.ts","dsh-desktop/lib/desktop/update-signature.ts","dsh-desktop/lib/desktop/update-platform.ts","dsh-desktop/lib/desktop/update-linux.ts","dsh-desktop/lib/desktop/update-appimage.ts","dsh-desktop/lib/desktop/update-backup.ts","dsh-desktop/lib/desktop/update-host.ts","dsh-desktop/lib/desktop/update-host-control.ts","dsh-desktop/lib/desktop/update-data-binding.ts","dsh-desktop/lib/desktop/update-package.ts","dsh-desktop/lib/desktop/update-portable.ts","dsh-desktop/lib/desktop/update-portable-lock.ts","dsh-desktop/lib/desktop/update-portable-helper.ts","dsh-desktop/lib/desktop/update-archive.ts","dsh-desktop/lib/desktop/update-restart.ts","dsh-desktop/lib/desktop/update-nsis.ts","dsh-desktop/lib/desktop/update-nsis-helper.ts","dsh-desktop/lib/desktop/update-helper-process.ts","dsh-desktop/lib/desktop/update-process-owners.ts","dsh-desktop/test/native-update-relay.test.ts","dsh-desktop/test/fixtures/nsis-repair-dialog-probe.ps1","reports/client-full-update-v5-r7-http-diagnosis.json","reports/client-full-update-v5-r8-evidence.json","reports/client-update-linux/handoff/source-manifest.json","reports/client-update-linux/handoff/EAC-Lite-linux-update-handoff-2026-10-15.zip","reports/client-update-linux/20261015T060000Z-x86_64/result.json","dsh-desktop/lib/desktop/update-portable-archive.ps1","tauri-shell/src/update-ui-checkpoint.js","tauri-shell/src/update-boot-ui.js","tauri-shell/src/update_startup.rs","dsh-desktop/client-update-defaults.json","tauri-shell/src/client-update.html"]')
+)
+Assert-Fixture -Name 'client-full-update-classification' -Condition (
+    $clientFullUpdate.exitCode -eq 0 -and
+    $clientFullUpdate.data.status -eq 'ready' -and
+    $clientFullUpdate.data.minimumValidation -eq 'package' -and
+    'client-update' -in @($clientFullUpdate.data.matchedRules) -and
+    'test/client-full-update.test.ts' -in @($clientFullUpdate.data.suggestedTests) -and
+    'test/update-linux.test.ts' -in @($clientFullUpdate.data.suggestedTests) -and
+    'test/update-appimage.test.ts' -in @($clientFullUpdate.data.suggestedTests) -and
+    @($clientFullUpdate.data.unmatchedCodeFiles).Count -eq 0
+) -Failure ($clientFullUpdate.raw)
+
 $sourceLedger = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
     '-RepoPath', $repoRoot,
     '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 '["dsh-desktop/assets/SOURCES.json"]')
@@ -240,7 +256,7 @@ Assert-Fixture -Name 'documentation-rule' -Condition (
 
 $auditEvidence = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
     '-RepoPath', $repoRoot,
-    '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 '["docs/audits/evidence/2026-10-11-base/security-validation-summary.json"]')
+    '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 '["docs/audits/evidence/2026-10-11-base/security-validation-summary.json","docs/product/2026-10-04/audit.snapshot.json","docs/product/2026-10-04/cached-resource-inspection.json","reports/client-full-update-native-result.json","reports/client-full-update-real-host.json","reports/client-full-update-real-health.json","reports/client-full-update-classification.json"]')
 )
 Assert-Fixture -Name 'audit-json-evidence-is-documentation' -Condition (
     $auditEvidence.exitCode -eq 0 -and
@@ -252,12 +268,12 @@ Assert-Fixture -Name 'audit-json-evidence-is-documentation' -Condition (
 
 $unknownJson = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
     '-RepoPath', $repoRoot,
-    '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 '["experimental/runtime-config.json","docs/product/runtime-config.json"]')
+    '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 '["experimental/runtime-config.json","docs/product/runtime-config.json","reports/client-full-update-runtime-config.json"]')
 )
 Assert-Fixture -Name 'audit-evidence-rule-does-not-allow-unknown-json-config' -Condition (
     $unknownJson.exitCode -eq 2 -and
     $unknownJson.data.status -eq 'blocked' -and
-    @($unknownJson.data.unmatchedCodeFiles).Count -eq 2
+    @($unknownJson.data.unmatchedCodeFiles).Count -eq 3
 ) -Failure ($unknownJson.raw)
 
 $typescriptTest = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(

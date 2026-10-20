@@ -4,7 +4,7 @@
 //     卸载器缺失的脏键仅清理注册表，绝不让安装流程卡死（issue #7/#8 的
 //     Tauri 版本）；
 //  2. UninstallString 剥引号 + 安装目录尾反斜杠剥除（R6 实测复现）；
-//  3. 清理前先按镜像名终结旧进程树，句柄释放缓冲后接管。
+//  3. 拒绝仍占用目标路径的实例；UPDATE 不重复执行历史卸载。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -34,8 +34,12 @@ test('卸载器路径剥引号 + 安装目录尾反斜杠防御（R6 实测契�
   assert.ok(nsh.includes('_?='), '卸载器目录参数必须裸写 _?=（不加引号，实测退出码 2 事故回归）');
 });
 
-test('清理旧壳前先终结其进程树（taskkill /F /T）', () => {
-  assert.match(nsh, /taskkill \/F \/T \/IM "/);
+test('UPDATE skips legacy takeover and native installations never run the legacy uninstaller',()=>{
+ const hook=nsh.match(/!macro NSIS_HOOK_PREINSTALL([\s\S]*?)!macroend/)[1];
+ assert.match(hook,/\$UpdateMode <> 1[\s\S]*DSH_TakeoverOldShell/);
+ assert.match(nsh,/FileExists.*\$1\\dsh-eac-shell\.exe[\s\S]*skipping legacy takeover/);
+ assert.match(nsh,/ExecWait '"\$3" \/S \/UPDATE _\?=\$1'/);
+ assert.doesNotMatch(nsh,/taskkill|KillProcess/);
 });
 
 test('当前安装器交付 EAC Lite，Full 需要实际安装 EAC-Pack', () => {

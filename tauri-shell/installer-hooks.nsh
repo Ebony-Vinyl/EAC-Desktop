@@ -79,31 +79,61 @@
       ; 取命令行剩余串当安装目录，带引号会内嵌字面 " 而静默失效（实测退出码 2、
       ; 零删除）；也正因原样取剩余，含空格目录无需引号（官方文档示例 _?=$INSTDIR）。
       ; $1（InstallLocation）为空时 _?= 空目录行为未定义 —— 跳过卸载器调用，
-      ; 只清注册表键（下方 DeleteRegKey 兜底）。
+      ; 保留登记，不能把未知安装目录当作安全卸载目标。
       ${If} $1 == ""
-        DetailPrint "DSH EAC: 旧壳 InstallLocation 为空，跳过卸载器调用，仅清理注册表"
+        DetailPrint "DSH EAC: 旧壳 InstallLocation 为空，跳过卸载器调用并保留登记"
       ${Else}
-        ExecWait '"$3" /S _?=$1' $R0
-        DetailPrint "DSH EAC: 旧壳卸载退出码 $R0"
+        ${If} ${FileExists} "$1\dsh-eac-shell.exe"
+          DetailPrint "EAC: native installation handled by Tauri reinstall; skipping legacy takeover"
+        ${Else}
+          !insertmacro DSH_RequireClosed "$1\Deepseek Harness EAC.exe"
+          ClearErrors
+          ExecWait '"$3" /S /UPDATE _?=$1' $R0
+          ${If} ${Errors}
+            SetErrorLevel 2
+            Quit
+          ${EndIf}
+          ${If} $R0 <> 0
+            SetErrorLevel 2
+            Quit
+          ${EndIf}
+          DeleteRegKey ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEYNAME}"
+        ${EndIf}
       ${EndIf}
     ${Else}
       DetailPrint "DSH EAC: 旧壳卸载键为脏值（卸载器缺失），仅清理注册表"
     ${EndIf}
-    ; 卸载器自删后键可能残留，兜底清理。
-    DeleteRegKey ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEYNAME}"
+    ; Only successful legacy uninstall or a missing uninstaller permits key cleanup.
+    ${IfNot} ${FileExists} "$3"
+      DeleteRegKey ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEYNAME}"
+    ${EndIf}
   ${EndIf}
 !macroend
 
-;   3. 升级/接管前结束运行中的应用进程树（用户实测反馈：安装时报
-;      「不能打开要写入的文件: ...\dsh-pet\assets\thumb\东张西望.webm」——
-;      旧壳运行中（宠物动画等资源被占用）时，卸载与解压都会撞锁）。
-;      taskkill /T 按镜像名整树终结（node sidecar / dsh web 均为子孙进程，
-;      一并结束释放句柄）；进程不存在时退出码非零，属预期，不视为失败。
+; 目标安装树中的运行文件必须已关闭。不终止任何进程。
+; 独占 CreateFile 检查与路径绑定，避免按镜像名影响其他安装实例。
+!macro DSH_RequireClosed FILEPATH
+  Push $8
+  ${If} ${FileExists} "${FILEPATH}"
+    System::Call 'kernel32::CreateFileW(w "${FILEPATH}", i 0x80000000, i 0, p 0, i 3, i 0x80, p 0) p.r8'
+    ${If} $8 == -1
+      DetailPrint "EAC: installation file is still in use: ${FILEPATH}"
+      MessageBox MB_ICONEXCLAMATION "$(DSH_STR_APP_RUNNING)" /SD IDOK
+      SetErrorLevel 2
+      Quit
+    ${Else}
+      System::Call 'kernel32::CloseHandle(p r8)'
+    ${EndIf}
+  ${EndIf}
+  Pop $8
+!macroend
 
-!macro DSH_KillAppExe EXENAME
-  DetailPrint "DSH EAC: 结束运行中的 ${EXENAME} 进程树（升级需独占安装文件）"
-  nsExec::ExecToLog 'taskkill /F /T /IM "${EXENAME}"'
-  Pop $R1
+; utils.nsh 先于 installerHooks 装载。替换其安装与卸载共用的强杀宏。
+!ifmacrodef CheckIfAppIsRunning
+  !macroundef CheckIfAppIsRunning
+!endif
+!macro CheckIfAppIsRunning executableName productName
+  !insertmacro DSH_RequireClosed "$INSTDIR\${executableName}"
 !macroend
 
 ;   4. 基础安装包只初始化既有形态标记，不再提供无实际差异的选择。
@@ -118,6 +148,9 @@ Var DshProfileChoice
 !macroend
 
 !macro DSH_WriteProfileMarker
+  ${If} ${FileExists} "$INSTDIR\dsh-desktop\profile.txt"
+    DetailPrint "EAC: existing profile marker preserved"
+  ${Else}
   ClearErrors
   FileOpen $R9 "$INSTDIR\dsh-desktop\profile.txt" w
   ${If} ${Errors}
@@ -127,39 +160,52 @@ Var DshProfileChoice
     FileClose $R9
     DetailPrint "DSH EAC: 兼容启停策略标记 = $DshProfileChoice（不代表 Full 已安装）"
   ${EndIf}
+  ${EndIf}
 !macroend
 
 !macro NSIS_HOOK_PREINSTALL
-  ; 官方安装位置屏契约：写入/接管之前先做安装位置 preflight（fail-closed）。
   !insertmacro DSH_InstallLocationGuard
-  ; 先杀进程再接管：旧壳运行中时其卸载器删不动被占用文件，宠物插件
-  ; webm 等资源锁不释放则解压同样报「不能打开要写入的文件」。
-  !insertmacro DSH_KillAppExe "dsh-eac-shell.exe"
-  !insertmacro DSH_KillAppExe "Deepseek Harness EAC.exe"
-  ; 句柄异步释放，给文件系统一点缓冲（NSIS 原生 Sleep，不产生网络行为）。
-  Sleep 2000
-  ; 三个候选键名 × HKCU/HKLM 双 hive：覆盖
-  ;   - Electron 时代（productName 键 / com.deepseek.dsh.desktop 键，含
-  ;     perMachine 安装残留在 HKLM 的情况）；
-  ;   - Tauri 自身旧版（productName 键与 com.deepseek.dsh.desktop.tauri 键）。
-  ; HKLM 只读/删除失败走 best-effort（currentUser 安装器无提权），
-  ; 主路径（per-user 安装）在 HKCU 全覆盖。
-  !insertmacro DSH_TakeoverOldShell HKCU "Deepseek Harness EAC"
-  !insertmacro DSH_TakeoverOldShell HKCU "com.deepseek.dsh.desktop"
-  !insertmacro DSH_TakeoverOldShell HKCU "com.deepseek.dsh.desktop.tauri"
-  !insertmacro DSH_TakeoverOldShell HKLM "Deepseek Harness EAC"
-  !insertmacro DSH_TakeoverOldShell HKLM "com.deepseek.dsh.desktop"
-  !insertmacro DSH_TakeoverOldShell HKLM "com.deepseek.dsh.desktop.tauri"
-  ; 不在安装/升级阶段删除 ~/.dsh 下的任何用户数据。退役 dsh-stt 的插件行与
-  ; profile 包副本仍由应用内的精确迁移处理；模型缓存可能是 CLI 或其他产品
-  ; 共用资产，只能由用户明确确认后单独清理。
-  ; 初始化兼容形态标记，不展示没有实际资源差异的 Full/Lite 选择。
+  !insertmacro DSH_RequireClosed "$INSTDIR\dsh-eac-shell.exe"
+  !insertmacro DSH_RequireClosed "$INSTDIR\Deepseek Harness EAC.exe"
+  ${If} $UpdateMode <> 1
+    ; current Tauri updates belong to the generated reinstall page; takeover only
+    ; handles legacy registered shells and never runs twice in UPDATE mode.
+    !insertmacro DSH_TakeoverOldShell HKCU "Deepseek Harness EAC"
+    !insertmacro DSH_TakeoverOldShell HKCU "com.deepseek.dsh.desktop"
+    !insertmacro DSH_TakeoverOldShell HKCU "com.deepseek.dsh.desktop.tauri"
+    !insertmacro DSH_TakeoverOldShell HKLM "Deepseek Harness EAC"
+    !insertmacro DSH_TakeoverOldShell HKLM "com.deepseek.dsh.desktop"
+    !insertmacro DSH_TakeoverOldShell HKLM "com.deepseek.dsh.desktop.tauri"
+  ${EndIf}
+  ; 不在安装/升级阶段删除 ~/.dsh 下的任何用户数据。
   !insertmacro DSH_AskInstallProfile
 !macroend
 
 !macro NSIS_HOOK_POSTINSTALL
   ; 资源已解压到 $INSTDIR\dsh-desktop\，覆盖随包默认的 profile.txt（full）。
   !insertmacro DSH_WriteProfileMarker
+  !if "${ARCH}" != "x64"
+    !if "${ARCH}" != "arm64"
+      !error "EAC NSIS requires x64 or arm64"
+    !endif
+  !endif
+  StrCpy $R7 "x86_64"
+  !if "${ARCH}" == "arm64"
+    StrCpy $R7 "aarch64"
+  !endif
+  ClearErrors
+  FileOpen $R8 "$INSTDIR\eac-installation.json" w
+  ${If} ${Errors}
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+  FileWrite $R8 '{$\"schemaVersion$\":1,$\"product$\":$\"eac-desktop$\",$\"installKind$\":$\"nsis$\",$\"scope$\":$\"currentUser$\",$\"arch$\":$\"$R7$\",$\"version$\":$\"${VERSION}$\"}'
+  ${If} ${Errors}
+    FileClose $R8
+    SetErrorLevel 2
+    Quit
+  ${EndIf}
+  FileClose $R8
 !macroend
 ; ===========================================================================
 ; 官方安装器 UI 复用（s7，2026-09-26）
@@ -238,6 +284,8 @@ Var DshProfileChoice
 ; DSH_LANGUAGE_IDS
 ; ---- 安装器本地化文案（官方 strings.nsh 的 EAC 版，中英双语） ------------
 ; 官方要求安装器自带本地化，与 Electron 应用语言解耦；EAC 同此。
+LangString DSH_STR_APP_RUNNING ${LANG_ENGLISH} "Close EAC at this installation location after saving your work, then retry. No process was stopped."
+LangString DSH_STR_APP_RUNNING ${LANG_SIMPCHINESE} "请保存工作并关闭此安装位置的 EAC，然后重试。安装器没有终止任何进程。"
 LangString DSH_STR_WELCOME_TITLE ${LANG_ENGLISH} "${DSH_PRODUCT_LABEL} Setup"
 LangString DSH_STR_WELCOME_TITLE ${LANG_SIMPCHINESE} "${DSH_PRODUCT_LABEL} 安装程序"
 LangString DSH_STR_WELCOME_TEXT ${LANG_ENGLISH} "This wizard installs ${DSH_PRODUCT_LABEL} for the current user. The next page chooses the install location.$\r$\n$\r$\n${DSH_WORDMARK}"
@@ -364,7 +412,7 @@ Function DshValidateInstallLocation
   ${EndIf}
   ; 非法字符清单 = 官方 InstallerValidatePath 同一组：: * ? " < > 管道符 / 与控制字符。
   ; 管道符不能写字面量 —— 本文件受 installer-nsh-pipe 守护（整份 nsh 零管道符，
-  ; nsExec 直连 taskkill 的前提），故用 ASCII 124 经 IntFmt "%c" 构造（NSIS 文档
+  ; 路径解析不经过 shell 的前提），故用 ASCII 124 经 IntFmt "%c" 构造（NSIS 文档
   ; 同款用法：IntFmt $1 "%c" 0x41），再进同一张逐字符清单。
   IntFmt $7 "%c" 124
   StrCpy $1 3

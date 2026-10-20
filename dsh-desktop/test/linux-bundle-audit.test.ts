@@ -4,6 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { auditLinuxBundle } from '../../tauri-shell/audit-linux-bundle.mjs';
+import { pruneLinuxPayloads, pruneNonLinuxPrebuilds } from '../../tauri-shell/stage-platform-prune.mjs';
 
 function elf64(machine: number): Buffer {
   const data = Buffer.alloc(20);
@@ -173,4 +174,50 @@ test('Linux bundle audit scans the complete extracted artifact outside the resou
     fs.rmSync(payload, { recursive: true, force: true });
     fs.rmSync(artifact, { recursive: true, force: true });
   }
+});
+
+for (const [arch, elf] of [['x64', ELF], ['arm64', ELF_ARM64]] as const) {
+  test(`Linux distribution pruning cleans nested koffi and bundled pnpm for ${arch}`, t => {
+    const root = fixture(elf);
+    t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+    const desktop = path.join(root, 'dsh-desktop');
+    const glibc = `node_modules/@deepseek-ai/dsh-fs-local/node_modules/@koromix/koffi-linux-${arch}/linux_${arch}/koffi.node`;
+    const musl = `node_modules/@deepseek-ai/dsh-fs-local/node_modules/@koromix/koffi-linux-${arch}/musl_${arch}/koffi.node`;
+    const pnpm = 'vendor/pnpm/dist';
+    const keep = [glibc, `${pnpm}/node_modules/@reflink/reflink-linux-${arch}-gnu/reflink.node`];
+    const drop = [
+      musl,
+      `${pnpm}/node_modules/@reflink/reflink-linux-${arch}-musl/reflink.node`,
+      `${pnpm}/node_modules/@reflink/reflink-darwin-arm64/reflink.node`,
+      `${pnpm}/node_modules/@reflink/reflink-win32-x64-msvc/reflink.node`,
+      `${pnpm}/vendor/fastlist-0.3.0-x64.exe`,
+      `${pnpm}/node_modules/node-pty/prebuilds/win32-x64/pty.node`,
+    ];
+    for (const relative of [...keep, ...drop]) {
+      const file = path.join(desktop, relative);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, /darwin/.test(relative) ? Buffer.from([0xcf, 0xfa, 0xed, 0xfe])
+        : /win32|\.exe$/.test(relative) ? Buffer.from('MZ') : elf);
+    }
+    const entry = path.join(desktop, pnpm, 'pnpm.cjs');
+    fs.writeFileSync(entry, '// pnpm entry must be preserved\n');
+    assert.throws(() => auditLinuxBundle(root, { targetArch: arch }), /musl payload|Windows payload|not ELF/);
+
+    pruneNonLinuxPrebuilds(desktop, arch);
+    pruneLinuxPayloads(desktop, arch);
+
+    for (const relative of keep) assert.deepEqual(fs.readFileSync(path.join(desktop, relative)), elf);
+    for (const relative of drop) assert.equal(fs.existsSync(path.join(desktop, relative)), false, relative);
+    assert.equal(fs.readFileSync(entry, 'utf8'), '// pnpm entry must be preserved\n');
+    assert.doesNotThrow(() => auditLinuxBundle(root, { targetArch: arch }));
+  });
+}
+
+test('Linux bundle audit rejects a musl suffix in bundled pnpm dependencies', t => {
+  const root = fixture();
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const addon = path.join(root, 'dsh-desktop', 'vendor', 'pnpm', 'dist', 'node_modules', '@reflink', 'reflink-linux-x64-musl', 'reflink.node');
+  fs.mkdirSync(path.dirname(addon), { recursive: true });
+  fs.writeFileSync(addon, ELF);
+  assert.throws(() => auditLinuxBundle(root), /musl payload in glibc bundle/);
 });

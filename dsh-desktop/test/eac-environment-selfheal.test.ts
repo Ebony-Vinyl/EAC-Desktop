@@ -37,6 +37,8 @@ function isolatedEnv(productRoot: string, extra: NodeJS.ProcessEnv = {}): NodeJS
   return {
     ...process.env,
     DSH_EAC_DATA_ROOT: productRoot,
+    // These fixtures exercise legacy beta; fresh stable selection has dedicated tests.
+    DSH_EAC_CHANNEL: 'beta',
     DSH_EAC_DPX_REGISTRY_HOME: path.join(productRoot, 'registry'),
     DSH_EAC_CHANNEL: 'beta',
     USERPROFILE: path.join(productRoot, 'fake-home'),

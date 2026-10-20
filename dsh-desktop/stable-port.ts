@@ -47,10 +47,10 @@ export function restrictedPortOf(url: string): number {
 //   watchServerProc 受限端口重试兜底）。
 export function chooseStableWebPort(
   ctx: StablePortCtx,
-  opts: { maxFreeRetries?: number } = {},
+  opts: { maxFreeRetries?: number; requiredPort?: number } = {},
 ): Promise<number> {
   const maxFreeRetries = opts.maxFreeRetries != null ? opts.maxFreeRetries : 5;
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const settings = ctx.loadSettings(ctx);
     const preferred = Number(settings.webPort) || 0;
     const save = (port: number): void => {
@@ -82,6 +82,15 @@ export function chooseStableWebPort(
         });
       });
     };
+    if (opts.requiredPort !== undefined) {
+      const required = opts.requiredPort;
+      if (!Number.isInteger(required) || required < 1 || required > 65535 || CHROMIUM_RESTRICTED_PORTS.has(required)) {
+        reject(new Error('update-web-port-invalid')); return;
+      }
+      if (preferred !== required) {reject(new Error('update-web-origin-changed')); return;}
+      tryPort(required, ok => ok ? resolve(required) : reject(new Error('update-web-port-unavailable')));
+      return;
+    }
     if (preferred && !CHROMIUM_RESTRICTED_PORTS.has(preferred)) {
       tryPort(preferred, (ok) => (ok ? save(preferred) : pickFree()));
     } else {

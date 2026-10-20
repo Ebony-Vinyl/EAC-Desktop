@@ -6,7 +6,7 @@
 //   2. 挂载最简本体模块（boot-server 及其基础闭包）
 //   3. 白名单方法注册表（Rust 壳调用面：boot.* / chrome.init / menu.action /
 //      files.* / shell.info / profile.*）
-// 剥离面（插件系统 / 更新体系 / 余额 / 手机桥 / 向导 / SDK 隔离宿主）按
+// 插件治理与完整包客户端更新通过各自的受控服务接回；其余剥离面按
 // ADR 0006 移出装配；代码保留在仓库原位，由 Task 3.2/3.3/4/5/6 以包接回。
 //
 // 纪律：stdout 只走协议帧；一切日志/兜底输出走 stderr。
@@ -16,6 +16,9 @@ import os = require('node:os');
 import fs = require('node:fs');
 import url = require('node:url');
 import readline = require('node:readline');
+import type { ClientUpdate } from '../../dsh-desktop/lib/desktop/client-update';
+
+import type { UpdateDefaults } from '../../dsh-desktop/lib/desktop/update-sources';
 
 // 资源根：开发态 tauri-shell/sidecar → 仓库根/dsh-desktop；
 // 打包态 resources/sidecar → resources/dsh-desktop（少一级）。
@@ -53,15 +56,8 @@ const mount = (name: string): Mod => require(LIB(name)) as Mod;
 // 那正是旧 profile 污染（旧插件 pending / 白屏）的根因。退场由壳层 reader
 // 广播 boot.server-died，走既有恢复/诊断链。
 const isolatedMode = Boolean(process.env.DSH_EAC_DATA_ROOT || process.env.DSH_EAC_DPX_ROOT);
-type EnsuredEnvironment = {
-  paths: { dshHome: string; root: string };
-  runtime: NodeJS.ProcessEnv;
-  legacyProfileDetected: boolean;
-  legacyDshHome: string;
-  name: string;
-  channel: string;
-  rootExistedBefore: boolean;
-};
+type EnsuredEnvironment = import('../../dsh-desktop/lib/desktop/environment').EnsuredEnvironment;
+
 type EnvironmentModule = {
   ensureEacEnvironment(env?: NodeJS.ProcessEnv, platform?: NodeJS.Platform): EnsuredEnvironment;
   applyRuntimeEnvironment(runtime: NodeJS.ProcessEnv, target?: NodeJS.ProcessEnv): void;
@@ -92,6 +88,7 @@ if (isolatedMode) {
   }
   // 应用 dpx 的全量 runtime（含清掉会伪装成宿主配置的继承变量）。
   environmentMod.applyRuntimeEnvironment(ensuredEnvironment.runtime, process.env);
+  process.env.DSH_EAC_CHANNEL = ensuredEnvironment.channel;
   say('[environment] 隔离已生效：name=' + ensuredEnvironment.name
     + ' root=' + ensuredEnvironment.paths.root
     + (ensuredEnvironment.rootExistedBefore ? '（复用既有环境实例）' : '（新建环境实例）'));
@@ -127,7 +124,7 @@ const fileRootsMod = mount('file-roots');
 // capability-stubs 仅提供内部 boot glue，不注册公开降级方法。
 import stubs = require('./capability-stubs');
 
-const MOUNTED = ['proc', 'platform', 'runtime-paths', 'profile', 'guard-box', 'runtime-patches', 'companion-sync', 'plugin-ops', 'file-roots', 'boot-server'];
+const MOUNTED = ['proc', 'platform', 'runtime-paths', 'profile', 'guard-box', 'runtime-patches', 'companion-sync', 'plugin-ops', 'file-roots', 'boot-server', 'client-update'];
 
 // 打包态判定 + 资源根：Rust 壳 spawn sidecar 时注入 DSH_SHELL_EXE /
 // DSH_RESOURCE_ROOT（main.rs Sidecar::spawn）。DSH_RESOURCE_ROOT 存在即打包态；
@@ -149,6 +146,15 @@ const notifyFallback = (n: { title: string; body: string }): void => {
 procMod.init({ log, getDshHome: () => dshHome, getDesktopProfile: desktopProfileFn });
 pathsMod.init({ log, getUserDataDir: () => userDataDir, isPackaged: () => isPackagedRuntime(), resourcesPath: () => resourceRoot(), platform: process.platform });
 profileMod.init({ log, getDshHome: () => dshHome });
+if (ensuredEnvironment) {
+  const {persistEnvironmentBinding} = require(LIB('update-data-binding')) as typeof import('../../dsh-desktop/lib/desktop/update-data-binding');
+  persistEnvironmentBinding(process.env.DSH_EAC_DATA_ROOT || path.dirname(ensuredEnvironment.storageRoot), {
+    schemaVersion: 1, product: 'eac-desktop', channel: ensuredEnvironment.channel,
+    environmentRoot: ensuredEnvironment.paths.root, storageRoot: ensuredEnvironment.storageRoot,
+    dshHome: ensuredEnvironment.paths.dshHome, registryHome: ensuredEnvironment.registryHome, profile: desktopProfileFn(),
+  });
+}
+
 runtimePatchesMod.init({ log, getDshHome: () => dshHome, getUserDataDir: () => userDataDir });
 // v6 Task 3.3：三件套 init（注入点与 v6 收窄面一致，见 ADR 0006 裁决项 5）。
 guardBoxMod.init({
@@ -339,87 +345,181 @@ async function ensureShortcuts(): Promise<void> {
   }
 }
 
-// ---------------------------------------------------------------------------
-// SYNC-005：dshDesktop.updates 真事件源
-//
-// EAC 更新态来源调研（自证材料 #1）：
-//   * 真实客户端更新链 = dsh-desktop/lib/desktop/client-update.js —— EAC 封装
-//     自更新（checkLatest → 弹窗同意 → downloadRelease 进度 → 写入
-//     settings.pendingClientUpdate={version,path,source} → 用户确认重启 →
-//     client-updater.applyUpdate 替换 exe 并退出）。updater.js 是内核 overlay
-//     （agent dsh 二进制）更新，不是「客户端」更新链。
-//   * Tauri 壳（v6 最简本体，ADR 0006）未挂载 runClientUpdateFlow —— 检查/
-//     下载流程不在本进程运行，checking/available/downloading/verifying/
-//     installing 各 phase 当前没有任何真实写入点，不得伪造。
-//   * 真实可观测态 = userData/settings.json 的 pendingClientUpdate（真实落盘，
-//     由 client-update 下载完成后写入）：映射官方 phase='ready'（更新已就绪
-//     待装）。判定门与 offerPendingClientUpdate（client-update.js:200-217）
-//     逐条一致：文件仍存在 且 version > 当前应用版本；失效项按 idle。
-//   * 其余一律 phase='idle' —— 当前没有进行中/就绪的客户端更新，这是真实态
-//    （若 shell 层未来接回检查/下载流程（SYNC-007），在状态变化点改写
-//     presentation 即可，本映射表随之扩展）。
-//
-// 事件源：settings.json 的真实文件变化。首个 updates.subscribe 到来才启动
-// 3s 低频 stat 轮询（mtimeMs+size 变化 → 重算 presentation → 与上次推送不同
-// 才 notify('updates.presentation')）；末个退订即停轮询。推送/轮询都只读
-// 真实文件，绝不凭空生成进度。
-// ---------------------------------------------------------------------------
-const updaterMod = require(path.join(DSH_DESKTOP_ROOT, 'updater')) as {
-  compareVersions(a: string, b: string): number;
-};
-function computeUpdatePresentation(): { phase: 'idle' | 'ready'; version?: string } {
-  const s = loadSettings() as { pendingClientUpdate?: { version?: unknown; path?: unknown } };
-  const pending = s.pendingClientUpdate;
-  if (pending && typeof pending.version === 'string' && typeof pending.path === 'string' && pending.path !== '') {
-    // offerPendingClientUpdate 同款判定门（client-update.js:208-217）：
-    // 包文件消失或版本不比当前新 = 过期待办，清场按 idle。
-    try {
-      if (fs.existsSync(pending.path) && updaterMod.compareVersions(pending.version, pkgVersion) > 0) {
-        return { phase: 'ready', version: pending.version };
-      }
-    } catch { /* 文件判定失败按 idle（不伪造就绪） */ }
-  }
-  return { phase: 'idle' };
-}
-let updatesWatchers = 0;
-let updatesTimer: NodeJS.Timeout | null = null;
-let updatesStatKey = '';
-let lastUpdatePresentation = '';
-function statKey(file: string): string {
-  try {
-    const st = fs.statSync(file);
-    return st.mtimeMs + ':' + st.size;
-  } catch {
-    return 'missing';
-  }
-}
-function pushUpdatePresentation(force: boolean): void {
-  const p = computeUpdatePresentation();
-  const key = JSON.stringify(p);
-  if (force || key !== lastUpdatePresentation) {
-    lastUpdatePresentation = key;
-    notify('updates.presentation', p);
-  }
-}
-function startUpdatesPoll(): void {
-  if (updatesTimer) return;
-  updatesStatKey = statKey(settingsFile);
-  updatesTimer = setInterval(() => {
-    const key = statKey(settingsFile);
-    if (key !== updatesStatKey) {
-      updatesStatKey = key;
-      try { pushUpdatePresentation(false); } catch (e) {
-        log('updates', 'presentation push failed: ' + String((e as Error).message || e));
-      }
+// Official updates bridge stays read-only; shell-owned commands drive the controller.
+const { ClientUpdate: ClientUpdateClass } = require(LIB('client-update')) as typeof import('../../dsh-desktop/lib/desktop/client-update');
+const { updateTarget } = require(LIB('update-platform')) as typeof import('../../dsh-desktop/lib/desktop/update-platform');
+const {hostIdentity} = require(LIB('update-host')) as typeof import('../../dsh-desktop/lib/desktop/update-host');
+const {UpdateHostControl} = require(LIB('update-host-control')) as typeof import('../../dsh-desktop/lib/desktop/update-host-control');
+const {captureBackup, assertInstallBoundary, writeDurableJson, protectedLinkTargets} = require(LIB('update-backup')) as typeof import('../../dsh-desktop/lib/desktop/update-backup');
+const updateStateDir = path.join(userDataDir, 'client-updates');
+const updateHost = new UpdateHostControl(updateStateDir, dshHome, desktopProfileFn());
+let uiCheckpoint: {nonce: string; resolve(value: Record<string, unknown>): void} | null = null;
+const updateDefaults = JSON.parse(fs.readFileSync(path.join(DSH_DESKTOP_ROOT, 'client-update-defaults.json'), 'utf8')) as UpdateDefaults;
+const {extractPortableArchive} = require(LIB('update-archive')) as typeof import('../../dsh-desktop/lib/desktop/update-archive');
+const {preparePortable, rollbackPortable, recoverPortable} = require(LIB('update-portable')) as typeof import('../../dsh-desktop/lib/desktop/update-portable');
+const {startPortableHelper} = require(LIB('update-portable-helper')) as typeof import('../../dsh-desktop/lib/desktop/update-portable-helper');
+const {prepareNsis, cancelNsis} = require(LIB('update-nsis')) as typeof import('../../dsh-desktop/lib/desktop/update-nsis');
+const {startNsisHelper} = require(LIB('update-nsis-helper')) as typeof import('../../dsh-desktop/lib/desktop/update-nsis-helper');
+const {prepareAppImage, cancelAppImage} = require(LIB('update-appimage')) as typeof import('../../dsh-desktop/lib/desktop/update-appimage');
+const {startAppImageHelper} = require(LIB('update-appimage-helper')) as typeof import('../../dsh-desktop/lib/desktop/update-appimage-helper');
+const {prepareLinuxPackage, cancelLinuxPackage, inspectAppImageRuntime} = require(LIB('update-linux')) as typeof import('../../dsh-desktop/lib/desktop/update-linux');
+const {startLinuxPackageHelper} = require(LIB('update-linux-helper')) as typeof import('../../dsh-desktop/lib/desktop/update-linux-helper');
+const {UpdateRestart} = require(LIB('update-restart')) as typeof import('../../dsh-desktop/lib/desktop/update-restart');
+const updateBinding = (): import('../../dsh-desktop/lib/desktop/client-update').DataBinding => ({environmentRoot: ensuredEnvironment?.paths.root || dshHome, dshHome,
+    profile: desktopProfileFn(), channel: ensuredEnvironment?.channel || process.env.DSH_EAC_CHANNEL || '',
+    registryHome: ensuredEnvironment?.registryHome || process.env.DPX_HOME || '', userDataDir,
+    webviewRoot: process.env.DSH_SHELL_WEBVIEW_ROOT || '', configRoot: process.env.DSH_SHELL_CONFIG_ROOT || '', guestRoot: process.env.DSH_SHELL_GUEST_ROOT || '', webPort: Number(loadSettings().webPort) || 0});
+let updateRestart: import('../../dsh-desktop/lib/desktop/update-restart').UpdateRestart | null = null;
+let updateBootSettled = true;
+const clientUpdate: ClientUpdate = new ClientUpdateClass({
+  stateDir: updateStateDir, defaults: updateDefaults, currentVersion: pkgVersion,
+  target: isPackagedRuntime() ? updateTarget(process.env.DSH_SHELL_EXE) : 'development',
+  binding: updateBinding,
+  notify: () => pushUpdatePresentation(),
+  prepare: async (transactionId, signal, plan, progress) => {
+    if (quitting) throw new Error('update-app-exiting');
+    if (activeMutation) throw new Error('update-business-mutation-busy');
+    if (updateRestart?.pending) throw new Error('update-restart-health-pending');
+    const installKind = plan.update.artifact.installKind;
+    if (!['portable', 'nsis', 'appimage', 'deb', 'rpm'].includes(installKind)) throw new Error('update-install-adapter-unavailable');
+    const shellExe = process.env.DSH_SHELL_EXE;
+    const shellPid = Number(process.env.DSH_SHELL_PID);
+    if (!shellExe || !Number.isSafeInteger(shellPid) || shellPid < 1) throw new Error('update-shell-identity-unavailable');
+    const appImageRuntime = installKind === 'appimage' ? await inspectAppImageRuntime(shellExe, plan.update.artifact.target) : null;
+    const stageRoot = path.join(path.dirname(plan.packageFile), 'portable-stage-' + require('node:crypto').randomUUID());
+    if (installKind === 'portable') {
+      progress('正在展开并校验完整包，完成前可以取消');
+      await extractPortableArchive(plan.packageFile, stageRoot, plan.update.manifest.version, plan.update.artifact.target, signal);
     }
-  }, 3000);
+    signal.throwIfAborted();
+    if (quitting) throw new Error('update-app-exiting');
+    if (activeMutation) throw new Error('update-business-mutation-busy');
+    if (JSON.stringify(updateBinding()) !== JSON.stringify(plan.binding)) throw new Error('update-data-binding-changed');
+    updatePreparing = true;
+    (bootMod.setIsRestarting as (value: boolean) => void)(true);
+    const kernel = (bootMod.getServerProc as () => import('node:child_process').ChildProcess | null)();
+    const transactionDir = path.join(updateStateDir, 'transactions', transactionId);
+    let handedOff = false;
+    let portableJournal: import('../../dsh-desktop/lib/desktop/update-portable').PortableJournal | null = null;
+    let nsisPlan: import('../../dsh-desktop/lib/desktop/update-nsis').NsisPlan | null = null;
+    let appImagePlan: import('../../dsh-desktop/lib/desktop/update-appimage').AppImagePlan | null = null;
+    let linuxPlan: import('../../dsh-desktop/lib/desktop/update-linux').LinuxPackagePlan | null = null;
+    let helper: import('../../dsh-desktop/lib/desktop/update-helper-process').UpdateHelperHandle | null = null;
+    const cancelPreparation = async (): Promise<void> => {
+      if (portableJournal) await rollbackPortable(portableJournal);
+      else if (nsisPlan) await cancelNsis(nsisPlan);
+      else if (appImagePlan) await cancelAppImage(appImagePlan);
+      else if (linuxPlan) await cancelLinuxPackage(linuxPlan);
+    };
+    const resume = async (): Promise<void> => {
+      if (kernel && kernel.exitCode !== null && !quitting) {
+        try {const result = await (bootMod.startAndWait as () => Promise<{webUrl: string; port: number}>)(); notify('boot.web-ready', result);} catch {log('updates', 'prepare-restart-unavailable');}
+      }
+      updatePreparing = false; (bootMod.setIsRestarting as (value: boolean) => void)(false); notify('update.ui-release', {});
+    };
+    try {
+      progress('正在确认草稿、会话和配置保存');
+      const nonce = require('node:crypto').randomBytes(32).toString('hex') as string;
+      let timer: NodeJS.Timeout | undefined;
+      let cancelUi: (() => void) | undefined;
+      const saved = await new Promise<Record<string, unknown>>((resolve, reject) => {
+        uiCheckpoint = {nonce, resolve};
+        cancelUi = (): void => reject(new Error('update-cancelled'));
+        signal.addEventListener('abort', cancelUi, {once: true});
+        timer = setTimeout(() => { reject(new Error('update-ui-save-timeout'));}, 10000);
+        notify('update.ui-freeze', {nonce});
+      }).finally(() => {if (timer) clearTimeout(timer); if (cancelUi) signal.removeEventListener('abort', cancelUi); uiCheckpoint = null;});
+      if (saved.draftSaved !== true) throw new Error('update-ui-draft-unconfirmed');
+      const webUrl = (bootMod.getWebUrl as () => string)();
+      if (!webUrl || saved.origin !== new URL(webUrl).origin) throw new Error('update-ui-origin-changed');
+      await writeDurableJson(path.join(transactionDir, 'ui-preferences.json'), saved);
+      const webPort = Number(new URL(webUrl).port);
+      if (!webPort || webPort !== Number(loadSettings().webPort)) throw new Error('update-web-origin-changed');
+      await writeDurableJson(path.join(updateStateDir, 'preserve-origin.json'), {schemaVersion: 1, transactionId, webPort, identity: hostIdentity(dshHome, desktopProfileFn())});
+      const roots: import('../../dsh-desktop/lib/desktop/update-backup').BackupRoot[] = [];
+      if (ensuredEnvironment) roots.push({id: 'environment', path: ensuredEnvironment.paths.root, required: true,
+        exclude: [updateStateDir, path.join(userDataDir, 'logs'), ensuredEnvironment.paths.tmp, ensuredEnvironment.paths.xdgCache, ensuredEnvironment.paths.updates]
+          .filter(p => p && path.relative(ensuredEnvironment!.paths.root, p) !== '..' && !path.relative(ensuredEnvironment!.paths.root, p).startsWith('..' + path.sep))});
+      else roots.push({id: 'dsh-home', path: dshHome, required: true});
+      // Preserve all profile, session, Agent and workspace data. Runtime links are
+      // recorded by the backup walker without traversing outside these authorities.
+      roots.push({id: 'desktop', path: userDataDir, required: true, exclude: [updateStateDir, path.join(userDataDir, 'logs')]});
+      if (ensuredEnvironment) roots.push({id: 'environment-binding', path: path.join(process.env.DSH_EAC_DATA_ROOT || path.dirname(ensuredEnvironment.storageRoot), 'eac-data-binding.json'), required: true});
+      if (ensuredEnvironment) roots.push({id: 'registry', path: ensuredEnvironment.registryHome, required: true});
+      roots.push({id: 'update-settings', path: path.join(updateStateDir, 'update-settings.json'), required: true});
+      roots.push({id: 'ui-preferences', path: path.join(transactionDir, 'ui-preferences.json'), required: true});
+      const target = updateTarget(process.env.DSH_SHELL_EXE);
+      const installPath = process.platform === 'linux' && process.env.APPIMAGE ? process.env.APPIMAGE
+        : process.env.DSH_SHELL_EXE && ['nsis', 'portable'].some(kind => target.endsWith('-' + kind)) ? path.dirname(process.env.DSH_SHELL_EXE) : process.env.DSH_SHELL_EXE && ['deb', 'rpm'].some(kind => target.endsWith('-' + kind)) ? process.env.DSH_SHELL_EXE : '';
+      if (!installPath) throw new Error('update-installation-unidentified');
+      const webviewRoot = process.env.DSH_SHELL_WEBVIEW_ROOT;
+      const configRoot = process.env.DSH_SHELL_CONFIG_ROOT;
+      if (!webviewRoot || !configRoot) throw new Error('update-shell-storage-unidentified');
+      roots.push({id: 'shell-settings', path: path.join(configRoot, 'window-state.json'), required: false});
+      await assertInstallBoundary(installPath, [...roots.map(root => root.path), webviewRoot, configRoot, process.env.DSH_SHELL_GUEST_ROOT || '']);
+      const receipt = await updateHost.prepare(kernel, transactionId, signal,
+        (proc, timeout) => (procMod.waitForProcExit as (p: import('node:child_process').ChildProcess, t: number) => Promise<boolean>)(proc, timeout));
+      await assertInstallBoundary(installPath, receipt.workspaceRoots);
+      progress('正在备份持久数据');
+      const backup = await captureBackup(roots, path.join(transactionDir, 'backup-' + require('node:crypto').randomUUID()), signal);
+      const userLinkTargets = protectedLinkTargets(backup.manifest,dshHome,DSH_DESKTOP_ROOT);
+      await assertInstallBoundary(installPath, userLinkTargets);
+      await writeDurableJson(path.join(transactionDir, 'data-binding.json'), {receipt, environment: ensuredEnvironment?.record || null,
+        paths: ensuredEnvironment?.paths || null, protectedWorkspaceRoots: receipt.workspaceRoots, protectedLinkTargets: userLinkTargets, backupDirectory: backup.directory, dshHome, profile: desktopProfileFn(), userDataDir, webPort: Number(loadSettings().webPort) || 0});
+      if (typeof receipt.sessionDigest !== 'string') throw new Error('update-session-read-unavailable');
+      signal.throwIfAborted();
+      progress('正在构建完整安装事务');
+      const protectedRoots = [...roots.map(root => root.path), webviewRoot, configRoot, process.env.DSH_SHELL_GUEST_ROOT || '', ...receipt.workspaceRoots, ...userLinkTargets];
+      const launchEnv: Record<string, string> = {};
+      for (const key of ['DSH_EAC_DATA_ROOT', 'DSH_EAC_CHANNEL', 'DSH_EAC_WEBVIEW_DATA_DIR', 'DSH_EAC_SHELL_CONFIG_DIR', 'DSH_EAC_GUEST_DATA_DIR', 'DPX_HOME']) if (process.env[key]) launchEnv[key] = process.env[key]!;
+      if (installKind === 'portable') {
+        portableJournal = await preparePortable({installRoot: path.dirname(shellExe), stageRoot, transactionId,
+          version: plan.update.manifest.version, target: plan.update.artifact.target, dataBinding: plan.binding, signal, protectedRoots});
+        progress('正在等待独立更新程序接管');
+        helper = await startPortableHelper({journal: portableJournal, packageFile: plan.packageFile, artifact: plan.update.artifact,
+          trustedKey: updateDefaults.trustedKeys[plan.update.keyId]!, signal, binding: plan.binding, owners: [shellPid, process.pid], dataBackupDirectory: backup.directory, launchEnv});
+      } else if (appImageRuntime) {
+        appImagePlan = await prepareAppImage({transactionId, transactionDir: path.join(path.dirname(appImageRuntime.image), '.eac-update-' + transactionId),
+          image: appImageRuntime.image, packageFile: plan.packageFile, version: plan.update.manifest.version, currentVersion: pkgVersion,
+          target: plan.update.artifact.target, artifact: plan.update.artifact, trustedKey: updateDefaults.trustedKeys[plan.update.keyId]!, binding: plan.binding, signal, protectedRoots});
+        progress('正在等待独立 AppImage 更新程序接管');
+        helper = await startAppImageHelper({plan: appImagePlan, owners: [shellPid, process.pid], dataBackupDirectory: backup.directory, launchEnv, signal});
+      } else if (installKind === 'deb' || installKind === 'rpm') {
+        linuxPlan = await prepareLinuxPackage({transactionId, transactionDir: path.join(path.dirname(plan.packageFile), 'linux-install'),
+          executable: shellExe, packageFile: plan.packageFile, version: plan.update.manifest.version, currentVersion: pkgVersion,
+          target: plan.update.artifact.target, artifact: plan.update.artifact, trustedKey: updateDefaults.trustedKeys[plan.update.keyId]!,
+          resourceRoot: resourceRoot(), envelope: plan.update.envelope, binding: plan.binding, signal, protectedRoots});
+        progress('请在系统授权窗口确认安装更新，取消授权可返回原版本');
+        helper = await startLinuxPackageHelper({plan: linuxPlan, owners: [shellPid, process.pid], dataBackupDirectory: backup.directory, launchEnv, signal});
+      } else {
+        nsisPlan = await prepareNsis({installRoot: path.dirname(shellExe), transactionDir: path.join(path.dirname(path.dirname(shellExe)), '.eac-update-' + transactionId), transactionId,
+          version: plan.update.manifest.version, target: plan.update.artifact.target, packageFile: plan.packageFile, artifact: plan.update.artifact,
+          trustedKey: updateDefaults.trustedKeys[plan.update.keyId]!, binding: plan.binding, signal, protectedRoots});
+        progress('正在等待独立安装程序接管');
+        helper = await startNsisHelper({plan: nsisPlan, packageFile: plan.packageFile, owners: [shellPid, process.pid], dataBackupDirectory: backup.directory, launchEnv, signal});
+      }
+      handedOff = true;
+      const acceptedHelper = helper;
+      return {
+        commit: async () => {await acceptedHelper.commit(); notify('update.safe-exit', {transactionId});},
+        cancel: async () => {await acceptedHelper.cancel(); await cancelPreparation(); await resume();},
+      };
+    } catch (error) {
+      if (helper) await helper.cancel();
+      await cancelPreparation();
+      if (installKind === 'portable' && !portableJournal && fs.existsSync(path.join(path.dirname(shellExe), '.eac-update-recovery.json'))) await recoverPortable(path.dirname(shellExe));
+      await resume();
+      throw error;
+    } finally {uiCheckpoint = null; if (!handedOff) {updatePreparing = false; (bootMod.setIsRestarting as (value: boolean) => void)(false); notify('update.ui-release', {});}}
+  },
+});
+function computeUpdatePresentation(): Record<string, unknown> {
+  const state = clientUpdate.status();
+  return {phase: state.phase, ...(state.version ? {version: state.version} : {}),
+    ...(state.progress !== undefined ? {percent: Math.round(state.progress * 100)} : {}),
+    ...(state.phase === 'error' ? {failure: 'check'} : {})};
 }
-function stopUpdatesPoll(): void {
-  if (updatesTimer) {
-    clearInterval(updatesTimer);
-    updatesTimer = null;
-  }
-}
+function pushUpdatePresentation(): void { notify('updates.presentation', computeUpdatePresentation()); }
 
 bootMod.init({
   log,
@@ -432,6 +532,16 @@ bootMod.init({
   loadSettings,
   saveSettings,
   isQuitting: () => quitting,
+  onServerSpawn: () => updateRestart?.recordOwners(),
+  updateRuntime: () => updateHost.runtime(),
+  requiredWebPort: () => {
+    const file = path.join(updateStateDir, 'preserve-origin.json');
+    if (!fs.existsSync(file)) return undefined;
+    const record = readJsonFile(file);
+    if (!record || record.schemaVersion !== 1 || record.identity !== hostIdentity(dshHome, desktopProfileFn())
+      || !Number.isInteger(record.webPort)) throw new Error('update-web-origin-record-invalid');
+    return Number(record.webPort);
+  },
   onServerDied: (info: unknown) => {
     notify('boot.server-died', info);
   },
@@ -605,6 +715,10 @@ const methods: Record<string, (p: RpcParams) => unknown> = {
   'profile.name': (): RpcResult => ({ name: desktopProfileFn() }),
   // ---- boot.*（P2：dsh web 服务编排，Rust 壳的启动主链路） ----
   'boot.start': async (p): Promise<RpcResult> => {
+    if (updateRestart && !updateRestart.canBoot()) throw new Error('update-restart-stopping');
+    updateBootSettled = false;
+    try {
+      if (updateRestart) await updateRestart.beforeBoot();
     const overlays = Array.isArray(p && p.overlays) ? (p!.overlays as string[]) : [];
     verifyBundleIntegrity();
     // 前置文件树准备（v6 最简版，见 preBootSync）。
@@ -624,6 +738,7 @@ const methods: Record<string, (p: RpcParams) => unknown> = {
       throw e;
     }
     bootFailureRecorder.clearRescueState();
+    updateRestart?.bootReady(r.webUrl);
     notify('boot.web-ready', r);
     // 应答必须立刻返回：boot.start 是 Rust 壳 180s 超时的同步等待点。
     setImmediate(() => {
@@ -633,6 +748,7 @@ const methods: Record<string, (p: RpcParams) => unknown> = {
       }
     });
     return { ok: true, webUrl: r.webUrl, port: r.port };
+    } catch(error) {await updateRestart?.bootFailed(error);throw error;} finally {updateBootSettled = true; updateRestart?.recordOwners();}
   },
   'boot.stop': async (): Promise<RpcResult> => {
     await (bootMod.stopServer as () => Promise<void>)();
@@ -704,23 +820,35 @@ const methods: Record<string, (p: RpcParams) => unknown> = {
     return shortcutPersistence!.edit(edit, p ? p.revision : undefined) as unknown as RpcResult;
   },
   // ---- SYNC-005：dshDesktop.updates（真实状态 + 真实文件变化事件源）----
-  // status：settings.pendingClientUpdate（真实落盘待办）→ 'ready'+version，
-  // 否则 'idle'（检查/下载流程未挂载，checking/downloading 等无真实写入点，
-  // 不伪造 —— 映射依据见上方 updates 区注释）。
+  // Public presentation is derived from the signed update transaction.
   'updates.status': (): RpcResult => computeUpdatePresentation(),
-  // subscribe：登记远端订阅（首个订阅启动 settings.json 变化轮询），并立即
+  'client-update.ui-checkpoint': (p: RpcParams): RpcResult => {
+    if (!uiCheckpoint || p?.nonce !== uiCheckpoint.nonce || typeof p?.origin !== 'string'
+      || typeof p.draftSaved !== 'boolean' || !p.preferences || typeof p.preferences !== 'object' || Array.isArray(p.preferences)) throw new Error('update-ui-checkpoint-invalid');
+    const preferences = p.preferences as Record<string, unknown>;
+    if (JSON.stringify(preferences).length > 4 * 1024 * 1024 || Object.entries(preferences).some(([key, value]) =>
+      !(key === 'dsh.conversation' || key.startsWith('dsh.conversation.') || key === 'dsh.locale') || typeof value !== 'string')) throw new Error('update-ui-checkpoint-invalid');
+    uiCheckpoint.resolve({origin: p.origin, draftSaved: p.draftSaved, preferences});
+    return {ok: true};
+  },
+  'client-update.ui-restore-checkpoint': (p: RpcParams): RpcResult => {if (!updateRestart || !p) throw new Error('update-ui-restore-unavailable'); updateRestart.acceptUi(p); return {ok: true};},
+  'client-update.settings': (): RpcResult => clientUpdate.settings(),
+  'client-update.configure': (p: RpcParams): Promise<Record<string, unknown>> => clientUpdate.configure(p?.selection),
+  'client-update.auto-select': (): Promise<Record<string, unknown>> => clientUpdate.selectAutomatically(),
+  'client-update.check': (): Promise<unknown> => clientUpdate.check(),
+  'client-update.download': (): Promise<unknown> => clientUpdate.download(),
+  'client-update.cancel': async (): Promise<RpcResult> => { await clientUpdate.cancel(); return {ok: true}; },
+  'client-update.prepare': (): Promise<unknown> => clientUpdate.prepare(),
+
+  // subscribe：登记远端订阅，并立即
   // 推送当前 presentation（页面重载后首个监听者即刻拿到真实态）。
   'updates.subscribe': (): RpcResult => {
-    updatesWatchers += 1;
-    startUpdatesPoll();
     const current = computeUpdatePresentation();
-    lastUpdatePresentation = JSON.stringify(current);
+
     notify('updates.presentation', current);
     return current;
   },
   'updates.unsubscribe': (): RpcResult => {
-    updatesWatchers = Math.max(0, updatesWatchers - 1);
-    if (updatesWatchers === 0) stopUpdatesPoll();
     return { ok: true };
   },
   // ---- 安装环境运维（P1：损坏环境可诊断 + 最小 repair/remove 能力）--------
@@ -993,16 +1121,34 @@ const rl = readline.createInterface({ input: process.stdin });
 rl.on('line', (line: string) => { void handleLine(line); });
 rl.on('close', () => { void gracefulExit(); });
 
+void clientUpdate.initialize().catch(() => log('updates', 'initial-selection-failed'));
+
+if (process.env.DSH_EAC_UPDATE_TRANSACTION_DIR && process.env.DSH_EAC_UPDATE_HEALTH_TOKEN && process.env.DSH_SHELL_EXE) {
+  updateRestart = new UpdateRestart({transactionDir: process.env.DSH_EAC_UPDATE_TRANSACTION_DIR, token: process.env.DSH_EAC_UPDATE_HEALTH_TOKEN,
+    shellExe: process.env.DSH_SHELL_EXE, shellPid: Number(process.env.DSH_SHELL_PID), version: pkgVersion,
+    nativeVersion: process.env.DSH_SHELL_VERSION || '', target: updateTarget(process.env.DSH_SHELL_EXE), binding: updateBinding,
+    kernel: () => (bootMod.getServerProc as () => import('node:child_process').ChildProcess | null)(),
+    hostHealth: () => updateHost.health((bootMod.getServerProc as () => import('node:child_process').ChildProcess | null)()),
+    releaseHost: () => updateHost.releaseHealth((bootMod.getServerProc as () => import('node:child_process').ChildProcess | null)()),
+    stopHost: transactionId => updateHost.prepare((bootMod.getServerProc as () => import('node:child_process').ChildProcess | null)(), transactionId, new AbortController().signal,
+      (proc, timeout) => (procMod.waitForProcExit as (p: import('node:child_process').ChildProcess, t: number) => Promise<boolean>)(proc, timeout)),
+    recordCompletion: (transactionId, version) => clientUpdate.completeRestart(transactionId, version),
+    bootSettled: () => updateBootSettled, notify,
+  });
+}
+
 // ---- lifecycle/profile mutation gate --------------------------------------
+let updatePreparing = false;
 let activeMutation: {key: string; promise: Promise<unknown>} | null = null;
 function isProfileMutation(method: string, params: RpcParams): boolean {
   if (['boot.start', 'boot.stop', 'boot.restart', 'plugins.set-enabled', 'plugins.set-removed',
-    'environment.remove', 'environment.repair', 'files.revert'].includes(method)) return true;
+    'environment.remove', 'environment.repair', 'files.revert', 'file-drop.save', 'shortcuts.edit'].includes(method)) return true;
   return method === 'guard.action' && !['status', 'check', 'incident'].includes(String(params?.action || ''));
 }
 async function invokeProfileMutation(method: string, params: RpcParams, fixed: (p: RpcParams) => unknown): Promise<unknown> {
   if (!isProfileMutation(method, params)) return fixed(params);
   if (quitting) return {ok: false, error: 'app-exiting'};
+  if (updatePreparing || (updateRestart?.pending && method !== 'boot.start')) return {ok: false, error: 'update-preparing'};
   if (activeMutation) return {ok: false, error: 'service-busy'};
   const operation = {key: method + (method === 'guard.action' ? ':' + String(params?.action || '') : ''),
     promise: Promise.resolve().then(() => quitting ? {ok: false, error: 'app-exiting'} : fixed(params))};
@@ -1010,24 +1156,39 @@ async function invokeProfileMutation(method: string, params: RpcParams, fixed: (
   try { return await operation.promise; } finally { if (activeMutation === operation) activeMutation = null; }
 }
 
-async function gracefulExit(): Promise<void> {
+let shutdownPromise: Promise<void> | null = null;
+function cleanupForExit(): Promise<void> {
+  if (shutdownPromise) return shutdownPromise;
   quitting = true;
-  try { if (sessionWatcher) { sessionWatcher.stop(); sessionWatcher = null; } } catch { /* 尽力回收 */ }
-  try { await (bootMod.stopServer as () => Promise<void>)(); } catch {
-    log('shutdown', 'service-stop-unconfirmed');
+  shutdownPromise = (async () => {
+    log('shutdown', 'cleanup-start');
+    updateRestart?.close();
+    try { await clientUpdate.cancel(); } catch { throw new Error('update-cancel-unconfirmed'); }
+    if (sessionWatcher) { sessionWatcher.stop(); sessionWatcher = null; }
+    try { await (bootMod.stopServer as () => Promise<void>)(); } catch { throw new Error('service-stop-unconfirmed'); }
+    const mutation = activeMutation;
+    if (mutation) {
+      let timer: NodeJS.Timeout | undefined;
+      const settled = await Promise.race([
+        mutation.promise.then(() => true, () => true),
+        new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), 15000); }),
+      ]).finally(() => { if (timer) clearTimeout(timer); });
+      if (!settled) throw new Error('mutation-shutdown-timeout');
+    }
+    log('shutdown', 'cleanup-complete');
+  })();
+  return shutdownPromise;
+}
+async function gracefulExit(): Promise<void> {
+  try {
+    await cleanupForExit();
+    // Drain the real protocol pipe before exit so prepared/shutdown replies are not truncated.
+    process.stdout.write('', () => process.exit(0));
+  } catch (error) {
+    const code = error instanceof Error ? error.message : '';
+    log('shutdown', ['update-cancel-unconfirmed', 'service-stop-unconfirmed', 'mutation-shutdown-timeout'].includes(code) ? code : 'cleanup-unconfirmed');
     process.exit(1);
-    return;
   }
-  const mutation = activeMutation;
-  if (mutation) {
-    let timer: NodeJS.Timeout | undefined;
-    const settled = await Promise.race([
-      mutation.promise.then(() => true, () => true),
-      new Promise<boolean>(resolve => { timer = setTimeout(() => resolve(false), 15000); }),
-    ]).finally(() => { if (timer) clearTimeout(timer); });
-    if (!settled) { log('shutdown', 'mutation-shutdown-timeout'); process.exit(1); return; }
-  }
-  process.exit(0);
 }
 
 async function handleLine(line: string): Promise<void> {
@@ -1041,6 +1202,7 @@ async function handleLine(line: string): Promise<void> {
   try {
     if (method === 'ping') return respond({ jsonrpc: '2.0', id, result: { pong: true, ts: Date.now() } });
     if (method === 'shutdown') {
+      await cleanupForExit();
       respond({ jsonrpc: '2.0', id, result: { bye: true } });
       rl.close();
       return;

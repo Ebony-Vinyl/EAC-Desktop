@@ -2,6 +2,7 @@ import { existsSync, openSync, closeSync, readSync, readdirSync, statSync, readF
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { isMuslPayloadPath } from './stage-platform-prune.mjs';
 
 const ELF_MACHINES = {
   x64: 62,
@@ -94,7 +95,7 @@ export function auditLinuxBundle(root, options = {}) {
     // musl 变体的目录名形态：`musl_x64`/`musl-<arch>`（koffi）、`linuxmusl`
     // （sharp 包名），以及裸 `musl`（node-addon-system 的 bin/musl/）。
     if (/\.node$/i.test(file)
-      && rel.split('/').some((part) => /linuxmusl|^musl[_-]|^musl$/i.test(part))) {
+      && isMuslPayloadPath(rel)) {
       errors.push(`musl payload in glibc bundle: ${rel}`);
     }
     const machine = elfMachine(file);

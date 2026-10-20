@@ -31,11 +31,21 @@
         @{
             Name = 'client-update'
             Domain = 'updates-packaging'
-            Pattern = 'client-updater|lib/desktop/client-update|update-smoke'
+            Pattern = '^dsh-desktop/test/fixtures/nsis-repair-dialog-probe\.ps1$|native-update-relay|create-update-manifest|client-updater|lib/desktop/(client-update|update-(sources|signature|platform|backup|host|host-control|data-binding|package|portable|archive|restart|nsis|linux|appimage|helper-process|process-owners))|client-update-defaults\.json$|^tauri-shell/src/(client-update\.html|update-ui-checkpoint\.js|update-boot-ui\.js)$|update-smoke'
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(
                 'test/client-updater-proxy.test.ts',
+                'test/client-full-update.test.ts',
+                'test/update-manifest-generation.test.ts',
+                'test/client-update-ui.test.ts',
+                'test/update-preparation.test.ts',
+                'test/native-update-relay.test.ts',
+                'test/update-portable.test.ts',
+                'test/installer-update-safety.test.ts',
+                'test/lite-artifact-names.test.ts',
+                'test/update-linux.test.ts',
+                'test/update-appimage.test.ts',
                 'test/runtime-overlay-health.test.ts',
                 'test/bridge-preload-parity.test.ts'
             )
@@ -342,7 +352,7 @@
         @{
             Name = 'packaging'
             Domain = 'updates-packaging'
-            Pattern = 'stage-resources|stage-platform-cache|stage-node-modules|audit-linux-bundle|make-portable|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
+            Pattern = 'stage-resources|stage-platform-cache|stage-node-modules|audit-linux-bundle|name-lite-installers|lite-artifact-names|make-portable|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(
@@ -419,7 +429,7 @@
         @{
             Name = 'audit-evidence'
             Domain = 'documentation'
-            Pattern = '^docs/audits/evidence/[^/]+/[^/]+\.json$'
+            Pattern = '^docs/audits/evidence/[^/]+/[^/]+\.json$|^docs/product/2026-10-04/(audit\.snapshot|cached-resource-inspection)\.json$|^reports/client-full-update-(native-result|real-host|real-health|classification|v5-r[0-9]+-(http-diagnosis|evidence|post-restart-ui|cancellation))\.json$|^reports/client-update-linux/[^/]+/([^/]+/)*[^/]+\.(json|md|txt|log|png)$|^reports/client-update-linux/handoff/EAC-Lite-linux-update-handoff-[0-9-]+\.zip$'
             Reference = 'references/testing-and-acceptance.md'
             Level = 'targeted'
             Tests = @()

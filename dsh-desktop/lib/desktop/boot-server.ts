@@ -28,7 +28,7 @@ const { killTreeAndWait, childEnv, childProcessSpawnOptions } = require('./proc'
 };
 const { restrictedPortOf, chooseStableWebPort } = require('../../stable-port') as {
   restrictedPortOf(url: string): number;
-  chooseStableWebPort(ctx: unknown): Promise<number>;
+  chooseStableWebPort(ctx: unknown, opts?: {requiredPort?: number}): Promise<number>;
 };
 const { createStreamWriteGuard } = require('../../stream-write-guard') as {
   createStreamWriteGuard(
@@ -49,6 +49,9 @@ export interface BootServerCtx {
   loadSettings(): { webPort?: number } & Record<string, unknown>;
   saveSettings(s: Record<string, unknown>): void;
   isQuitting(): boolean;
+  requiredWebPort?(): number | undefined;
+  onServerSpawn?(): void;
+  updateRuntime?(): {overlays: string[]; env: NodeJS.ProcessEnv};
   /** 服务就绪后意外死亡（非主动重启、非退出中）时上抛。 */
   onServerDied?(info: { code: number | null; signal: string | null; logPath: string }): void;
 }
@@ -133,10 +136,11 @@ async function startServer(unsafePortRetries = 4, overlays: string[] = [], revis
   healCredentialsVersion();
   // 稳定端口（stable-port）：复用 settings.webPort，避免每次 --port 0 换
   // origin 导致 localStorage 偏好丢失；同时避开 Chromium 受限端口。
+  const requiredPort = ctx.requiredWebPort?.();
   const webPort = await chooseStableWebPort({
     loadSettings: () => ctx.loadSettings(),
     saveSettings: (_c: unknown, s: unknown) => ctx.saveSettings(s as Record<string, unknown>),
-  });
+  }, requiredPort === undefined ? {} : {requiredPort});
   assertStartAllowed(revision);
   return new Promise<string>((resolve, reject) => {
     const nodeBin = ctx.nodeExe();
@@ -169,7 +173,8 @@ async function startServer(unsafePortRetries = 4, overlays: string[] = [], revis
     ctx.log('dsh', `启动: "${nodeBin}" "${bin}" --profile ${ctx.getDesktopProfile()} --host 127.0.0.1 --port ${webPort}`);
     // --use-system-ca：让 dsh web 进程信任系统证书库（代理/MITM 场景下内置
     // node 的默认 CA 无法验证，导致插件市场等对外 fetch 失败）。
-    const patchArgs = overlays
+    const updateRuntime = ctx.updateRuntime?.();
+    const patchArgs = [...overlays, ...(updateRuntime?.overlays || [])]
       .filter((p) => typeof p === 'string' && p && fs.existsSync(p))
       .flatMap((p) => ['--patch', p]);
     // 0.1.5-rc.2 CLI 形态：`web` 子命令硬编码 --profile web 且拒绝根级
@@ -180,16 +185,17 @@ async function startServer(unsafePortRetries = 4, overlays: string[] = [], revis
     // --no-open：内核 openBrowser 默认 true 会每轮启动弹一个系统浏览器标签。
     const proc = cp.spawn(
       nodeBin,
-      ['--use-system-ca', carrier, '--profile', ctx.getDesktopProfile(), '--host', '127.0.0.1', '--port', String(webPort), '--no-open', ...patchArgs],
+      ['--use-system-ca', carrier, '--profile', ctx.getDesktopProfile(), ...patchArgs, '--host', '127.0.0.1', '--port', String(webPort), '--no-open'],
       {
         ...childProcessSpawnOptions(),
         cwd: ctx.getUserDataDir(),
-        env: { ...childEnv(), DSH_EAC_KERNEL_BIN: bin, DSH_BIN: carrier },
+        env: { ...childEnv(), ...updateRuntime?.env, DSH_EAC_KERNEL_BIN: bin, DSH_BIN: carrier },
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       },
     );
     serverProc = proc;
+    ctx.onServerSpawn?.();
     // profile 首次引导（node_modules 缺失）时 dsh 要先跑 pnpm 装齐依赖，
     // 就绪等待放宽（下方 bootTimeoutMs）。
     const firstBoot = !fs.existsSync(path.join(ctx.desktopProfileDir(), 'node_modules'));

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>客户端更新</title>
+<style>
+:root{color-scheme:light dark;font-family:system-ui,"Microsoft YaHei",sans-serif;background:#f5f6f8;color:#232936}body{margin:0;padding:28px;max-width:760px;margin-inline:auto}h1{font-size:24px;margin:0 0 8px}p{line-height:1.6}.muted{color:#6b7280;font-size:14px}.card{background:#fff;border:1px solid #e0e4eb;border-radius:14px;padding:22px;margin-top:20px}label{display:block;font-size:14px;font-weight:600;margin-bottom:8px}select,input{box-sizing:border-box;width:100%;padding:10px;border:1px solid #cbd2de;border-radius:7px;font:inherit;background:transparent;color:inherit}.field{margin-top:18px}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}button{border:1px solid #cbd2de;border-radius:7px;background:transparent;padding:10px 16px;font:inherit;cursor:pointer;color:inherit}button.primary{background:#315fce;border-color:#315fce;color:white}button:disabled{opacity:.5;cursor:default}progress{width:100%;height:12px}#message{white-space:pre-wrap;overflow-wrap:anywhere}[hidden]{display:none!important}@media(prefers-color-scheme:dark){:root{background:#161b24;color:#e6ebf2}.card{background:#202733;border-color:#343e4c}.muted{color:#acb7c8}select,input,button{border-color:#536176}}
+</style></head><body>
+<h1>客户端更新</h1><div class="muted">稳定版 · 完整包更新</div>
+<section class="card"><strong id="version">正在读取当前版本…</strong><p id="message" role="status" aria-live="polite">正在连接客户端…</p><progress id="progress" max="1" value="0" hidden></progress>
+<div class="actions"><button id="check" class="primary">检查更新</button><button id="download" hidden>下载更新</button><button id="install" hidden>保存并安装</button><button id="cancel" hidden>取消本次更新</button></div>
+<p class="muted">安装前会等待任务与配置保存。对话、配置和个人文件继续保留。</p></section>
+<section class="card"><label for="source">更新来源</label><select id="source"><option value="github">GitHub</option><option value="gitee">Gitee</option><option value="local">本地更新包</option><option value="custom">自定义更新源</option></select>
+<div class="field" id="local-field" hidden><label for="local">本地目录或清单文件</label><input id="local" placeholder="请选择包含完整更新包的目录"><div class="actions"><button id="choose">选择目录</button></div></div>
+<div class="field" id="custom-field" hidden><label for="custom">更新清单地址</label><input id="custom" type="url" placeholder="https://…/stable.json" autocomplete="off"></div>
+<p id="source-notice" class="muted"></p><div class="actions"><button id="save">保存来源</button><button id="auto">重新自动选择</button></div></section>
+<script>
+'use strict';
+const $=id=>document.getElementById(id);
+let selection=null,busy=false,phase='idle';
+const phaseText={idle:'尚未检查更新',checking:'正在检查稳定版…',available:'发现新版本',downloading:'正在下载完整更新包…',ready:'更新包已验证，可以安装',installing:'正在保存数据并交接安装…',error:'更新未完成'};
+const errors={'gitee-not-configured':'Gitee 暂未配置，请选择其他来源。','untrusted-update-key':'当前发布尚未配置可信更新，请等待正式更新包。','update-save-confirmation-unavailable':'尚无法确认全部数据保存，已停止安装。','update-ui-draft-unconfirmed':'草稿或附件尚未确认保存，请先完成保存或取消更新。','update-web-port-unavailable':'原来的界面端口被占用，请释放端口后重试。','update-invalid-source-settings':'更新来源配置已损坏，请重新选择并保存来源。','update-busy':'另一个更新操作正在进行。','local-path-escape':'更新包路径超出所选目录。','local-source-link':'本地源包含不受控链接，请选择实际目录。','signature-verification-failed':'更新包签名无效，已停止更新。','package-identity-mismatch':'更新包不完整或内容已改变，请重新下载。','update-disk-space':'磁盘空间不足，已停止下载。'};
+const call=(method,params={})=>window.dshDesktop._call('client-update.'+method,params,1800000);
+function fields(){$('local-field').hidden=$('source').value!=='local';$('custom-field').hidden=$('source').value!=='custom';}
+function render(state){phase=state.phase;$('message').textContent=errors[state.message]||state.message||phaseText[phase]||'更新未完成';if(state.version)$('message').textContent+=' · '+state.version;
+$('progress').hidden=phase!=='downloading';$('progress').value=state.progress||0;$('download').hidden=phase!=='available';$('install').hidden=phase!=='ready';$('cancel').hidden=!(['checking','downloading','ready','available'].includes(phase)||(phase==='installing'&&state.cancellable===true));
+$('check').disabled=busy||['checking','downloading','installing'].includes(phase);$('download').disabled=busy;$('install').disabled=busy;$('save').disabled=phase==='installing';$('auto').disabled=phase==='installing';}
+function settings(data){selection=data.selection;$('source').value=selection.preferredSourceId;$('local').value=selection.localPath;$('custom').value=selection.customUrl;$('version').textContent='当前版本 '+data.currentVersion;
+$('source-notice').textContent=data.notice||('当前使用 '+({github:'GitHub',gitee:'Gitee',local:'本地',custom:'自定义'}[data.effectiveSourceId])+(selection.selectionMode==='manual'?' · 已固定选择':' · 自动选择'));
+$('source').querySelector('option[value="gitee"]').disabled=!data.giteeConfigured;fields();render(data.presentation);}
+async function action(fn){busy=true;render({phase});try{await fn();settings(await call('settings'));}catch(error){$('message').textContent=errors[error.message]||'操作未完成，请重试或切换更新来源。';}finally{busy=false;renderButtons();}}
+function renderButtons(){$('check').disabled=['checking','downloading','installing'].includes(phase);$('download').disabled=false;$('install').disabled=false;}
+$('source').onchange=fields;$('check').onclick=()=>action(async()=>render(await call('check')));$('download').onclick=()=>action(async()=>render(await call('download')));
+$('install').onclick=()=>{if(confirm('安装更新将关闭并重启客户端。确认后会先保存与备份数据；任务未完成时停止安装。'))action(()=>call('prepare'));};
+$('cancel').onclick=()=>action(()=>call('cancel'));$('save').onclick=()=>action(async()=>settings(await call('configure',{selection:{...selection,selectionMode:'manual',preferredSourceId:$('source').value,localPath:$('local').value.trim(),customUrl:$('custom').value.trim()}})));
+$('auto').onclick=()=>action(async()=>settings(await call('auto-select')));$('choose').onclick=async()=>{try{const dir=await window.__DSH_DIRECTORY_PICKER__.pick();if(dir)$('local').value=dir;}catch{$('message').textContent='无法选择目录，请直接填写目录路径。';}};
+window.dshDesktop.updates.subscribe(()=>{call('settings').then(settings).catch(()=>{});});
+call('settings').then(settings).catch(()=>$('message').textContent='客户端连接不可用，请关闭此页后重试。');
+</script></body></html>

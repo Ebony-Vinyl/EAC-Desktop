@@ -22,6 +22,7 @@ import os = require('node:os');
 import path = require('node:path');
 import childProcess = require('node:child_process');
 import url = require('node:url');
+import {boundEnvironmentChannel, readEnvironmentBinding} from './update-data-binding';
 
 /** dpx 的 pathsFor() 布局（字段与 dpx 一一对应，不做增删）。 */
 export interface DpxPaths {
@@ -69,7 +70,7 @@ export interface EnsuredEnvironment {
 export const DPX_PINNED_COMMIT = '95f18221640ef36cc10e83dbfdf7c48d2744044c';
 export const DPX_LICENSE = 'MIT';
 
-export const DEFAULT_ENVIRONMENT_CHANNEL = 'beta';
+export const DEFAULT_ENVIRONMENT_CHANNEL = 'stable';
 export const DEFAULT_ENVIRONMENT_PRODUCT = 'Deepseek Harness EAC';
 export const DEFAULT_DESKTOP_PROFILE = 'web-desktop';
 
@@ -89,13 +90,18 @@ export function cleanChannel(value: string | undefined): string {
   return raw.replace(/-+$/g, '') || DEFAULT_ENVIRONMENT_CHANNEL;
 }
 
-export function environmentChannel(env: NodeJS.ProcessEnv = process.env): string {
-  return cleanChannel(env.DSH_EAC_CHANNEL);
+export function environmentChannel(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string {
+  if (env.DSH_EAC_CHANNEL?.trim()) return cleanChannel(env.DSH_EAC_CHANNEL);
+  if (platform === process.platform) {
+    const bound = boundEnvironmentChannel(environmentProductRoot(env, platform), environmentStorageRoot(env, platform));
+    if (bound) return bound;
+  }
+  return cleanChannel(env.DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL || DEFAULT_ENVIRONMENT_CHANNEL);
 }
 
 /** dpx 环境名：`eac-<channel>`（字母开头，满足 dpx 的 assertEnvironmentName）。 */
-export function environmentName(env: NodeJS.ProcessEnv = process.env): string {
-  return `eac-${environmentChannel(env)}`;
+export function environmentName(env: NodeJS.ProcessEnv = process.env, platform: NodeJS.Platform = process.platform): string {
+  return `eac-${environmentChannel(env, platform)}`;
 }
 
 function platformPath(platform: NodeJS.Platform): typeof path.win32 {
@@ -134,6 +140,10 @@ export function environmentStorageRoot(
   const api = platformPath(platform);
   const explicit = env.DSH_EAC_DPX_ROOT?.trim();
   if (explicit) return api.resolve(explicit);
+  if (platform === process.platform) {
+    const binding = readEnvironmentBinding(environmentProductRoot(env, platform));
+    if (binding) return binding.storageRoot;
+  }
   return api.join(environmentProductRoot(env, platform), 'dpx');
 }
 
@@ -151,6 +161,10 @@ export function environmentRegistryHome(
   const api = platformPath(platform);
   const explicit = env.DSH_EAC_DPX_REGISTRY_HOME?.trim();
   if (explicit) return api.resolve(explicit);
+  if (platform === process.platform) {
+    const binding = readEnvironmentBinding(environmentProductRoot(env, platform), environmentStorageRoot(env, platform));
+    if (binding) return binding.registryHome;
+  }
   const home = env.USERPROFILE || env.HOME || os.homedir();
   if (platform === 'win32') {
     const localAppData = env.LOCALAPPDATA || api.join(home, 'AppData', 'Local');
@@ -169,7 +183,7 @@ export function environmentRoot(
   platform: NodeJS.Platform = process.platform,
 ): string {
   const api = platformPath(platform);
-  return api.join(environmentStorageRoot(env, platform), 'dsh-environments', environmentName(env));
+  return api.join(environmentStorageRoot(env, platform), 'dsh-environments', environmentName(env, platform));
 }
 
 /** 当前生效的隔离根（优先 dpx 注入的身份变量），供 UI/诊断展示。 */
@@ -360,7 +374,7 @@ export function ensureEacEnvironment(
     storageRoot,
     registryHome,
     name,
-    channel: environmentChannel(env),
+    channel: environmentChannel(env, platform),
     rootExistedBefore,
     legacyDshHome,
     legacyProfileDetected: fs.existsSync(path.join(legacyDshHome, 'profiles', DEFAULT_DESKTOP_PROFILE)),

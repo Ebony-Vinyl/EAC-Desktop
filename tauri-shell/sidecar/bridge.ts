@@ -31,6 +31,7 @@
   // WebView2 also runs document-start scripts in nested documents.
   if (window.top && window.top !== window) return;
 
+  var isMainWindow = (window as any).__DSH_WINDOW_LABEL__ !== 'client-update';
   var BAR_ID = '__dsh_desktop_chrome__';
   var BAR_HEIGHT = 36;
 
@@ -144,9 +145,6 @@
   // revertFiles / openPath / openExternal 为 Task 3.3 接回的 EAC 自有面
   //（见下方「v6 Task 3.3 接回」区），非官方契约、非无主面。
   // ---------------------------------------------------------------------------
-  function unavailable(capability: string): Promise<never> {
-    return Promise.reject(new Error('capability "' + capability + '" is not bundled in the v6 minimal core'));
-  }
 
   // ---------------------------------------------------------------------------
   // keyboard（SYNC-001 · 官方 DesktopKeyboardApi，native.d.ts 逐字段对齐）
@@ -290,7 +288,7 @@
   // DesktopUpdatePresentation（映射依据见 server.ts updates 区注释，无流时
   // 如实 idle）；subscribe 在 0→1/1→0 时 call('updates.subscribe'/
   // 'updates.unsubscribe') 交 sidecar 启停文件变化监听，状态变化经
-  // notify('updates.presentation') 推送。open 保持退役 reject（既有锁定），
+  // notify('updates.presentation') 推送。open 打开原生更新窗口，
   // check/install 无主面已由 SYNC-007 删除（官方无此二方法，全包无消费者）。
   // ---------------------------------------------------------------------------
   var UPDATE_PHASES = ['idle', 'checking', 'available', 'downloading', 'verifying', 'installing', 'ready', 'error'];
@@ -511,8 +509,8 @@
       // 退役语义（ADR 0006 · bridge-preload-parity.test.ts 锁定）：原生确认框
       // 与更新主面未接回，保持 reject。check/install 无主面已由 SYNC-007 删除
       //（官方无此二方法；官方消费者 DesktopUpdateSource 仅用 status/subscribe/open）。
-      open: function () { return unavailable('client-update'); },
-      // 订阅真实事件流：sidecar 监听 settings.json 变化（真实更新态来源），
+      open: function () { return call('updates.open', {}).then(function () {}); },
+      // 订阅更新控制器发布的真实事件流，
       // 变化经 notify('updates.presentation') 推送；0→1/1→0 交 sidecar 启停
       // 监听。返回 disposer。
       subscribe: function (listener: (presentation: unknown) => void): () => void {
@@ -1458,6 +1456,7 @@
   }
 
   function injectChrome(): void {
+    if (!isMainWindow) return;
     if (document.getElementById(BAR_ID)) return;
     injectUiSkin();
     nameUiSkinAnchors();
@@ -1547,6 +1546,7 @@
   // 实际尺寸，超差即重申 webview bounds 自愈。
   // ---------------------------------------------------------------------------
   (function () {
+    if (!isMainWindow) return;
     var beat = function () {
       try {
         send('win.viewport-beat', {
@@ -1564,5 +1564,5 @@
     });
   })();
 
-  initPopupRescue();
+  if (isMainWindow) initPopupRescue();
 })();

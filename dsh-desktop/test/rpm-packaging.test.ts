@@ -33,7 +33,7 @@ test('Linux installer workflow installs RPM tooling and uploads RPM artifacts', 
   const linuxUpload = installerWorkflow.match(
     /Upload Linux installer packages[\s\S]*?path:([\s\S]*?)if-no-files-found:/,
   )?.[1] || '';
-  assert.match(linuxUpload, /bundle\/rpm\/\*\.rpm/);
+  assert.match(linuxUpload, /bundle\/rpm\/EAC-Lite-\*\.rpm/);
 });
 
 test('RPM audit checks metadata, architecture, runtime closure, and forbidden payloads', () => {
@@ -54,7 +54,8 @@ test('RPM audit validator accepts the staged runtime closure and rejects bad pay
     '/usr/lib/deepseek-harness-eac/dsh-desktop/vendor/node/node',
     '/usr/lib/deepseek-harness-eac/ui-skin-manager/resolved/system.default/snapshot.json',
   ];
-  const info = { name: 'deepseek-harness-eac', version: '6.0.0', release: '1', arch: 'x86_64' };
+  const version = JSON.parse(readFileSync(join(repositoryRoot, 'dsh-desktop/package.json'), 'utf8')).version;
+  const info = { name: 'deepseek-harness-eac', version, release: '1', arch: 'x86_64' };
   assert.deepEqual(validateRpmPackage(info, files, { arch: 'x64' }), {
     name: info.name, version: info.version, release: info.release, arch: info.arch, files: files.length,
   });

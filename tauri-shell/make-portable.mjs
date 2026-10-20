@@ -11,20 +11,27 @@
 //
 // 用法：node make-portable.mjs [--out <dir>]
 //   前置：tauri build 已完成（target/release/{dsh-eac-shell.exe, sidecar/, dsh-desktop/}）。
-//   产物：Deepseek-Harness-EAC-<version>-portable.zip + SHA256SUMS.txt
+//   产物：EAC-Lite-<version>-windows-<arch>-portable.zip + SHA256SUMS.txt
 
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
+import { createReadStream, openSync, readSync, closeSync } from 'node:fs';
+import { makeReleaseFiles } from '../dsh-desktop/lib/desktop/update-package.js';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const shellDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 const repo = path.resolve(shellDir, '..');
-const rel = path.join(shellDir, 'target', 'release');
+const targetArg = process.argv.indexOf('--target');
+const triple = targetArg > -1 ? process.argv[targetArg + 1] : '';
+if (targetArg > -1 && (!triple || triple.startsWith('--'))) throw new Error('--target requires a build triple');
+if (triple && !['x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc'].includes(triple)) throw new Error('Unsupported portable build target');
+const rel = path.join(shellDir, 'target', ...(triple ? [triple] : []), 'release');
 const version = JSON.parse(readFileSync(path.join(repo, 'dsh-desktop', 'package.json'), 'utf8')).version || '0.0.0';
 
 const outArg = process.argv.indexOf('--out');
+if (outArg > -1 && (!process.argv[outArg + 1] || process.argv[outArg + 1].startsWith('--'))) throw new Error('--out requires a directory');
 const outDir = outArg > -1 ? path.resolve(process.argv[outArg + 1]) : path.join(rel, 'portable');
 
 const exe = path.join(rel, 'dsh-eac-shell.exe');
@@ -37,15 +44,29 @@ for (const need of [exe, path.join(rel, 'sidecar', 'server.js'), path.join(rel, 
 }
 
 mkdirSync(outDir, { recursive: true });
-const zipPath = path.join(outDir, `Deepseek-Harness-EAC-${version}-portable.zip`);
-rmSync(zipPath, { force: true });
+const descriptor = openSync(exe, 'r');
+let machine;
+try {
+  const dos = Buffer.alloc(64); readSync(descriptor, dos, 0, dos.length, 0);
+  if (dos.toString('ascii', 0, 2) !== 'MZ') throw new Error('Portable shell is not a PE executable');
+  const pe = Buffer.alloc(6); readSync(descriptor, pe, 0, pe.length, dos.readUInt32LE(60));
+  if (pe.readUInt32LE(0) !== 0x4550) throw new Error('Portable shell PE header is invalid');
+  machine = pe.readUInt16LE(4);
+} finally {closeSync(descriptor);}
+const arch = machine === 0x8664 ? 'x86_64' : machine === 0xaa64 ? 'aarch64' : '';
+if (!arch || (triple && !triple.startsWith(arch + '-'))) throw new Error('Portable shell architecture differs from target');
+const updateTarget = 'windows-' + arch + '-portable';
+const zipPath = path.join(outDir, 'EAC-Lite-' + version + '-' + updateTarget + '.zip');
+if (existsSync(zipPath)) throw new Error('Portable ZIP already exists: ' + zipPath);
 
 console.log('[portable] 装配暂存目录（zip 根 = 安装树同构，顶层无包裹目录）');
-const staging = path.join(outDir, '.staging-portable');
-rmSync(staging, { recursive: true, force: true });
+const staging = path.resolve(outDir, '.staging-portable-' + randomUUID());
+const stagingRelative = path.relative(path.resolve(outDir), staging);
+if (path.isAbsolute(stagingRelative) || stagingRelative.startsWith('..') || !path.basename(staging).startsWith('.staging-portable-')) throw new Error('Portable staging escaped its output directory');
 mkdirSync(staging, { recursive: true });
 copyFileSync(exe, path.join(staging, 'dsh-eac-shell.exe'));
 writeFileSync(path.join(staging, '.dsh-portable'), '');
+writeFileSync(path.join(staging, 'eac-installation.json'), JSON.stringify({schemaVersion: 1, product: 'eac-desktop', installKind: 'portable', arch}, null, 2) + '\n');
 // WebView2Loader.dll：安装版由 tauri.windows.conf.json 把 staged-resources/ 里的
 // 该文件映射到 exe 同级，便携 zip 补上以保持两形态产物面一致。实测壳 exe 已
 // 静态链接 webview2（导入表无该 DLL），此文件属防御性冗余 —— 故为 best-effort：
@@ -57,11 +78,11 @@ if (existsSync(webview2Loader)) {
   console.log('[portable] WebView2Loader.dll 已随包（与安装版产物面一致）');
 }
 
-// robocopy 退出码 0-7 均为成功语义（1=有文件复制）；execSync 对非零会抛，需容错。
+// robocopy 退出码 0-7 均为成功语义（1=有文件复制）；execFileSync 对非零会抛，需容错。
 function robocopy(src, dest) {
   let code = 0;
   try {
-    execSync(`robocopy "${src}" "${dest}" /E /NFL /NDL /NJH /NJS /NP`, { stdio: ['ignore', 'ignore', 'ignore'], shell: 'cmd.exe' });
+    execFileSync('robocopy.exe', [src, dest, '/E', '/NFL', '/NDL', '/NJH', '/NJS', '/NP'], {stdio: 'ignore', windowsHide: true});
   } catch (e) {
     code = e.status == null ? 8 : e.status;
   }
@@ -74,25 +95,31 @@ robocopy(path.join(rel, 'dsh-desktop'), path.join(staging, 'dsh-desktop'));
 robocopy(path.join(rel, 'ui-skin-manager'), path.join(staging, 'ui-skin-manager'));
 robocopy(path.join(rel, 'dpx'), path.join(staging, 'dpx'));
 
-console.log('[portable] 压缩 zip（Compress-Archive，约 500MB 需几分钟）');
+await makeReleaseFiles(staging, version, updateTarget);
+console.log('[portable] 压缩完整文件清单与程序树');
 const psZip = [
   "$ErrorActionPreference='Stop'",
   "$ProgressPreference='SilentlyContinue'",
-  'Compress-Archive -LiteralPath (Get-ChildItem -LiteralPath $env:P_STAGE | ForEach-Object { $_.FullName }) -DestinationPath $env:P_ZIP -Force',
+  'Add-Type -AssemblyName System.IO.Compression',
   'Add-Type -AssemblyName System.IO.Compression.FileSystem',
+  '$prefix = [IO.Path]::GetFullPath($env:P_STAGE).TrimEnd([char]92) + [char]92',
+  '$zip = [IO.Compression.ZipFile]::Open($env:P_ZIP, [IO.Compression.ZipArchiveMode]::Create)',
+  "try { foreach ($file in [IO.Directory]::EnumerateFiles($env:P_STAGE, '*', [IO.SearchOption]::AllDirectories)) { $name = $file.Substring($prefix.Length).Replace([char]92, [char]47); [IO.Compression.ZipFileExtensions]::CreateEntryFromFile($zip, $file, $name, [IO.Compression.CompressionLevel]::Optimal) | Out-Null }; foreach ($dir in [IO.Directory]::EnumerateDirectories($env:P_STAGE, '*', [IO.SearchOption]::AllDirectories)) { if ([IO.Directory]::GetFileSystemEntries($dir).Length -eq 0) { $zip.CreateEntry($dir.Substring($prefix.Length).Replace([char]92, [char]47) + '/') | Out-Null } } } finally { $zip.Dispose() }",
   '$archive = [System.IO.Compression.ZipFile]::OpenRead($env:P_ZIP)',
   "try { if (-not ($archive.Entries | Where-Object { $_.FullName.Replace([char]92, [char]47) -eq 'ui-skin-manager/resolved/system.default/snapshot.json' })) { throw 'Portable ZIP is missing the skin manager snapshot' } } finally { $archive.Dispose() }",
 ].join('; ');
-execSync('powershell -NoProfile -Command "' + psZip.replace(/"/g, '\\"') + '"', {
+execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(psZip, 'utf16le').toString('base64')], {
   env: { ...process.env, P_STAGE: staging, P_ZIP: zipPath },
   stdio: 'inherit',
 });
 
 console.log('[portable] 计算 SHA256');
 const hash = createHash('sha256');
-hash.update(readFileSync(zipPath));
+for await (const chunk of createReadStream(zipPath)) hash.update(chunk);
 const sha256 = hash.digest('hex').toUpperCase();
-writeFileSync(path.join(outDir, 'SHA256SUMS.txt'), `${sha256}  ${path.basename(zipPath)}\n`);
+const sumsPath = path.join(outDir, 'SHA256SUMS.txt');
+const previousSums = existsSync(sumsPath) ? readFileSync(sumsPath, 'utf8') : '';
+writeFileSync(sumsPath, previousSums + (previousSums && !previousSums.endsWith('\n') ? '\n' : '') + `${sha256}  ${path.basename(zipPath)}\n`);
 
 console.log('[portable] 清理暂存');
 rmSync(staging, { recursive: true, force: true });

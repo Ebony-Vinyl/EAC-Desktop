@@ -13,13 +13,13 @@ function harness() {
   const replies: any[] = []; const calls: string[] = [];
   let finish!: () => void;
   const hold = new Promise<void>(resolve => {finish = resolve;});
-  const methods: any = Object.fromEntries(['boot.start','boot.stop','boot.restart','plugins.set-enabled','plugins.set-removed','environment.remove','environment.repair','files.revert','guard.action'].map(name => [name, async (p: any) => {
+  const methods: any = Object.fromEntries(['boot.start','boot.stop','boot.restart','plugins.set-enabled','plugins.set-removed','environment.remove','environment.repair','files.revert','shortcuts.edit','file-drop.save','guard.action'].map(name => [name, async (p: any) => {
     calls.push(name + ':' + (p?.action || ''));
     if (name === 'boot.start') await hold;
     if (p?.fail) throw Error('injected action failure');
     return {ok: true};
   }]));
-  const context: any = {methods, respond: (m: any) => replies.push(m), quitting: false, rl: {close() {}}, Date, setTimeout, clearTimeout};
+  const context: any = {updateRestart: null, methods, respond: (m: any) => replies.push(m), quitting: false, rl: {close() {}}, Date, setTimeout, clearTimeout};
   runInNewContext(code + '\nthis.run = handleLine;', context);
   let id = 0;
   return {replies,calls,finish,quit: () => {context.quitting = true;}, run: (method: string, params: any = {}) => context.run(JSON.stringify({jsonrpc:'2.0',id: ++id,method,params}))};
@@ -27,9 +27,9 @@ function harness() {
 
 test('sidecar rejects all profile/lifecycle writes while a boot mutation is pending', async () => {
   const h = harness(); const first = h.run('boot.start'); await Promise.resolve();
-  for (const method of ['boot.stop','boot.restart','plugins.set-enabled','plugins.set-removed','environment.remove','environment.repair','files.revert']) await h.run(method);
+  for (const method of ['boot.stop','boot.restart','plugins.set-enabled','plugins.set-removed','environment.remove','environment.repair','files.revert','shortcuts.edit','file-drop.save']) await h.run(method);
   for (const action of ['restore','snapshot','repair','resolve-incident']) await h.run('guard.action',{action});
-  assert.equal(h.replies.length,11); for (const reply of h.replies) assert.equal(reply.result.error,'service-busy');
+  assert.equal(h.replies.length,13); for (const reply of h.replies) assert.equal(reply.result.error,'service-busy');
   assert.equal(h.calls.length,1); h.finish(); await first;
 });
 

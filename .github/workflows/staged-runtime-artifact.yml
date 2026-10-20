@@ -107,6 +107,10 @@ jobs:
           APPIMAGE_EXTRACT_AND_RUN: '1'
         run: npx -y @tauri-apps/cli@2 build --verbose
 
+      - name: Name Lite installer artifacts
+        working-directory: ${{ github.workspace }}
+        run: node tauri-shell/name-lite-installers.mjs --platform=${{ matrix.os }} --arch=${{ matrix.arch }}
+
       - name: Build portable package
         if: runner.os == 'Windows'
         working-directory: ${{ github.workspace }}/tauri-shell
@@ -116,10 +120,11 @@ jobs:
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v4
         with:
-          name: dsh-eac-windows-${{ matrix.arch }}-installers
+          name: eac-lite-windows-${{ matrix.arch }}-installers
           path: |
-            tauri-shell/target/release/bundle/nsis/*.exe
-            tauri-shell/target/release/portable/*.zip
+            tauri-shell/target/release/bundle/nsis/EAC-Lite-*.exe
+            tauri-shell/target/release/bundle/SHA256SUMS-Lite.txt
+            tauri-shell/target/release/portable/EAC-Lite-*.zip
             tauri-shell/target/release/portable/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 7
@@ -133,10 +138,11 @@ jobs:
         if: runner.os == 'Linux'
         uses: actions/upload-artifact@v4
         with:
-          name: dsh-eac-linux-${{ matrix.arch }}-installers
+          name: eac-lite-linux-${{ matrix.arch }}-installers
           path: |
-            tauri-shell/target/release/bundle/deb/*.deb
-            tauri-shell/target/release/bundle/appimage/*.AppImage
-            tauri-shell/target/release/bundle/rpm/*.rpm
+            tauri-shell/target/release/bundle/deb/EAC-Lite-*.deb
+            tauri-shell/target/release/bundle/SHA256SUMS-Lite.txt
+            tauri-shell/target/release/bundle/appimage/EAC-Lite-*.AppImage
+            tauri-shell/target/release/bundle/rpm/EAC-Lite-*.rpm
           if-no-files-found: error
           retention-days: 7
