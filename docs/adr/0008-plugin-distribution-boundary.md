@@ -11,6 +11,10 @@
 > `dsh-plugin-manager`、`dsh-terminal`、`dsh-file-drop-eac`），且 `balance` 由
 > builtin 改归 recommended、`plugin-wizard` 由 builtin 改归 external。**分发集合以账本
 > `.sync/plugin-distribution.json` 为准**（`plugin-sync.mjs validate` 强校验）。
+>
+> **2026-10-18 更新**：`dsh-our-free-model` 由「仅 full 预置层」改归 builtin（随 Lite
+> 交付），账本实测为 **11 builtin / 15 recommended / 20 external = 46**。判定依据见
+> `.sync/plugins.json` 该条目的 `runtimeUpdate.allowed=false` 与 `dsh-desktop/assets/SOURCES.json#C116`。
 
 ## 背景
 

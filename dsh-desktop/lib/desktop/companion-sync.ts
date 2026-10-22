@@ -163,6 +163,12 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // overflow 尺寸识别导航/内容滚动区；MutationObserver 跟随动态内容，卸载时
   // 完整清理样式、标记与监听器。纯客户端实现（host 半边 no-op）。
   { id: 'settings-scroll-fix', name: 'dsh-settings-scroll-fix', dir: 'dsh-settings-scroll-fix' },
+  // Our Free Model：免登录/免注册/免 API Key 接入前沿模型（含 DeepSeek V4.1 Flash、
+  // Kimi K3），集成 Jet Hub 十三账号渠道、本地 OpenAI 网关与数据看板。
+  // 纯 JS（零原生依赖）、inject 仅 ['llm']（内核自带），无需桌面桥接面，
+  // 故可作 builtin 随 Lite 交付。上游 Ebony-Vinyl/dsh-our-free-model
+  //（私有 ESM 包，npm 无发布；GitHub Release v2.5.2 提供官方预构建 tgz）。
+  { id: 'our-free-model', name: 'dsh-our-free-model', dir: 'dsh-our-free-model' },
   // —— 已不随包的插件（ISO-005 收敛出本清单）：不再登记 ——
   // 收敛前本清单 44 项，其中 35 项自 v6 Task 3.1 剥出 assets/plugins 后已无实物
   //（每次启动只留一条「配套插件源目录无效，跳过」）。它们不再随包，改由市场按需

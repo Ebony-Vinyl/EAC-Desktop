@@ -216,6 +216,41 @@
       "owner": "desktop-plugins"
     },
     {
+      "id": "our-free-model",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+      "packageName": "dsh-our-free-model",
+      "class": "manual",
+      "source": {
+        "kind": "unknown",
+        "reason": "package.json does not declare a source repository; upstream is Ebony-Vinyl/dsh-our-free-model (private ESM package, no npm release). Do not infer a source from the directory name."
+      },
+      "request": {
+        "mode": "exact",
+        "version": "2.5.2"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "index.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
+    },
+    {
       "id": "plugin-shield",
       "kind": "plugin",
       "path": "dsh-desktop/assets/plugins/dsh-plugin-shield",

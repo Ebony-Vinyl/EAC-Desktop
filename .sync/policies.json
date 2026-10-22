@@ -11,7 +11,7 @@
     "recommendedPack": ".sync/packs/desktop-recommended.pack.json",
     "packSchema": "docs/schemas/feature-pack-pack.json",
     "expectedCounts": {
-      "builtin": 10,
+      "builtin": 11,
       "recommended": 15,
       "external": 20
     }

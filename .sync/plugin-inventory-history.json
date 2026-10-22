@@ -178,6 +178,11 @@
       "patched": true
     },
     {
+      "id": "our-free-model",
+      "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+      "patched": false
+    },
+    {
       "id": "picturereader",
       "path": "dsh-desktop/assets/plugins/picturereader",
       "patched": true

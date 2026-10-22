@@ -115,8 +115,9 @@ Rust and Node communicate over **stdio JSON-RPC**, keeping protocol output separ
 - **Reuse established environment management.** DPX owns registry state, identity and default paths; EAC calls it through an adapter instead of maintaining a second rule set.
 - **Make distribution explicit.** Plugin directories, synchronization manifests and dependency artifacts define the package, exposing missing resources during staging.
 - **Pin interface resources.** UI skin manager and default-shell artifacts are locked and checked with SHA-256 during assembly.
+- **Keep artifacts within a budget.** Trimming rules and the size/file-count ceilings live in the [packaging budget](docs/adr/0012-packaging-budget-and-trimming.md); exceeding them blocks the release.
 
-Read the decisions on [layering](docs/adr/0002-shell-boundary-and-layering.md), [environment isolation](docs/adr/0004-eac-install-environment-isolation.md), and [core scope](docs/adr/0006-minimal-core-scope.md).
+Read the decisions on [layering](docs/adr/0002-shell-boundary-and-layering.md), [environment isolation](docs/adr/0004-eac-install-environment-isolation.md), [core scope](docs/adr/0006-minimal-core-scope.md), and the [packaging budget](docs/adr/0012-packaging-budget-and-trimming.md).
 
 ## Plugins and appearance
 
@@ -133,6 +134,7 @@ Companion plugins use Harness host/client contracts. The [staging script](tauri-
 | Protection | `dsh-plugin-shield` | Snapshots, health checks and rollback controls |
 | Localization | `dsh-eac-locale-compat` | English UI compatibility for companion and community plugins |
 | UI stability | `dsh-viewport-lock`, `dsh-settings-scroll-fix` | Viewport constraints and settings-panel wheel/overflow fixes |
+| Free models | `dsh-our-free-model` | Frontier models without login, signup or API keys, plus a local OpenAI gateway and usage dashboard |
 
 ### Extension distribution
 

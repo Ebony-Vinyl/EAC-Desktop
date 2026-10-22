@@ -354,6 +354,16 @@
       }
     },
     {
+      "id": "our-free-model",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
+    },
+    {
       "id": "picturereader",
       "distributionClass": "recommended",
       "delivery": "pack",

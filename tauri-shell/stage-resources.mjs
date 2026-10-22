@@ -461,6 +461,13 @@ console.log('[stage] assets（v6 最简本体：图标 + WS 客户端 + skills�
     // 阶段 3：服务端 RPC / bridge 面已随本批接回
     'dsh-plugin-shield',
     'dsh-client-file-changes',
+    // Our Free Model：免登录/免注册/免 API Key 接入前沿模型，集成 Jet Hub 十三
+    // 账号渠道、本地 OpenAI 网关与数据看板。纯 JS（零原生依赖）、inject 仅 llm
+    // （内核自带），无需桌面桥接面，故可作 builtin 随 Lite 交付。
+    // 上游 Ebony-Vinyl/dsh-our-free-model（私有 ESM 包，GitHub Release v2.5.2）。
+    // 注意：本数组的契约测试用单引号正则抽取条目，注释里不要再出现带单引号的
+    // 标识符，否则会被误当成清单项（曾因写成带引号的 llm 导致 10→11）。
+    'dsh-our-free-model',
   ];
   // EAC-CORE-SHELL-01：皮肤平台（loader + 13 款公约皮肤）已彻底外迁，宿主
   // 最小壳不再随包皮肤/加载器。皮肤改为市场可选包（Market Core 按需安装）。

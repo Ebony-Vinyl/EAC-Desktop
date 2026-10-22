@@ -90,8 +90,8 @@ test('offline ledgers no longer carry skin-switch (history keeps a retired basel
   const builtinCount = distribution.plugins.filter((p) => p.distributionClass === 'builtin').length;
   assert.equal(policies.pluginDistribution.expectedCounts.builtin, builtinCount,
     'policies.expectedCounts.builtin 必须与 plugin-distribution 的 builtin 数一致');
-  assert.equal(builtinCount, 10,
-    '10 个内置插件 = dsh-desktop/assets/plugins 实物（皮肤平台 14 包已外迁、plugin-manager/terminal/file-drop-eac 已退役；balance/plugin-wizard 实物不存在，ISO-004 改判 recommended/external）');
+  assert.equal(builtinCount, 11,
+    '11 个内置插件 = dsh-desktop/assets/plugins 实物 + our-free-model（皮肤平台 14 包已外迁、plugin-manager/terminal/file-drop-eac 已退役；balance/plugin-wizard 实物不存在，ISO-004 改判 recommended/external）');
   // lock 的 manifestRevision 与被编辑后的 .sync/plugins.json 逐字节对应
   //（与 scripts/plugin-sync.mjs buildLock 的 sha256File 口径一致）。
   const lock = json<{ manifestRevision: string }>('.sync', 'plugins.lock.json');
@@ -136,7 +136,7 @@ test('staging drops the retired plugin but preserves the ADR 0010 manager fallba
   // ISO-003：eac-core-bridge 的端点生产者缺失（DSH_EAC_BRIDGE_URL/TOKEN 零写入方）
   // → 退役出装配清单（资产目录保留，等进程隔离接回）。
   assert.equal(stagedDirs.includes('dsh-eac-core-bridge'), false, 'ISO-003：Core Bridge 不得再随包装配');
-  assert.equal(stagedDirs.length, 9, '装配清单应为 9 个内置插件（皮肤平台已外迁 + 3 个同名/内置重叠插件已退役 + ISO-003 core-bridge 退役）');
+  assert.equal(stagedDirs.length, 10, '装配清单应为 10 个内置插件（皮肤平台已外迁 + 3 个同名/内置重叠插件已退役 + ISO-003 core-bridge 退役 + our-free-model 接入）');
   // ADR 0010：壳层 ui-skin manager 钉版产物与 boot/recovery 回退资源必须随包。
   assert.match(stageScript, /ui-skin-manager/);
   assert.match(stageScript, /pinned UI skin manager artifacts staged/);

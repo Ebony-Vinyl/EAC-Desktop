@@ -1,6 +1,11 @@
 node_modules/
 dist/
-vendor/
+# 只忽略 dsh-desktop 直属的 vendor/（node.exe / npm 运行时缓存，由 fetch-runtime 生成）。
+# 锚定到 /vendor/：插件自身的 vendor/ 是随包资产，必须可入库 —— 未锚定时会连
+# assets/plugins/*/vendor/ 一起忽略，导致 dsh-our-free-model 的 channel-pack
+# （pack.js + WASM + LICENSE/NOTICE）在干净检出里整体缺失，plugin-sync
+# validate 也因 excludedPaths 与 lock 不符而在 CI 上恒定红灯。
+/vendor/
 *.log
 data/
 .playwright-mcp/
@@ -103,6 +108,12 @@ build/*
 /lib/desktop/plugin-remove.js
 /scripts/eac-cli.js
 /scripts/fetch-pnpm.js
+/lib/desktop/full-composition.js
+
+# 完全体预装层：由 prepare-composition.mjs 从 EAC-Pack/dist 生成的构建产物
+# （约 0.88 GiB / 1.9 万文件，含 profile-seed node_modules 与 payload 分块）。
+# 只随打包装配，不入 Git；重建走 prepare-composition.mjs。
+/assets/full-pack/
 
 # Generated complete-package updater modules
 /lib/desktop/update-sources.js

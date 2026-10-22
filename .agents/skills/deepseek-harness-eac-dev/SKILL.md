@@ -48,7 +48,7 @@ description: 面向 Deepseek Harness EAC 源码仓库的全栈开发与维护技
 | 余额、会话通知、文件预览、端口等产品服务 | `references/product-services.md` |
 | 新增或修改 DSH 插件、插件注册与分发 | `references/dsh-plugins.md` |
 | preset、profile、Cordis patch、配置迁移 | `references/presets-and-profile.md` |
-| Agent/插件/客户端更新、NSIS、便携包、资源完整性 | `references/updates-and-packaging.md` |
+| Agent/插件/客户端更新、NSIS、便携包、资源完整性、体积预算与裁剪 | `references/updates-and-packaging.md` |
 | `patch-deps.js`、受控 node_modules 补丁和 vendored 覆盖 | `references/dependency-patches.md` |
 | guard、rescue、安全模式、日志脱敏、路径和进程安全 | `references/reliability-and-security.md` |
 | 选择测试范围、运行 smoke、验收结果 | `references/testing-and-acceptance.md` |

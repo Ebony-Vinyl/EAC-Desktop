@@ -101,8 +101,9 @@ Rust 与 Node 使用 **stdio JSON-RPC** 通信，协议输出与诊断日志分�
 - **环境管理复用成熟实现。** DPX 负责注册表、环境身份与默认路径；EAC 通过适配层调用，避免重复维护两套规则。
 - **分发以实际装配为准。** 插件目录、同步清单与依赖工件共同组成发行包，资源缺失在装配阶段暴露。
 - **界面资源有可核对的来源。** UI skin manager 与默认壳资源通过锁文件固定工件，并在装配时校验 SHA-256。
+- **产物体积有预算。** 裁剪规则、体积与文件数上限见 [打包预算](docs/adr/0012-packaging-budget-and-trimming.md)，超限拒绝出包。
 
-阅读 [三层边界](docs/adr/0002-shell-boundary-and-layering.md)、[环境隔离](docs/adr/0004-eac-install-environment-isolation.md) 与 [本体范围](docs/adr/0006-minimal-core-scope.md)，了解设计约束。
+阅读 [三层边界](docs/adr/0002-shell-boundary-and-layering.md)、[环境隔离](docs/adr/0004-eac-install-environment-isolation.md)、[本体范围](docs/adr/0006-minimal-core-scope.md) 与 [打包预算](docs/adr/0012-packaging-budget-and-trimming.md)，了解设计约束。
 
 ## 插件与外观
 
@@ -119,6 +120,7 @@ Rust 与 Node 使用 **stdio JSON-RPC** 通信，协议输出与诊断日志分�
 | 插件保护 | `dsh-plugin-shield` | 快照、体检与回滚入口 |
 | 语言兼容 | `dsh-eac-locale-compat` | 配套及社区插件的英文界面兼容 |
 | 界面稳定 | `dsh-viewport-lock`、`dsh-settings-scroll-fix` | 视口约束、设置面板滚轮与溢出滚动修复 |
+| 免密模型 | `dsh-our-free-model` | 免登录/免注册/免 API Key 接入前沿模型，含本地 OpenAI 网关与用量看板 |
 
 ### 扩展分发
 

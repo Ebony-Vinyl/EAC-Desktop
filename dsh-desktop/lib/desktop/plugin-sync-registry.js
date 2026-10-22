@@ -2,7 +2,7 @@
 // GENERATED FILE — do not edit by hand.
 // Sources: .sync/plugins.json, plugin-distribution.json, and recommended pack registry (run generate-plugin-registry.mjs).
 // plugin-sync:update-sources {"unified-market":{"npm":"dsh-unified-market"}}
-// plugin-sync:distribution {"builtinPluginIds":["client-file-changes","compact","eac-core-bridge","eac-locale-compat","easy-setup","file-changes","plugin-shield","settings-scroll-fix","unified-market","viewport-lock"],"recommendedPluginIds":["balance","better-sidebar","change-review","composer-dynamic-island","conversation-tweaks","dock-settings","dsh-navbar","dsh-raw-html","dsh-session-manager","message-rewind","mobile-fix","offpeak","picturereader","prompt-custom","soul-md"],"recommendedPackId":"dev.dsh-eac.desktop-recommended","pluginClasses":{"agent-teams":"external","balance":"recommended","better-sidebar":"recommended","change-review":"recommended","client-file-changes":"builtin","compact":"builtin","composer-dynamic-island":"recommended","computer-user":"external","conversation-tweaks":"recommended","dock-settings":"recommended","dsh-dafeiyu":"external","dsh-feature-toggles":"external","dsh-navbar":"recommended","dsh-pet":"external","dsh-pet-settings":"external","dsh-phone":"external","dsh-raw-html":"recommended","dsh-session-manager":"recommended","dsh-stt":"external","dsh-undo":"external","dsh-webui-prompt-optimizer":"external","dsh-whale-widget":"external","eac-core-bridge":"builtin","eac-locale-compat":"builtin","easy-setup":"builtin","file-changes":"builtin","float-window":"external","font-custom":"external","image-paste":"external","meow-smooth":"external","message-rewind":"recommended","mobile-fix":"recommended","offpeak":"recommended","openclaw-bridge":"external","picturereader":"recommended","plugin-shield":"builtin","plugin-wizard":"external","prompt-custom":"recommended","settings-groups":"external","settings-scroll-fix":"builtin","side-session":"external","soul-md":"recommended","think-zh-expand-eac":"external","unified-market":"builtin","viewport-lock":"builtin"}}
+// plugin-sync:distribution {"builtinPluginIds":["client-file-changes","compact","eac-core-bridge","eac-locale-compat","easy-setup","file-changes","our-free-model","plugin-shield","settings-scroll-fix","unified-market","viewport-lock"],"recommendedPluginIds":["balance","better-sidebar","change-review","composer-dynamic-island","conversation-tweaks","dock-settings","dsh-navbar","dsh-raw-html","dsh-session-manager","message-rewind","mobile-fix","offpeak","picturereader","prompt-custom","soul-md"],"recommendedPackId":"dev.dsh-eac.desktop-recommended","pluginClasses":{"agent-teams":"external","balance":"recommended","better-sidebar":"recommended","change-review":"recommended","client-file-changes":"builtin","compact":"builtin","composer-dynamic-island":"recommended","computer-user":"external","conversation-tweaks":"recommended","dock-settings":"recommended","dsh-dafeiyu":"external","dsh-feature-toggles":"external","dsh-navbar":"recommended","dsh-pet":"external","dsh-pet-settings":"external","dsh-phone":"external","dsh-raw-html":"recommended","dsh-session-manager":"recommended","dsh-stt":"external","dsh-undo":"external","dsh-webui-prompt-optimizer":"external","dsh-whale-widget":"external","eac-core-bridge":"builtin","eac-locale-compat":"builtin","easy-setup":"builtin","file-changes":"builtin","float-window":"external","font-custom":"external","image-paste":"external","meow-smooth":"external","message-rewind":"recommended","mobile-fix":"recommended","offpeak":"recommended","openclaw-bridge":"external","our-free-model":"builtin","picturereader":"recommended","plugin-shield":"builtin","plugin-wizard":"external","prompt-custom":"recommended","settings-groups":"external","settings-scroll-fix":"builtin","side-session":"external","soul-md":"recommended","think-zh-expand-eac":"external","unified-market":"builtin","viewport-lock":"builtin"}}
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RECOMMENDED_PACK_ID = exports.PLUGIN_DISTRIBUTION_CLASSES = exports.RECOMMENDED_PACK_PLUGIN_IDS = exports.DISTRIBUTION_BUILTIN_PLUGIN_IDS = exports.PLUGIN_UPDATE_SOURCES = exports.PLUGIN_SYNC_REGISTRY = void 0;
 exports.PLUGIN_SYNC_REGISTRY = {
@@ -14,6 +14,7 @@ exports.PLUGIN_SYNC_REGISTRY = {
             "eac-locale-compat",
             "easy-setup",
             "file-changes",
+            "our-free-model",
             "plugin-shield",
             "settings-scroll-fix",
             "unified-market",
@@ -54,6 +55,7 @@ exports.PLUGIN_SYNC_REGISTRY = {
             "mobile-fix": "recommended",
             "offpeak": "recommended",
             "openclaw-bridge": "external",
+            "our-free-model": "builtin",
             "picturereader": "recommended",
             "plugin-shield": "builtin",
             "plugin-wizard": "external",
@@ -176,6 +178,21 @@ exports.PLUGIN_SYNC_REGISTRY = {
                 "kind": "internal",
                 "name": "@deepseek-ai/dsh-file-changes",
                 "reason": "maintained in this repository; no external source is declared"
+            },
+            "syncMode": "manual"
+        },
+        "our-free-model": {
+            "class": "manual",
+            "kind": "plugin",
+            "packageName": "dsh-our-free-model",
+            "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+            "runtimeUpdate": {
+                "allowed": false,
+                "defaultAction": "prompt"
+            },
+            "source": {
+                "kind": "unknown",
+                "reason": "package.json does not declare a source repository; upstream is Ebony-Vinyl/dsh-our-free-model (private ESM package, no npm release). Do not infer a source from the directory name."
             },
             "syncMode": "manual"
         },
