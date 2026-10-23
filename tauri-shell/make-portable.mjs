@@ -56,7 +56,21 @@ try {
 const arch = machine === 0x8664 ? 'x86_64' : machine === 0xaa64 ? 'aarch64' : '';
 if (!arch || (triple && !triple.startsWith(arch + '-'))) throw new Error('Portable shell architecture differs from target');
 const updateTarget = 'windows-' + arch + '-portable';
-const zipPath = path.join(outDir, 'EAC-Lite-' + version + '-' + updateTarget + '.zip');
+// 档位前缀：lite 产物沿用 EAC-Lite-（既有消费者与 updateTarget 约定依赖）；
+// full 产物必须是 EAC-Full-，否则两个档位会产出一模一样的文件名，
+// 放到同一目录下互相覆盖，用户也无法从文件名区分。
+//
+// 判定依据是 staged 的 profile.txt（stage-resources.mjs:406 写入的档位标记），
+// 而不是命令行参数 —— 后者可能与实际装配面不一致，前者是产物的既成事实。
+const profileTxt = path.join(rel, 'dsh-desktop', 'profile.txt');
+let distro = 'lite';
+if (existsSync(profileTxt)) {
+  const mark = readFileSync(profileTxt, 'utf8').trim();
+  if (mark === 'full' || mark === 'lite') distro = mark;
+}
+const productPrefix = distro === 'full' ? 'EAC-Full-' : 'EAC-Lite-';
+console.log(`[portable] 档位: ${distro}（来自 profile.txt），产物前缀 ${productPrefix}`);
+const zipPath = path.join(outDir, productPrefix + version + '-' + updateTarget + '.zip');
 if (existsSync(zipPath)) throw new Error('Portable ZIP already exists: ' + zipPath);
 
 console.log('[portable] 装配暂存目录（zip 根 = 安装树同构，顶层无包裹目录）');
