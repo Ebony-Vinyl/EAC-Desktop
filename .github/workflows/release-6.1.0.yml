@@ -1,33 +1,45 @@
 name: Release 6.1.0
 
-# 6.1.0 发行构建（手动触发）。
+# 6.1.0 发行构建。
 #
-# 为什么不是 tag 触发：本轮要先验证「压缩优化 + 双档位装配」是否真的可行，
-# 不能一上来就绑死 tag —— 打错 tag 再修，代价比手动跑一轮大得多。
-# 验证通过后再把 `push: tags` 打开（见文件末尾注释）。
+# ## 为什么用 push 触发而不是 workflow_dispatch
 #
-# 只做 lite：lite 不含 Pack 预置层，不受 EAC-Pack 仓库 11 个未合并 PR 的影响。
-# full 的 Pack 来源待定（见 PR 讨论），所以这里显式只跑 lite，不做假承诺。
+# GitHub 规定 `workflow_dispatch` 只认**默认分支上存在**的 workflow 文件。
+# 这里要构建的是 `release/6.1.0` 分支，而两处默认分支都不适合放这个文件：
+#   · org 仓 (DSH-EAC/EAC-Desktop) 的 main —— 发行流程不该挂在日常主干上
+#   · fork  (BAIKAI23333/...) 的 main —— 停在 2026-09-12 的 e7da2db3，
+#     比 org main 落后 200 个提交，且其 .github/workflows 目录状态与
+#     workflow 列表不一致（ci.yml 在列表里但 contents API 取不到）
 #
-# 与 staged-runtime-artifact.yml 的关系：那个是 4 平台矩阵（含 arm64/linux），
-# 且硬编码 --distro 缺省 lite + 只上传 EAC-Lite-*。本文件是 6.1.0 专用的
-# Windows x64 发行通道，两者并存互不影响。
+# 改用 push 触发后：推哪个 release 提交，就构建哪个提交，运行记录直接绑定
+# commit SHA，反而比手动触发更可追溯。
+#
+# ## 为什么只做 lite
+#
+# lite 不含 Pack 预置层，不受 EAC-Pack 仓库 11 个未合并 PR 的影响。
+# full 的 Pack 来源待定，这里显式只跑 lite，不做假承诺。
+#
+# ## 与 staged-runtime-artifact.yml 的关系
+#
+# 那个是 4 平台矩阵（含 arm64/linux），硬编码 --distro 缺省 lite，
+# 且只上传 EAC-Lite-*。本文件是 6.1.0 专用的 Windows x64 发行通道，两者并存。
 
 on:
-  workflow_dispatch:
-    inputs:
-      distro:
-        description: '档位（full 暂未接入 Pack 预置层，先只支持 lite）'
-        required: true
-        default: lite
-        type: choice
-        options:
-          - lite
-      skip_tests:
-        description: '跳过单元测试（仅供排障，正式发行不要勾）'
-        required: false
-        default: false
-        type: boolean
+  push:
+    branches:
+      # 只在发行分支上触发，不污染日常开发推送。
+      - 'release/**'
+    # 只改文档/报告类文件时不必重跑几十分钟的构建。
+    paths-ignore:
+      - '**/*.md'
+      - 'reports/**'
+      - 'docs/**'
+
+# 同一分支连推多次时，取消上一轮未完成的构建 —— 发行构建很贵，
+# 中间那次基本没有交付价值。
+concurrency:
+  group: release-6.1.0-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -36,10 +48,12 @@ env:
   NODE_VERSION: '24'
   PNPM_VERSION: '11.7.0'
   KERNEL_VERSION: '0.2.0-rc.2'
+  # 档位写死：见上方「为什么只做 lite」。接入 full 预置层后再改成变量。
+  DISTRO: lite
 
 jobs:
   release:
-    name: 构建 6.1.0 ${{ inputs.distro }}（windows/x64）
+    name: 构建 6.1.0 ${{ env.DISTRO }}（windows/x64）
     runs-on: windows-latest
     timeout-minutes: 150
     defaults:
@@ -90,12 +104,11 @@ jobs:
         run: cargo fetch --locked
 
       - name: Unit tests
-        if: ${{ !inputs.skip_tests }}
         run: npm test
 
-      - name: Assemble staged runtime (${{ inputs.distro }})
+      - name: Assemble staged runtime (${{ env.DISTRO }})
         working-directory: ${{ github.workspace }}
-        run: node tauri-shell/stage-resources.mjs --target=win32 --distro=${{ inputs.distro }} --skip-npm
+        run: node tauri-shell/stage-resources.mjs --target=win32 --distro=${{ env.DISTRO }} --skip-npm
 
       - name: Verify staged closure and bundle integrity
         working-directory: ${{ github.workspace }}
@@ -109,9 +122,16 @@ jobs:
           CARGO_ENCODED_RUSTFLAGS: '--remap-path-prefix=${{ github.workspace }}=eac-build'
         run: npx -y @tauri-apps/cli@2 build --verbose
 
-      - name: Build portable package
+      # zip 保底（双击即开）+ tar.zst 精简形态（体积约小 32%）。
+      # 两者内容同源，只是封装与压缩算法不同，见 make-portable.mjs 注释。
+      - name: Ensure zstd available
         working-directory: ${{ github.workspace }}/tauri-shell
-        run: node make-portable.mjs --out target/release/portable
+        shell: bash
+        run: zstd --version || echo "zstd 不在 PATH，WINDOWS runner 自带 tar 但不带 zstd"
+
+      - name: Build portable package (zip + tar.zst)
+        working-directory: ${{ github.workspace }}/tauri-shell
+        run: node make-portable.mjs --out target/release/portable --zstd
 
       - name: Collect artifacts
         working-directory: ${{ github.workspace }}
@@ -120,6 +140,7 @@ jobs:
           mkdir -p out
           find tauri-shell/target/release/bundle -name '*.exe' -path '*nsis*' -exec cp {} out/ \;
           find tauri-shell/target/release/portable -name '*.zip' -exec cp {} out/ \;
+          find tauri-shell/target/release/portable -name '*.tar.zst' -exec cp {} out/ \;
           find tauri-shell/target/release/bundle -name 'SHA256SUMS*.txt' -exec cp {} out/ \; || true
           find tauri-shell/target/release/portable -name 'SHA256SUMS*.txt' -exec cp {} out/ \; || true
           ls -la out
@@ -134,18 +155,11 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: eac-6.1.0-${{ inputs.distro }}-windows-x64
+          name: eac-6.1.0-${{ env.DISTRO }}-windows-x64
           path: ${{ github.workspace }}/out/*
           if-no-files-found: error
           retention-days: 30
 
-# 验证通过后，把上面的 `workflow_dispatch` 扩成：
-#
-#   on:
-#     workflow_dispatch: { ... }
-#     push:
-#       tags: ['v6.1.0*']
-#
-# 并增加一个 publish job（permissions: contents: write）用
-# softprops/action-gh-release 或 gh release upload 发布。
-# 在压缩优化与双档位都实测通过前不要打开 tag 触发。
+# 后续：验证通过后如需自动发布，在 on: 里加 tags: ['v6.1.0*']，
+# 并增加 publish job（permissions: contents: write）用 gh release upload。
+# 在压缩优化与产物都实测通过前不要打开，否则打错 tag 就要返工。
