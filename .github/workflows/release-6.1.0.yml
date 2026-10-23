@@ -53,7 +53,11 @@ env:
 
 jobs:
   release:
-    name: 构建 6.1.0 ${{ env.DISTRO }}（windows/x64）
+    # 注意：这里**不能**用 ${{ env.DISTRO }}。`jobs.<id>.name` 求值时 env 上下文
+    # 不可用，GitHub 会把整个 workflow 判为非法 —— 表现是运行创建即失败、
+    # 0 个 job、名字显示成文件路径，且 API 不回传任何错误原因。
+    # 同样的写法在 steps[].name 里是允许的。实测踩过（commit e3181aac）。
+    name: 构建 6.1.0（windows/x64）
     runs-on: windows-latest
     timeout-minutes: 150
     defaults:
@@ -155,7 +159,7 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: eac-6.1.0-${{ env.DISTRO }}-windows-x64
+          name: eac-6.1.0-lite-windows-x64
           path: ${{ github.workspace }}/out/*
           if-no-files-found: error
           retention-days: 30
