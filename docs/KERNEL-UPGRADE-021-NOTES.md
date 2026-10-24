@@ -12,7 +12,7 @@
 
 本机源码构建在 `pnpm install` 下载 `https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz` 时超时，未完成源码复现。本次没有改写上游锁文件，也没有改变获取脚本的源码构建机制。
 
-本地验证使用官方 npm registry 已发布的精确版本：按该 tag 的 `scripts/release/families.ts` 发布集合枚举 352 个非 private 包，逐包校验 `dist.integrity` 及 tarball 内的包名与版本。缓存位于忽略目录 `dsh-desktop/vendor/kernel/0.2.1-rc.2/`，同目录 `registry-provenance.json` 记录来源与摘要。**这些证据不能证明本机已重现官方源码构建；CI 冷缓存构建仍未验证。**
+本地验证使用官方 npm registry 已发布的精确版本：按该 tag 的 `scripts/release/families.ts` 发布集合枚举 352 个非 private 包，逐包校验 `dist.integrity` 及 tarball 内的包名与版本。缓存位于忽略目录 `dsh-desktop/vendor/kernel/0.2.1-rc.2/`，同目录 `registry-provenance.json` 记录来源与摘要。**这些证据不能证明本机已重现官方源码构建；CI 源码构建结果见下文 CI 记录。**
 
 ## 适配结果
 
@@ -76,8 +76,17 @@ JSONL 删除使用后端配置的存储 root、原生路径查找与跨进程写
 
 1. 外置插件及推荐功能包仍需按新 `activity/usage` 扩展位、Agent Team、子代理、PTC/SDK 和凭据读取规则逐项验收。随包源码未发现对旧 composer stats 槽的调用，不代表第三方插件已通过验证；外部会话管理插件的设置页与批量操作也未完成实机验收。
 2. 尚未验证真实账号登录后的模型对话、旧用户数据副本升级与回退，以及真实 Tauri 窗口运行。当前页面验证不等于真实模型请求成功。
-3. 尚未构建或安装本轮 NSIS/便携分发包；Windows 分发验收为 **partial**。Linux/macOS 和 CI 冷缓存源码构建也未执行。
+3. 尚未构建或安装本轮 NSIS/便携分发包；Windows 分发验收为 **partial**。四组 CI 的官方源码准备已完成，但跨平台安装包尚未构建完成；macOS 未覆盖。
 
 代码通过 `beta` 分支提交进行 CI 验证。安装包工作流保留 `workflow_call`，增加 `beta` push 与手动触发，在现有 Windows/Linux x64/arm64 矩阵中运行自动测试、装配校验和安装包构建。CI 结果以对应提交的 Actions 记录为准；构建验证不代表已发布或完成上述实机验收。
+
+## CI 首轮及修正（2026-10-24）
+
+- [首轮 beta CI](https://github.com/Ebony-Vinyl/EAC-Desktop/actions/runs/40068004384) 四组均完成官方源码准备与依赖安装，但在自动测试步骤失败，未进入安装包构建。Linux 各 1 项失败，Windows 各 10 项失败。
+- 同步工作流契约测试：只允许 beta push、workflow_dispatch 和 workflow_call；确认 npm test 无条件执行、失败不可忽略，且位于装配与打包之前。
+- 两份新内核源码 fixture 固定为 LF，避免 Windows Git 检出转为 CRLF 后破坏真实补丁锚点；不改变生产补丁的严格匹配。
+- Windows runner 的 TEMP 使用 8.3 别名，便携测试曾把短路径与更新器的规范路径混用。测试先以 realpath 取得临时根，再创建隔离目录；保留清理边界检查与更新器全部断言，不修改产品更新器实现。
+- 已用真实 Windows 8.3 临时路径复现三个便携测试失败，修正后 3/3 通过；工作流及主题测试 11/11 通过；core.autocrlf=true 下两个 fixture 的实际 Git 检出均保持 LF，主题补丁成功匹配。
+- 本次修正后的跨平台 CI 及安装包结果仍以最新 beta 提交的 Actions 为准，不以定向测试代替分发验收。
 
 官方变更说明：[0.2.1-rc.1](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1)、[0.2.1-rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)。
