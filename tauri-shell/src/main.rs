@@ -5304,7 +5304,11 @@ fn main() {
                 }
                 "feedback" => {
                     tauri::async_runtime::spawn(async move {
-                        if let Err(error) = open_external("https://github.com/Ebony-Vinyl/Deepseek-Harness-EAC/issues").await {
+                        // 仓库在 2026 年迁到 org 命名空间 EAC-Desktop（DSH-EAC/EAC-Desktop
+                        // 已重定向到 Ebony-Vinyl/EAC-Desktop）。旧地址
+                        // `Ebony-Vinyl/Deepseek-Harness-EAC` 不存在，用户点击后得到 404
+                        // （issue #472）。这里用重定向后的规范地址。
+                        if let Err(error) = open_external("https://github.com/Ebony-Vinyl/EAC-Desktop/issues").await {
                             eprintln!("[tray] open feedback failed: {}", error);
                         }
                     });
