@@ -36,6 +36,7 @@ build/*
 /preload.js
 /scripts/check-syntax.js
 /scripts/patch-deps.js
+/scripts/patch-session-manage-021.js
 /scripts/patch-portable-template.js
 /scripts/fetch-node.js
 /scripts/fetch-npm.js

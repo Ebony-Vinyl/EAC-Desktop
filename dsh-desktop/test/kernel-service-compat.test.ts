@@ -75,8 +75,8 @@ function isContractInject(name: string): boolean {
   return name === 'remote' || REMOTE_INJECT_RE.test(name);
 }
 
-/** `client.js`（含 `*.remote-client.js`）是浏览器半，其余是宿主半。 */
-const halfOf = (rel: string): Half => (/client\.js$/.test(rel) ? 'client' : 'host');
+/** 0.2.1 的浏览器条件入口为 client.browser.js；Node client 入口不参与两半扫描。 */
+const halfOf = (rel: string): Half => (/client(?:\.browser)?\.js$/.test(rel) ? 'client' : 'host');
 
 function matches(text: string, re: RegExp): string[] {
   const out: string[] = [];
@@ -114,6 +114,7 @@ function collectKernelSurfaces(): Surfaces {
     if (!existsSync(libDir)) continue;
     for (const file of readdirSync(libDir)) {
       if (!file.endsWith('.js')) continue;
+      if (/client\.node\.js$/.test(file)) continue;
       const rel = `${pkg}/lib/${file}`;
       const half = halfOf(rel);
       const text = readFileSync(join(libDir, file), 'utf8');
@@ -195,6 +196,7 @@ test('内核服务面覆盖 rc2 已知面，且 client/host 两半分离（setti
   for (const name of ['slots', 'configForms', 'uiRenderer']) {
     assert.ok(!kernel.host.has(name), `client 半独有的 ${name} 不得出现在 host 面`);
   }
+  assert.ok(!kernel.host.has('remote'), 'Node client 条件入口不得被当成 host 服务提供方');
   for (const half of ['client', 'host'] as const) {
     assert.ok(!kernel[half].has('settingsScope'), `0.1.7-rc.2 已移除 settingsScope，${half} 面不得再收录`);
   }

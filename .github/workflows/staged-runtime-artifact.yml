@@ -2,14 +2,17 @@ name: Installer packages
 
 on:
   workflow_call:
+  push:
+    branches: [beta]
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 env:
   NODE_VERSION: '24'
-  PNPM_VERSION: '11.7.0'
-  KERNEL_VERSION: '0.2.0-rc.2'
+  PNPM_VERSION: '11.28.5'
+  KERNEL_VERSION: '0.2.1-rc.2'
 
 jobs:
   build:
@@ -88,6 +91,9 @@ jobs:
       - name: Fetch Cargo dependencies
         working-directory: ${{ github.workspace }}/tauri-shell
         run: cargo fetch --locked
+
+      - name: Run automated tests
+        run: npm test
 
       - name: Assemble staged runtime
         working-directory: ${{ github.workspace }}

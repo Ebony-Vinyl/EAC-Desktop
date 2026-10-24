@@ -16,7 +16,8 @@ const {preparePortable,exchangePortable,recoverPortable,readPortableJournal}=req
 const {inspectPortableArchive,extractPortableArchive}=require('../lib/desktop/update-archive.js');
 const TARGET='windows-x86_64-portable';
 const BASE_FILES=['dsh-eac-shell.exe','.dsh-portable','sidecar/server.js','sidecar/bridge.js','dpx/src/index.js','ui-skin-manager/resolved/system.default/snapshot.json'];
-async function temporary(t:any){const root=await fs.mkdtemp(path.join(os.tmpdir(),'eac-portable-'));t.after(async()=>{const resolved=path.resolve(root);assert.equal(path.dirname(resolved),path.resolve(os.tmpdir()));assert.ok(path.basename(resolved).startsWith('eac-portable-'));await fs.rm(resolved,{recursive:true,force:true});});return root;}
+// Windows runners can expose TEMP through an 8.3 alias; use the updater's canonical paths.
+async function temporary(t:any){const parent=await fs.realpath(os.tmpdir());const root=await fs.mkdtemp(path.join(parent,'eac-portable-'));t.after(async()=>{const resolved=path.resolve(root);assert.equal(path.dirname(resolved),parent);assert.ok(path.basename(resolved).startsWith('eac-portable-'));await fs.rm(resolved,{recursive:true,force:true});});return root;}
 async function tree(root:string,version:string,dll=true){
   await fs.mkdir(root);for(const relative of BASE_FILES){const file=path.join(root,...relative.split('/'));await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,version+':'+relative);}
   await fs.mkdir(path.join(root,'dsh-desktop'));await fs.writeFile(path.join(root,'dsh-desktop/package.json'),JSON.stringify({version}));

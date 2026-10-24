@@ -14,7 +14,7 @@
 //      均不把 `D:\...` 当远程 tape 主机，避免依赖 --force-local。
 //
 // 前置：pnpm 版本必须等于内核 packageManager 钉住的版本（脚本自校验）。
-// 用法：npm run fetch-kernel [-- <tag>]（默认 dsh-v0.2.0-rc.2）
+// 用法：npm run fetch-kernel [-- <tag>]（默认 dsh-v0.2.1-rc.2）
 //
 // commit hash 来源（issue #393）：构建元数据要求 tag 指向的 commit，但**绝不**
 // 能走匿名 GitHub REST API —— 未认证限额 60 次/小时/IP，而 GitHub 托管 runner
@@ -31,7 +31,7 @@ import path = require('node:path');
 import cp = require('node:child_process');
 
 const REPO = 'deepseek-ai/deepseek-harness';
-const DEFAULT_TAG = 'dsh-v0.2.0-rc.2';
+const DEFAULT_TAG = 'dsh-v0.2.1-rc.2';
 /**
  * 钉版 tag → 该 tag 指向的 commit SHA（40 位十六进制）。
  * 钉版命中即零网络请求，这是 issue #393 的根治手段：CI 矩阵并发跑本脚本时
@@ -39,6 +39,7 @@ const DEFAULT_TAG = 'dsh-v0.2.0-rc.2';
  * ——kernel-pin-consistency.test.ts 会强制这条记录存在且格式合法。
  */
 const KERNEL_TAG_COMMITS: Record<string, string> = {
+  'dsh-v0.2.1-rc.2': '687f282e8625c6b8d11ff58211a90524be2e4317',
   'dsh-v0.2.0-rc.2': '639ed015397290b3745d163aafe02ffee4aa3f84',
   // 旧钉版保留：`npm run fetch-kernel -- dsh-v0.1.7-rc.2` 回构路径同样零网络。
   'dsh-v0.1.7-rc.2': '477b4f420553e8a52c2fbccc464d7561b239c443',
@@ -213,7 +214,7 @@ function main(): void {
   const pnpm = resolvePnpmEntry();
   console.log(`fetch-kernel: tag=${tag} version=${version} pnpm=${pnpm.version}`);
 
-  // 内核 packageManager 钉死 pnpm 版本（当前 11.7.0）：build.ts 内部会再起
+  // 内核 packageManager 钉死 pnpm 版本（当前 11.28.5）：build.ts 内部会再起
   // `pnpm` 子进程，版本不符会直接拒绝执行。
   fs.rmSync(WORK, { recursive: true, force: true });
   fs.mkdirSync(WORK, { recursive: true });

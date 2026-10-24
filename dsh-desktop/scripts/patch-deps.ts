@@ -62,6 +62,10 @@ function patchSettingsNavScroll(): void {
   }
   const navMatch = NAV_RE.exec(src);
   const navListMatch = NAVLIST_RE.exec(src);
+  if (navMatch && new RegExp(`\\.${navMatch[1]}_navList\\{[^}]*overflow-y:auto[;} ]`).test(src)) {
+    console.log('[patch-deps] 设置左栏已由上游提供滚动，旧 CSS 补丁已退役');
+    return;
+  }
   if (!navMatch || !navListMatch || navMatch[1] !== navListMatch[1]) {
     console.log('[patch-deps] 设置左栏未匹配到目标 CSS（上游版本可能已修复/更新），跳过');
     return;
@@ -343,10 +347,54 @@ const THEME_WRITE_EDITS: Array<[string, string]> = [
   ],
 ];
 
+// 0.2.1 将字号/字体拆为多个 role，并提供批量 mutate。保留上游 adopt 的
+// pendingWrites 门控，在同一批事务内合并后续字段值，避免旧单字号补丁覆盖新接口。
+const THEME_WRITE_021_OLD = [
+  '\t\t\twrite(operation) {',
+  '\t\t\t\tthis.pendingWrites += 1;',
+  '\t\t\t\toperation().finally(() => {',
+  '\t\t\t\t\tthis.pendingWrites -= 1;',
+  '\t\t\t\t\tthis.adopt();',
+  '\t\t\t\t});',
+  '\t\t\t}',
+].join('\n');
+const THEME_WRITE_021_NEW = [
+  `\t\t\t/* ${THEME_WRITE_MARKER}: 0.2.1 role-aware batched writes */`,
+  '\t\t\twrite(ops) {',
+  '\t\t\t\tthis.__eacQueued ??= new Map();',
+  '\t\t\t\tfor (const op of ops) this.__eacQueued.set(op.path[0], op);',
+  '\t\t\t\tif (this.pendingWrites === 0) this.__eacFlush();',
+  '\t\t\t}',
+  '\t\t\t__eacFlush() {',
+  '\t\t\t\tconst ops = [...this.__eacQueued.values()];',
+  '\t\t\t\tthis.__eacQueued.clear();',
+  '\t\t\t\tthis.pendingWrites += 1;',
+  '\t\t\t\tconst settle = (ok) => {',
+  '\t\t\t\t\tif (ok) {',
+  '\t\t\t\t\t\tfor (const op of ops) {',
+  '\t\t\t\t\t\t\tif (this.__eacQueued.get(op.path[0])?.value === op.value) this.__eacQueued.delete(op.path[0]);',
+  '\t\t\t\t\t\t}',
+  '\t\t\t\t\t} else this.__eacQueued.clear();',
+  '\t\t\t\t\tthis.pendingWrites -= 1;',
+  '\t\t\t\t\tif (this.__eacQueued.size > 0) this.__eacFlush();',
+  '\t\t\t\t\telse this.adopt();',
+  '\t\t\t\t};',
+  '\t\t\t\tthis.host.mutate(ops).then((ok) => settle(ok === true), () => settle(false));',
+  '\t\t\t}',
+].join('\n');
+const THEME_WRITE_021_EDITS: Array<[string, string]> = [
+  ['this.write(() => this.host.set(THEME_PREFERENCE_FIELD, id));', 'this.write([{ op: "set", path: [THEME_PREFERENCE_FIELD], value: id }]);'],
+  ['this.write(() => this.host.set(spec.field, px));', 'this.write([{ op: "set", path: [spec.field], value: px }]);'],
+  ['this.write(() => this.host.mutate(ops));', 'this.write(ops);'],
+  ['this.write(() => this.host.set(FONT_FAMILY_FIELDS[role], list));', 'this.write([{ op: "set", path: [FONT_FAMILY_FIELDS[role]], value: list }]);'],
+  [THEME_WRITE_021_OLD, THEME_WRITE_021_NEW],
+];
+
 function patchThemeWriteConvergeSource(source: string): string | undefined {
   if (source.includes(THEME_WRITE_MARKER)) return source;
   let out = source;
-  for (const [oldText, newText] of THEME_WRITE_EDITS) {
+  const edits = source.includes(THEME_WRITE_021_OLD) ? THEME_WRITE_021_EDITS : THEME_WRITE_EDITS;
+  for (const [oldText, newText] of edits) {
     if (!out.includes(oldText)) return undefined;
     out = out.replace(oldText, newText);
   }
@@ -414,7 +462,12 @@ const CONFIG_EDIT_NEW = [
   '\t\t\t\tif (!this.entries().includes(entry)) throw new Error("Configuration entry changed during reload");',
 ].join('\n');
 
-function patchConfigEditorEditShortCircuitSource(source: string): string | undefined {
+function patchConfigEditorEditShortCircuitSource(source: string, appBootSource = ''): string | undefined {
+  // 新 recompose 负责失败归因、requiredIds 和事务恢复；旧第五参数已无效，
+  // 保留写前/写后/回滚的原生重载，不把旧短路条件移入新的事务边界。
+  if (hasTransactionalProfileRecompose(appBootSource)) {
+    return source.includes(CONFIG_EDIT_NEW) ? source.replace(CONFIG_EDIT_NEW, CONFIG_EDIT_OLD) : source;
+  }
   if (source.includes(CONFIG_EDIT_SKIP_MARKER)) return source;
   if (!source.includes(CONFIG_EDIT_OLD)) return undefined;
   return source.replace(CONFIG_EDIT_OLD, CONFIG_EDIT_NEW);
@@ -426,7 +479,13 @@ function patchConfigEditorEditShortCircuit(targetFile = CONFIG_EDIT_TARGET): boo
     return false;
   }
   const source = fs.readFileSync(targetFile, 'utf8');
-  const patched = patchConfigEditorEditShortCircuitSource(source);
+  const appBootSource = fs.existsSync(APP_BOOT_TARGET) ? fs.readFileSync(APP_BOOT_TARGET, 'utf8') : '';
+  const patched = patchConfigEditorEditShortCircuitSource(source, appBootSource);
+  if (hasTransactionalProfileRecompose(appBootSource)) {
+    if (patched !== source) writeFileAtomic(targetFile, patched!);
+    console.log('[patch-deps] config-editor 使用上游事务重载，旧短路补丁已退役');
+    return true;
+  }
   if (patched === source) {
     console.log('[patch-deps] config-editor 短路补丁已应用，跳过');
     return true;
@@ -474,7 +533,13 @@ const APP_BOOT_MANIFEST_HOT_NEW = [
   '\t}',
 ].join('\n');
 
+function hasTransactionalProfileRecompose(source: string): boolean {
+  return source.includes('return (await recompose(ctx, patches, binName, { requiredIds }, false)).warnings;')
+    && source.includes('async function recompose(ctx, patches, binName, options, withResolution) {');
+}
+
 function patchAppBootReconcileGateSource(source: string): string | undefined {
+  if (hasTransactionalProfileRecompose(source)) return source;
   if (source.includes(RECONCILE_GATE_MARKER)) return source;
   let out = source;
   for (const [oldText, newText] of [
@@ -495,6 +560,10 @@ function patchAppBootReconcileGate(targetFile = APP_BOOT_TARGET): boolean {
   }
   const source = fs.readFileSync(targetFile, 'utf8');
   const patched = patchAppBootReconcileGateSource(source);
+  if (hasTransactionalProfileRecompose(source)) {
+    console.log('[patch-deps] app-boot 使用上游事务重载，旧 reconcile/manifestOf 补丁已退役');
+    return true;
+  }
   if (patched === source) {
     console.log('[patch-deps] reconcile 门控补丁已应用，跳过');
     return true;
@@ -672,7 +741,14 @@ function upgradeModelImageInputSource(source: string): string | undefined {
     .replace(MODEL_IMAGE_HELPER_V1, MODEL_IMAGE_HELPER);
 }
 
+function hasNativeModelInputTypes(source: string): boolean {
+  return source.includes('function ModelInputTypes({ model, field, position, disabled, fallback, t, onChange }) {')
+    && source.includes('const nextSelected = ["text", "image"].filter(')
+    && source.includes('disabled: disabled || selected.length === 1 && selected.includes(modality),');
+}
+
 function patchModelImageInputSource(source: string): string | undefined {
+  if (hasNativeModelInputTypes(source)) return source;
   if (source.includes(MODEL_IMAGE_INPUT_MARKER)) return source;
   if (source.includes(`/*${MODEL_IMAGE_INPUT_MARKER_V1}*/`)) {
     return upgradeModelImageInputSource(source);
@@ -729,6 +805,10 @@ function patchModelImageInputToggle(targetFile = MODEL_SETTINGS_FILE): boolean {
   }
   const source = fs.readFileSync(targetFile, 'utf8');
   const patched = patchModelImageInputSource(source);
+  if (hasNativeModelInputTypes(source)) {
+    console.log('[patch-deps] 模型输入类型已由上游设置面板提供，旧图片开关补丁已退役');
+    return true;
+  }
   if (patched === source) {
     console.log('[patch-deps] 模型图片输入开关补丁已应用，跳过');
     return true;
@@ -803,7 +883,10 @@ function patchAgentPresetMenu(file?: string): boolean {
     console.log('[patch-deps] agent-preset 模式菜单补丁已应用，跳过');
     return true;
   }
-  const seatStart = src.indexOf(AGENT_PRESET_SEAT_START);
+  // 0.2.1 先按 developerTools 过滤 options；分组必须消费过滤后的清单。
+  const seatAnchor = src.includes(AGENT_PRESET_SEAT_START) ? AGENT_PRESET_SEAT_START : AGENT_PRESET_ROW_START;
+  const seatOptions = seatAnchor === AGENT_PRESET_SEAT_START ? 'state.options' : 'options';
+  const seatStart = src.indexOf(seatAnchor);
   const seatTail = seatStart >= 0 ? src.indexOf(AGENT_PRESET_SEAT_TAIL, seatStart) : -1;
   const rowStart = src.indexOf(AGENT_PRESET_ROW_START);
   const rowTail = rowStart >= 0 ? src.indexOf(AGENT_PRESET_ROW_TAIL, rowStart) : -1;
@@ -817,7 +900,7 @@ function patchAgentPresetMenu(file?: string): boolean {
     console.log('[patch-deps] agent-preset 未匹配到目标代码（版本可能已更新），跳过');
     return false;
   }
-  const seatBody = src.slice(seatStart + AGENT_PRESET_SEAT_START.length, seatTail);
+  const seatBody = src.slice(seatStart + seatAnchor.length, seatTail);
   // composer 座位：官方保留主列表，第三方收进「第三方模式」submenu。
   // submenu 子项复用两行渲染体，但 Menu 的 submenu item 是 flex-row center，
   // 会压扁两行结构导致字体重叠 —— 给子项 item span 加内联纵向布局覆盖。
@@ -826,9 +909,9 @@ function patchAgentPresetMenu(file?: string): boolean {
     'className: AgentPresetSeat_module_css_default.item, style: { flexDirection: "column" },'
   );
   const seatNew =
-    'items: [...state.options.filter((option) => option.trust !== "user").map((option) => {' + seatBody +
+    'items: [...' + seatOptions + '.filter((option) => option.trust !== "user").map((option) => {' + seatBody +
     '\n\t\t\t\t}), ...(function () {\n' +
-    '\t\t\t\t\tconst user = state.options.filter((option) => option.trust === "user");\n' +
+    '\t\t\t\t\tconst user = ' + seatOptions + '.filter((option) => option.trust === "user");\n' +
     '\t\t\t\t\tif (user.length === 0) return [];\n' +
     '\t\t\t\t\treturn [{\n' +
     '\t\t\t\t\t\tid: "' + AGENT_PRESET_MARKER + '",\n' +
@@ -941,6 +1024,29 @@ const SUBMENU_BTN_NEW_020 = 'l.jsxs("button",{type:"button",role:"menuitem",clas
 const SUBMENU_LABEL_ANCHOR_020 = 'l.jsx("span",{className:Ee.itemLabel,children:he.label})';
 const SUBMENU_LABEL_NEW_020 = 'l.jsx("span",{className:Ee.itemLabel,style:{whiteSpace:"normal",overflow:"visible","' + SUBMENU_ITEM_MARKER + '":"1"},children:he.label})';
 
+const MENU_021_MARKER = 'dsh-desktop:menu-submenu-021';
+function patchMenuSubmenu021Source(source: string): string | undefined {
+  if (source.includes(MENU_021_MARKER)) return source;
+  // 官方 0.2.1 bundle 的控制器为 se / 当前项 O。整组锚点必须命中后才落盘，
+  // 防止旧 z/B 回调被写入新 bundle，菜单打开后才抛 ReferenceError。
+  const edits: Array<[string, string]> = [
+    ['role:"menu",children:O.submenu.map(',
+      'role:"menu",onMouseEnter:()=>{clearTimeout(window.__dshMenuTimer);se(O.id)},onMouseLeave:()=>{clearTimeout(window.__dshMenuTimer);window.__dshMenuTimer=setTimeout(()=>se(null),400)},style:{maxHeight:"' + MENU_SUBMENU_MAXH + '",overflowY:"auto",minWidth:' + MENU_SUBMENU_MINW + '},/*' + MENU_021_MARKER + '*/children:O.submenu.map('],
+    ['onMouseEnter:ee?()=>{se(O.id)}:void 0,onMouseLeave:()=>{se(null)}',
+      'onMouseEnter:ee?()=>{clearTimeout(window.__dshMenuTimer);se(O.id)}:void 0,onMouseLeave:()=>{clearTimeout(window.__dshMenuTimer);window.__dshMenuTimer=setTimeout(()=>se(null),600)}'],
+    ['onPointerLeave:y?()=>{e&&fe()}:void 0',
+      'onPointerLeave:y?()=>{clearTimeout(window.__dshMenuTimer);window.__dshMenuTimer=setTimeout(()=>{e&&fe()},300)}:void 0'],
+    ['u.jsxs("button",{type:"button",role:"menuitem",className:Ne.item,disabled:X.disabled',
+      'u.jsxs("button",{type:"button",role:"menuitem",className:Ne.item,style:{alignItems:"flex-start",flexShrink:0},disabled:X.disabled'],
+    ['u.jsx("span",{className:Ne.itemLabel,children:X.label})',
+      'u.jsx("span",{className:Ne.itemLabel,style:{whiteSpace:"normal",overflow:"visible","' + SUBMENU_ITEM_MARKER + '":"1"},children:X.label})'],
+  ];
+  if (edits.some(([anchor]) => source.split(anchor).length !== 2)) return undefined;
+  let out = source;
+  for (const [anchor, replacement] of edits) out = out.replace(anchor, replacement);
+  return out;
+}
+
 function patchMenuSubmenuScroll(file?: string): boolean {
   let target: string | undefined = file;
   if (!target) {
@@ -964,6 +1070,16 @@ function patchMenuSubmenuScroll(file?: string): boolean {
     return false;
   }
   let src = fs.readFileSync(target, 'utf8');
+  if (src.includes('O.submenu.map(X=>u.jsxs(') || src.includes(MENU_021_MARKER)) {
+    const patched = patchMenuSubmenu021Source(src);
+    if (patched === undefined) {
+      console.log('[patch-deps] 0.2.1 submenu 锚点不完整，未写入任何菜单改动');
+      return false;
+    }
+    if (patched !== src) writeFileAtomic(target, patched);
+    console.log('[patch-deps] 0.2.1 submenu 悬停、滚动与两行布局补丁已应用');
+    return true;
+  }
   let changed = false;
   // 三个改动各自按锚点独立幂等，不再用单一 marker 门控整个 if 块——
   // 旧版 bundle 已有 hover marker 时，后续新增的 minWidth / root pointerleave
@@ -1169,9 +1285,11 @@ module.exports = {
   patchHttpCacheSemantics,
   patchAgentPresetMenu,
   patchMenuSubmenuScroll,
+  patchMenuSubmenu021Source,
   patchClientModulesResolve,
   patchModelImageInputSource,
   patchModelImageInputToggle,
+  hasNativeModelInputTypes,
   patchSettingsWriteFailureSource,
   patchSettingsWriteFailure,
   patchThemeWriteConvergeSource,
@@ -1180,4 +1298,5 @@ module.exports = {
   patchConfigEditorEditShortCircuit,
   patchAppBootReconcileGateSource,
   patchAppBootReconcileGate,
+  hasTransactionalProfileRecompose,
 };

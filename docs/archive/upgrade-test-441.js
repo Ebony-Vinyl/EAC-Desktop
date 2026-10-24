@@ -73,7 +73,7 @@ async function main() {
   const dshPkg = path.join(EXP, 'dsh-desktop', 'node_modules', '@deepseek-ai', 'dsh', 'package.json');
   let kern = '';
   try { kern = JSON.parse(fs.readFileSync(dshPkg, 'utf8')).version; } catch {}
-  check('安装树内核 = 0.2.0-rc.2', kern === '0.2.0-rc.2', 'got=' + kern);
+  check('安装树内核 = 0.2.1-rc.2', kern === '0.2.1-rc.2', 'got=' + kern);
   const oldGone = !fs.existsSync(path.join(EXP, 'resources', 'app', 'package.json'));
   check('旧 Electron resources\\app 已清除', oldGone);
   const sc = path.join(process.env.APPDATA, 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Deepseek Harness EAC.lnk');

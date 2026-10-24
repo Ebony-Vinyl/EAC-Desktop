@@ -12,6 +12,8 @@
 *.cjs text eol=lf
 *.mjs text eol=lf
 *.ts text eol=lf
+/dsh-desktop/test/fixtures/menu-021.txt text eol=lf
+/dsh-desktop/test/fixtures/theme-methods-021.txt text eol=lf
 *.rs text eol=lf
 *.toml text eol=lf
 *.ps1 text eol=crlf

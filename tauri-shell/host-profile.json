@@ -31,7 +31,8 @@
     {"dshRange": "0.1.5-rc.2", "mapping": "eac-dsh-adapter@1"},
     {"dshRange": "0.1.6-alpha.2", "mapping": "eac-dsh-adapter@1"},
     {"dshRange": "0.1.7-rc.2", "mapping": "eac-dsh-adapter@1"},
-    {"dshRange": "0.2.0-rc.2", "mapping": "eac-dsh-adapter@1"}
+    {"dshRange": "0.2.0-rc.2", "mapping": "eac-dsh-adapter@1"},
+    {"dshRange": "0.2.1-rc.2", "mapping": "eac-dsh-adapter@1"}
   ],
   "fallbackSkin": {
     "id": "system.default",
