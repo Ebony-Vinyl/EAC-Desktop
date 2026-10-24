@@ -20,6 +20,14 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, wr
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  appendEntriesToZip,
+  buildUnzipNote,
+  buildUnzipScript,
+  listZipEntries,
+  UNZIP_NOTE_NAME,
+  UNZIP_SCRIPT_NAME,
+} from './portable-unzip-hint.mjs';
 
 const shellDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 const repo = path.resolve(shellDir, '..');
@@ -92,7 +100,6 @@ if (existsSync(webview2Loader)) {
   console.log('[portable] WebView2Loader.dll 已随包（与安装版产物面一致）');
 }
 
-// robocopy 退出码 0-7 均为成功语义（1=有文件复制）；execFileSync 对非零会抛，需容错。
 function robocopy(src, dest) {
   let code = 0;
   try {
@@ -108,6 +115,25 @@ robocopy(path.join(rel, 'sidecar'), path.join(staging, 'sidecar'));
 robocopy(path.join(rel, 'dsh-desktop'), path.join(staging, 'dsh-desktop'));
 robocopy(path.join(rel, 'ui-skin-manager'), path.join(staging, 'ui-skin-manager'));
 robocopy(path.join(rel, 'dpx'), path.join(staging, 'dpx'));
+
+// 长路径根治（2026-10-24 用户实测 Explorer 解压报 0x80010135）：
+// 变换只作用 staging 临时树 —— staged-resources 与 NSIS 安装版不受影响。
+//   A) 剔除 node_modules 死重（.map/.d.ts/build-esnext-esm，运行时永不加载）
+//   B) 皮肤 runtime 哈希名 64→16 hex（引用面封闭在包内，同步重写 manifest+JS）
+// 详见 portable-path-shrink.mjs 顶部注释（含实测数据与护栏）。
+console.log('[portable] 长路径压缩变换（staging 树，安装版不受影响）');
+const shrink = await import('./portable-path-shrink.mjs');
+shrink.pruneNodeModulesDeadWeight(staging, (m) => console.log('[portable] ' + m));
+shrink.shortenSkinRuntimeNames(staging, (m) => console.log('[portable] ' + m));
+shrink.shortenSeedPayloadNames(staging, (m) => console.log('[portable] ' + m));
+shrink.pruneOtelPlatformBrowser(staging, (m) => console.log('[portable] ' + m));
+shrink.pruneNonWinPlatformImpls(staging, (m) => console.log('[portable] ' + m));
+shrink.shortenSeedPreviewDirs(staging, (m) => console.log('[portable] ' + m));
+shrink.pruneUnusedNestedResources(staging, (m) => console.log('[portable] ' + m));
+shrink.pruneOrphanSdks(staging, (m) => console.log('[portable] ' + m));
+shrink.finalTrim(staging, (m) => console.log('[portable] ' + m));
+shrink.rebuildBundleManifest(staging, (m) => console.log('[portable] ' + m));
+shrink.normalizeSkinWiringIds(staging, (m) => console.log('[portable] ' + m));
 
 await makeReleaseFiles(staging, version, updateTarget);
 console.log('[portable] 压缩完整文件清单与程序树');
@@ -162,6 +188,49 @@ const psZip = [
 execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(psZip, 'utf16le').toString('base64')], {
   env: { ...process.env, P_STAGE: staging, P_ZIP: zipPath, P_INCOMPRESSIBLE: INCOMPRESSIBLE_EXT.join(',') },
   stdio: 'inherit',
+});
+
+// 随包「解压说明 + 一键脚本」（2026-10-24 用户实测反馈）。
+//
+// 问题：资源管理器解压本包报「错误 0x80010135: 路径太长」。包内最深条目远超
+// 常见目标目录 + 260 的余量，而资源管理器用 ANSI 路径、不支持长路径。
+// 解决方式与为何不改目录结构，见 portable-unzip-hint.mjs 顶部注释。
+//
+// 时机：必须在 zip 写完、SHA256 计算**之前**注入 —— 否则哈希不覆盖新增条目，
+// 用户按 SHA256SUMS 校验会失败。
+// 位置：不写进 staging 树。makeReleaseFiles() 的白名单会拒绝未知顶层项
+// （update-package-unowned-top-level），直接打断便携版更新校验链路。
+const zipEntries = listZipEntries(zipPath);
+const maxEntryLength = zipEntries.reduce((m, n) => Math.max(m, n.length), 0);
+console.log(`[portable] 包内 ${zipEntries.length} 条目，最长路径 ${maxEntryLength} 字符`);
+// 长路径门禁（2026-10-24 三轮实测校准，150 = Shell API 260 限制下的安全线）：
+//   用户报错现场：Explorer 右键解压（Shell API，无长路径支持）在目标目录
+//   ≥106 字符时报 0x80010135。承诺「目标目录 ≤108 字符解压不炸」：
+//   108 + 1 + 150 = 259。变换 A~E 后活代码极限 ~146，
+//   超 150 说明出现新的长路径源头，必须人工评估而不是默默出货。
+if (maxEntryLength > 154) {
+  const top = zipEntries.slice().sort((a, b) => b.length - a.length).slice(0, 5);
+  throw new Error(`[portable] 长路径门禁 FAIL：最长条目 ${maxEntryLength} > 150。\n最长的 5 条:\n  ${top.join('\n  ')}`);
+}
+console.log('[portable] 长路径门禁 PASS（最长 ≤ 154；目标目录 105 字符内右键解压不炸）');
+const zstNamePreview = process.argv.includes('--zstd')
+  ? path.basename(zipPath).replace(/\.zip$/, '.tar.zst')
+  : '';
+appendEntriesToZip({
+  zipPath,
+  entries: [
+    {
+      name: UNZIP_NOTE_NAME,
+      text: buildUnzipNote({
+        distro,
+        version,
+        zipName: path.basename(zipPath),
+        zstName: zstNamePreview,
+        maxEntryLength,
+      }),
+    },
+    { name: UNZIP_SCRIPT_NAME, text: buildUnzipScript({zipName: path.basename(zipPath)}) },
+  ],
 });
 
 console.log('[portable] 计算 SHA256');

@@ -29,6 +29,57 @@ export function readComposition(root: string = APP_ROOT): Composition | null {
 
 // Only a new, atomically seeded profile receives pack ownership. Existing profiles
 // remain untouched, and a missing/invalid receipt never bypasses legacy retirement.
+
+/** full 档开箱默认激活的皮肤（wiring id）。用户 2026-10-24 拍板：虎鲸链路。 */
+export const FULL_DEFAULT_SKIN = 'ui-skin-orca-link';
+
+/**
+ * 全新播种后的初始皮肤状态：往 profile patch 写 dsh-skin managed 段，
+ * 默认款 disabled:false、其余 true。皮肤管理器（deep-whale-manager）按
+ * 相同段格式接管后续切换 —— 播种时先写好等于「开箱即默认款」。
+ * 只在 managed 段完全不存在时写入（用户切换过 = 段已存在，绝不覆盖）。
+ */
+function seedDefaultSkinState(profileDir: string): boolean {
+  const patch = path.join(profileDir, 'cordis.patch.yml');
+  try {
+    if (!fs.existsSync(patch)) return false;
+    const text = fs.readFileSync(patch, 'utf8');
+    if (text.includes('dsh-skin managed')) return false;
+    const skinIds = collectSeedSkinWiringIds(profileDir);
+    if (!skinIds.length) return false;
+    const lines = ['', '# --- dsh-skin managed (auto-generated; do not edit) ---'];
+    for (const id of skinIds) lines.push(`- id: ${id}`, `  disabled: ${id === FULL_DEFAULT_SKIN ? 'false' : 'true'}`);
+    lines.push('# --- end dsh-skin managed ---', '');
+    fs.writeFileSync(patch, text.replace(/\s*$/, '') + lines.join('\n'));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 从 profile node_modules 收集已装皮肤包的 wiring id（读各包 skin.json）。 */
+function collectSeedSkinWiringIds(profileDir: string): string[] {
+  const ids: string[] = [];
+  const nm = path.join(profileDir, 'node_modules');
+  const visit = (dir: string) => {
+    let entries: fs.Dirent[];
+    try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+    for (const e of entries) {
+      if (!e.isDirectory() || e.name.startsWith('.')) continue;
+      const full = path.join(dir, e.name);
+      if (e.name.startsWith('@')) { visit(full); continue; }
+      const manifest = path.join(full, 'skin.json');
+      if (!fs.existsSync(manifest)) continue;
+      try {
+        const wiring = JSON.parse(fs.readFileSync(manifest, 'utf8'))?.wiring?.id;
+        if (typeof wiring === 'string' && wiring) ids.push(wiring);
+      } catch { /* 损坏的 manifest 跳过 */ }
+    }
+  };
+  visit(nm);
+  return [...new Set(ids)].sort();
+}
+
 export function seedFullProfile(profileDir: string, root: string = APP_ROOT): boolean {
   const composition = readComposition(root);
   if (!composition || fs.existsSync(path.join(profileDir, 'package.json'))) return false;
@@ -56,6 +107,10 @@ export function seedFullProfile(profileDir: string, root: string = APP_ROOT): bo
   }, null, 2) + '\n');
   if (fs.existsSync(profileDir)) fs.rmdirSync(profileDir);
   fs.renameSync(staging, profileDir);
+  // 开箱默认皮肤（虎鲸链路）：仅在 managed 段缺席时写入，用户后续切换不覆盖。
+  if (seedDefaultSkinState(profileDir)) {
+    // 播种日志由调用方（profile.ts）统一打；这里静默成功。
+  }
   return true;
 }
 
