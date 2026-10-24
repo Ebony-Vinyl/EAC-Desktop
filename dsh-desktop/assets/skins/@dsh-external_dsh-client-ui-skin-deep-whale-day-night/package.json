@@ -1,0 +1,63 @@
+{
+  "name": "@dsh-external/dsh-client-ui-skin-deep-whale-day-night",
+  "description": "Hot-pluggable Deep Whale day/night skin with themed scenes, companions, controls, and lightweight ambience for the dsh web GUI",
+  "version": "0.1.12",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./skin.json": "./skin.json",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-theme"
+      ],
+      "platform": "web"
+    }
+  },
+  "license": "CC-BY-NC-SA-4.0",
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh-client-ui-theme": ">=0.1.0-rc.5 <0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/cordis": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-theme": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.0"
+  },
+  "files": [
+    "package.json",
+    "cordis.patch.yml",
+    "lib/index.js",
+    "lib/client.js",
+    "skin.json",
+    "preview/light.webp",
+    "preview/dark.webp",
+    "screenshots/day.png",
+    "screenshots/night.png",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "scripts": {
+    "build": "node scripts/embed-deep-whale-art.mjs && tsdown --config tsdown.config.ts",
+    "embed:assets": "node scripts/embed-deep-whale-art.mjs",
+    "pack:runtime": "pnpm run build && node scripts/build-runtime-package.mjs",
+    "test": "vitest run --config vitest.config.ts",
+    "typecheck": "tsc -p tsconfig.json",
+    "verify:harness": "node scripts/verify-harness-install.mjs"
+  }
+}

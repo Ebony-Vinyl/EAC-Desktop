@@ -49,20 +49,15 @@ function resolveGeneratedAt() {
   return new Date().toISOString();
 }
 
-// 装配脚本与本文同目录（tauri-shell/）：BUILTIN_PLUGIN_DIRS 是「哪些插件随包」
-// 的权威清单（stage-resources 逐目录 fail-fast 拷贝）。解析口径与
-// test/issue-415-skin-switch-retirement.test.ts 的断言一致。
-const STAGE_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'stage-resources.mjs');
+// 装配脚本与本文同目录（tauri-shell/）：随包面口径统一由 distro.mjs 提供。
+// 修复前这里用正则从 stage-resources.mjs 源码里抓 BUILTIN_PLUGIN_DIRS —— 那是
+// 脆弱耦合：装配面一旦按档位拆分，正则会静默抓错或抛错。现在两边都 import
+// 同一个纯数据模块，口径只有一处。
+import { builtinPluginDirs, parseDistro } from './distro.mjs';
 
-/** 随包内置插件目录名（stage-resources.mjs 的 BUILTIN_PLUGIN_DIRS）。 */
-function stagedBuiltinPluginDirs() {
-  const src = readFileSync(STAGE_SCRIPT, 'utf8');
-  const match = /const BUILTIN_PLUGIN_DIRS = \[([\s\S]*?)\];/.exec(src);
-  if (!match) {
-    // 解析失败必须 fail-fast：此处静默降级会让描述符把全部台账插件都当随包项。
-    throw new Error('[descriptor] 无法解析装配面 BUILTIN_PLUGIN_DIRS，发行契约无法判定随包插件');
-  }
-  return new Set([...match[1].matchAll(/'([^']+)'/g)].map((x) => x[1]));
+/** 当前档位随包的内置插件目录名。 */
+function stagedBuiltinPluginDirs(distro = parseDistro(process.argv)) {
+  return new Set(builtinPluginDirs(distro));
 }
 
 /** 台账条目声明的资产路径是否真在包（repo 根为基准；台账用 `dsh-desktop/...` 口径）。 */

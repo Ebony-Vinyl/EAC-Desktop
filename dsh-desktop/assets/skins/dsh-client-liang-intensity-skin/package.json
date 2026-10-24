@@ -1,0 +1,77 @@
+{
+  "name": "dsh-client-liang-intensity-skin",
+  "version": "0.1.7",
+  "private": true,
+  "description": "滑动变祖：an opt-in adaptive reasoning slider skin for DeepSeek Harness",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kingOfSoySauce/dsh-liang-skin.git"
+  },
+  "homepage": "https://github.com/kingOfSoySauce/dsh-liang-skin#readme",
+  "bugs": "https://github.com/kingOfSoySauce/dsh-liang-skin/issues",
+  "type": "module",
+  "main": "./src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "assets/portrait-source-v2/stage-00.webp",
+    "assets/portrait-source-v2/level-01.webp",
+    "assets/portrait-source-v2/level-03.webp",
+    "assets/portrait-source-v2/level-04.webp",
+    "assets/portrait-source-v2/stage-06.webp",
+    "assets/portrait-source-v2/level-07.webp",
+    "assets/portrait-source-v2/level-09.webp",
+    "assets/portrait-source-v2/level-10.webp",
+    "assets/portrait-source-v2/stage-12.webp",
+    "assets/portrait-source-v2/level-13.webp",
+    "assets/portrait-source-v2/level-14.webp",
+    "assets/portrait-source-v2/bridge-15.webp",
+    "assets/portrait-source-v2/level-16.webp",
+    "assets/portrait-source-v2/level-17.webp",
+    "assets/portrait-source-v2/stage-18.webp",
+    "assets/portrait-source-v2/level-19.webp",
+    "assets/portrait-source-v2/level-21.webp",
+    "assets/portrait-source-v2/level-22.webp",
+    "assets/portrait-source-v2/stage-24.webp",
+    "assets/portrait-source-v2/level-25.webp",
+    "assets/portrait-source-v2/bridge-27.webp",
+    "assets/portrait-source-v2/level-28.webp",
+    "assets/portrait-source-v2/level-29.webp",
+    "assets/portrait-source-v2/stage-30.webp",
+    "cordis.patch.yml",
+    "lib/client.js",
+    "lib/client.js.map",
+    "src/index.js",
+    "src/range.js"
+  ],
+  "scripts": {
+    "build": "node ./scripts/build-client.mjs",
+    "test": "vitest run"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-model-selection",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-theme",
+        "@deepseek-ai/dsh-client-ui-settings-general",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-api-remotes"
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/react": "~18.3.1",
+    "esbuild": "^0.25.0",
+    "vitest": "^4.1.10"
+  }
+}

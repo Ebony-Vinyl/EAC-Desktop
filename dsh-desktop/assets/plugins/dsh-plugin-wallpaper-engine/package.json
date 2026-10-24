@@ -1,0 +1,87 @@
+{
+  "name": "dsh-plugin-wallpaper-engine",
+  "version": "0.6.7",
+  "description": "Wallpaper Engine backgrounds for the DSH web GUI: render your local Wallpaper Engine Video/Web wallpapers behind the chat, Scene wallpapers as extracted static frames, with iOS-style liquid glass, adjustable scrim/border/blur, and a customizable accent color + glass transparency for the whole settings window.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/types/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/elysia395/dsh-wallpaper-engine.git"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "wallpaper",
+    "wallpaper-engine",
+    "theme",
+    "background"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "lib/pkg-extract.js",
+    "lib/scene-renderer.js",
+    "lib/scene-render-worker.mjs",
+    "lib/we-renderer/",
+    "lib/apng-encode.js",
+    "lib/font-render.js",
+    "lib/scene-scripts.js",
+    "lib/scene-manifest.js",
+    "lib/scene-player.js",
+    "lib/types/index.d.ts",
+    "lib/types/client.d.ts",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ],
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "license": "MIT",
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "verify": "node scripts/verify-client.mjs && node scripts/verify-transcode-state.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh-client-runtime": ">=0.1.0-rc.6",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.1.0-rc.6",
+    "@deepseek-ai/dsh-host-webserver": ">=0.1.0-rc.6",
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-host-webserver": {
+      "optional": true
+    }
+  },
+  "dependencies": {
+    "jpeg-js": "^0.4.4",
+    "@shaderfrog/glsl-parser": "^7.0.1"
+  }
+}

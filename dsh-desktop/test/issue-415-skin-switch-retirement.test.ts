@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { builtinPluginDirs } from '../../tauri-shell/distro.mjs';
 
 // M2/#415 结构退役契约：旧版用户可见皮肤切换（dsh-skin-switch 插件 +
 // assets/skins 目录播种 + applyLegacySkinChoice 迁移落位）整体移除，
@@ -30,10 +31,28 @@ test('dsh-skin-switch asset package is no longer shipped (#415 A5)', () => {
 test('skin-switch moved from the companion registry to the retired builtin list', () => {
   const offered = companion.COMPANION_PLUGINS.map((p: { id: string }) => p.id);
   assert.equal(offered.includes('skin-switch'), false, 'skin-switch 必须退出配套插件注册表');
+  // 断言本意：旧版**皮肤切换器**的 `ui-skin-*` 皮肤行不得再经配套注册表登记。
+  // 皮肤管理器本体 `ui-skin-deep-whale-manager` 也不再走配套注册表 ——
+  // 2026-10-23 实测：它自带 `dsh.bundle.patch`（包内 cordis.patch.yml 已 insert
+  // 同一 id），若同时出现在 COMPANION_PLUGINS，syncCompanionPlugins 会再写一条
+  // 配套行，内核按两个实例加载同一包 → `duplicate exact route "/api/dsh/skins"`
+  // → 管理器 did not activate → 不写 body 皮肤属性 → 所有皮肤不生效。
+  //
+  // 因此它改为**只走 bundles**：目录由 stage-resources 的 BUILTIN_PLUGIN_DIRS
+  // 随包，挂载行由包内 patch 提供。这里据此断言「没有任何 ui-skin-* 配套行」，
+  // 并把「随包」改由 distro 清单证明。
+  const straySkinRows = offered.filter((id: string) => id.startsWith('ui-skin-'));
+  assert.deepEqual(straySkinRows, [], 'ui-skin-* 不得经 COMPANION_PLUGINS 注册（改为走 bundles）');
+  const SKIN_MANAGER_DIR = 'dsh-client-ui-skin-deep-whale-manager';
   assert.equal(
-    offered.some((id: string) => id.startsWith('ui-skin-')),
-    false,
-    '旧版皮肤行（ui-skin-*）不得经 COMPANION_PLUGINS 注册',
+    builtinPluginDirs('lite').includes(SKIN_MANAGER_DIR),
+    true,
+    '皮肤管理器应随包（精简版首屏即有「皮肤管理」分节）',
+  );
+  assert.equal(
+    builtinPluginDirs('full').includes(SKIN_MANAGER_DIR),
+    true,
+    '完整版也应随包皮肤管理器',
   );
   const retired = companion.RETIRED_BUILTIN_PLUGINS as { id: string; name: string }[];
   assert.deepEqual(
@@ -123,20 +142,24 @@ test('SOURCES.json drops the main-line skin-switch component, keeps aio-v1 histo
 });
 
 test('staging drops the retired plugin but preserves the ADR 0010 manager fallback', () => {
-  // 只看 BUILTIN_PLUGIN_DIRS 数组本体：历史注释允许提及退役插件（#415 A7）。
-  const arrayMatch = /const BUILTIN_PLUGIN_DIRS = \[([\s\S]*?)\];/.exec(stageScript);
-  assert.ok(arrayMatch, 'BUILTIN_PLUGIN_DIRS 清单必须存在');
-  const stagedDirs = (arrayMatch![1].match(/'([^']+)'/g) || []).map((s) => s.slice(1, -1));
+  // 随包面口径已从 stage-resources.mjs 的字面量数组移到 tauri-shell/distro.mjs
+  // 的纯数据模块（装配与发行描述符共用，避免「描述符用正则解析装配源码」的
+  // 脆弱耦合）。这里改为从同一事实源取数，而不是再写一份正则解析。
+  const stagedDirs = [...builtinPluginDirs('lite')];
+  assert.ok(stagedDirs.length > 0, 'BUILTIN_PLUGIN_DIRS 清单必须非空');
   assert.equal(stagedDirs.includes('dsh-skin-switch'), false, '退役插件不得再随包装配');
-  // EAC-CORE-SHELL-01：皮肤平台（loader + 13 款皮肤）已外迁，装配清单收敛为
-  // 阶段 1-3 的内置插件（不含任何皮肤/加载器）。
+  // EAC-CORE-SHELL-01：皮肤平台（loader）外迁；2026-10-22 起随包的是**皮肤数据**
+  // （assets/skins，走 bundledSkinDirs），不再是加载器 —— 两者别混淆。
   assert.equal(stagedDirs.includes('dsh-ui-skin-loader'), false, '皮肤加载器不得再随包装配（已外迁）');
   assert.equal(stagedDirs.includes('dsh-terminal'), false, '与内核同名的 terminal 不得再随包装配');
   assert.equal(stagedDirs.includes('dsh-plugin-manager'), false, '与内核同名的 plugin-manager 不得再随包装配');
   // ISO-003：eac-core-bridge 的端点生产者缺失（DSH_EAC_BRIDGE_URL/TOKEN 零写入方）
   // → 退役出装配清单（资产目录保留，等进程隔离接回）。
   assert.equal(stagedDirs.includes('dsh-eac-core-bridge'), false, 'ISO-003：Core Bridge 不得再随包装配');
-  assert.equal(stagedDirs.length, 9, '装配清单应为 9 个内置插件（皮肤平台已外迁 + 3 个同名/内置重叠插件已退役 + ISO-003 core-bridge 退役）');
+  // 9 个基础配套 + 2 个视觉核心（壁纸引擎 / 皮肤管理器，2026-10-22 用户要求提升）
+  assert.equal(stagedDirs.length, 11, '装配清单应为 11 个随包插件（9 基础 + 2 视觉核心）');
+  assert.equal(stagedDirs.includes('dsh-plugin-wallpaper-engine'), true, '壁纸引擎应随包');
+  assert.equal(stagedDirs.includes('dsh-client-ui-skin-deep-whale-manager'), true, '皮肤管理器应随包');
   // ADR 0010：壳层 ui-skin manager 钉版产物与 boot/recovery 回退资源必须随包。
   assert.match(stageScript, /ui-skin-manager/);
   assert.match(stageScript, /pinned UI skin manager artifacts staged/);
