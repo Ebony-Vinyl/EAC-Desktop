@@ -14,23 +14,50 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 
 const DSH_HOME = '~/.dsh';
 
-// 装配脚本与本文同目录（tauri-shell/）：BUILTIN_PLUGIN_DIRS 是「哪些插件随包」
-// 的权威清单（stage-resources 逐目录 fail-fast 拷贝）。解析口径与
-// test/issue-415-skin-switch-retirement.test.ts 的断言一致。
-const STAGE_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'stage-resources.mjs');
-
-/** 随包内置插件目录名（stage-resources.mjs 的 BUILTIN_PLUGIN_DIRS）。 */
-function stagedBuiltinPluginDirs() {
-  const src = readFileSync(STAGE_SCRIPT, 'utf8');
-  const match = /const BUILTIN_PLUGIN_DIRS = \[([\s\S]*?)\];/.exec(src);
-  if (!match) {
-    // 解析失败必须 fail-fast：此处静默降级会让描述符把全部台账插件都当随包项。
-    throw new Error('[descriptor] 无法解析装配面 BUILTIN_PLUGIN_DIRS，发行契约无法判定随包插件');
+/**
+ * 描述符里的 `generatedAt` 必须是**可复现**的。
+ *
+ * 原先直接用 `new Date().toISOString()` —— 每次装配都变。实测：同一 commit、
+ * 同一源码跑两遍 stage，956 个受控产物里**恰好只有这一个文件**不同
+ * （其余 955 个字节一致、node_modules 签名也一致）。也就是说它是唯一的
+ * 不可复现点，让「同源码 ⇒ 同产物」这条性质在调试构建上不成立。
+ *
+ * 取值优先级：
+ *   1. `SOURCE_DATE_EPOCH`（可复现构建的通行约定，秒级 unix 时间）；
+ *   2. 当前 HEAD 的 commit 时间（同一 commit 恒定，换 commit 才变）；
+ *   3. 兜底用当前时间（无 git 时，例如源码 tar 解包构建）。
+ *
+ * 为什么不用「固定常量」：那会让描述符在换 commit 时也不变，失去"这份产物
+ * 何时由哪版源码生成"的信息价值。commit 时间既确定又真实。
+ */
+function resolveGeneratedAt() {
+  const epoch = process.env.SOURCE_DATE_EPOCH;
+  if (epoch !== undefined && /^\d+$/.test(epoch)) {
+    return new Date(Number(epoch) * 1000).toISOString();
   }
-  return new Set([...match[1].matchAll(/'([^']+)'/g)].map((x) => x[1]));
+  try {
+    const out = execFileSync('git', ['-C', path.dirname(fileURLToPath(import.meta.url)), 'log', '-1', '--format=%cI'], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+    if (out) return new Date(out).toISOString();
+  } catch { /* 无 git：走兜底 */ }
+  return new Date().toISOString();
+}
+
+// 装配脚本与本文同目录（tauri-shell/）：随包面口径统一由 distro.mjs 提供。
+// 修复前这里用正则从 stage-resources.mjs 源码里抓 BUILTIN_PLUGIN_DIRS —— 那是
+// 脆弱耦合：装配面一旦按档位拆分，正则会静默抓错或抛错。现在两边都 import
+// 同一个纯数据模块，口径只有一处。
+import { builtinPluginDirs, parseDistro } from './distro.mjs';
+
+/** 当前档位随包的内置插件目录名。 */
+function stagedBuiltinPluginDirs(distro = parseDistro(process.argv)) {
+  return new Set(builtinPluginDirs(distro));
 }
 
 /** 台账条目声明的资产路径是否真在包（repo 根为基准；台账用 `dsh-desktop/...` 口径）。 */
@@ -147,7 +174,7 @@ export function genDistributionDescriptor({ ddRoot, stagedOut }) {
       installProfiles: ['full', 'lite'],
       profileMarker: 'dsh-desktop/profile.txt',
       ledger: 'dsh-desktop/assets/SOURCES.json',
-      generatedAt: new Date().toISOString(),
+      generatedAt: resolveGeneratedAt(),
     },
   };
 

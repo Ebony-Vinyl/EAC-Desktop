@@ -1,0 +1,37 @@
+maid-atelier (深海女仆工坊 · Abyssal Maid Atelier)
+====================================================
+
+Third-party derivative notice (CC BY-NC-SA 4.0 attribution chain)
+
+This skin's artwork is a tertiary derivative. Per the ShareAlike and
+Attribution requirements of CC BY-NC-SA 4.0, every upstream author in the
+chain is credited:
+
+1. 一创 (initial creation): 上善 —— 鲸鱼娘 (whale-girl) 角色形象的原作者。
+   个人主页 (profile): https://www.pixiv.net/users/62155430
+   The original whale-girl character design.
+
+2. 二创 (secondary creation): ZipZipPipe —— 在上善的鲸鱼娘形象基础上加入
+   DeepSeek 元素的女仆鲸鱼娘 (maid whale-girl) 二次设计（生成模型：GPT Image 2）。
+   个人主页 (profile): https://www.pixiv.net/users/18604994
+   The maid whale-girl redesign adding DeepSeek elements, based on 上善's
+   whale-girl (generated with GPT Image 2).
+
+3. 三创 (this skin): Small-tailqwq (dsh-external/dsh-deep-whale) —— 本皮肤
+   使用的素材为该形象的 DeepSeek 元素再设计。
+   The DeepSeek-element secondary design used in this skin.
+
+   启动错误页立绘（assets/boot-error/，2026-09-06）：根据用户提供的上述
+   双角色参考图，使用 OpenAI imagegen 重新生成，采用本地洋红抠图制作透明层。
+   角色设计沿用以上署名链；生成提示词与处理方式见该目录 PROMPTS.md。
+
+   网页与应用图标（assets/icons/，2026-09-07）：由 Small-tailqwq 提供三张
+   鲸鱼娘表情原图；保留原图，通过本地脚本抠除浅色背景并处理边缘，等比缩放及
+   透明留边生成 PNG / ICO，沿用以上署名链。处理脚本为 scripts/build-maid-icons.py。
+   插件菜单图标 assets/plugin-icon.png 为其中 delighted-192.png 的原字节副本。
+
+Artwork usage terms (LICENSE-ARTWORK): CC BY-NC-SA 4.0 —— 署名 (attribution) 必须保留以上完整创作链；
+非商业性使用 (non-commercial only)；衍生作品必须以相同方式共享 (share-alike)。
+
+Software code is covered by LICENSE (MIT). Artwork copyright remains with the
+respective authors above, including embedded and transformed copies.

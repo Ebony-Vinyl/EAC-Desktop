@@ -124,7 +124,7 @@ function profileBundles(): { names: string[]; identities: BundleIdentities } {
     const bundles: unknown = manifest.dsh?.profile?.bundles;
     if (Array.isArray(bundles)) names = bundles.filter((name): name is string => typeof name === 'string');
   } catch { /* An absent manifest supplies no package aliases. */ }
-  return { names, identities: resolveBundleIdentities(desktopProfileDir(), names) };
+  return { names, identities: resolveBundleIdentities(desktopProfileDir(), names, [APP_ROOT]) };
 }
 
 function bundleTarget(id: string): { name: string; identity: BundleIdentity } | null {

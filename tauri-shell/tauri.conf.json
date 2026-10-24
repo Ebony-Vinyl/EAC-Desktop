@@ -30,7 +30,7 @@
       },
       "nsis": {
         "installMode": "currentUser",
-        "compression": "bzip2",
+        "compression": "lzma",
         "languages": [
           "SimpChinese",
           "English"

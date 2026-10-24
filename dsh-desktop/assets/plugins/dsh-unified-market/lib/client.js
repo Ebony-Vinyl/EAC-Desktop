@@ -186,16 +186,16 @@ window.__ModuleLoader__.load({ id: 'dsh-unified-market', factory: (require) => {
 .mkts-chip{font-size:12px;color:var(--dsw-alias-label-secondary);background:none;white-space:nowrap;border:1px solid var(--dsw-alias-border-l2);border-radius:999px;padding:2px 10px;cursor:pointer}
 .mkts-chip small{color:var(--dsw-alias-label-tertiary);font-size:10px}
 .mkts-chip:hover:not(:disabled){border-color:var(--dsw-alias-label-dimmed)}
-.mkts-chip-on{background:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}
+.mkts-chip-on{background:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary-foreground,#fff)}
 .mkts-chip-on small{color:inherit;opacity:.8}
 .mkts-sort{display:flex;gap:2px;background:var(--dsw-alias-bg-layer-2);border-radius:8px;padding:2px;margin-left:auto;flex-shrink:0}
 .mkts-sort button{border:none;background:none;font:inherit;font-size:12px;color:var(--dsw-alias-label-secondary);padding:3px 10px;border-radius:6px;cursor:pointer;white-space:nowrap}
-.mkts-sort button.on{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3);font-weight:600}
+.mkts-sort button.on{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary-foreground,#fff);font-weight:600}
 .mkts-sec{padding-block:14px 8px;font-size:15px;font-weight:600;color:var(--dsw-alias-label-primary);display:flex;align-items:baseline;gap:8px}
 .mkts-sec small{font-size:11px;color:var(--dsw-alias-label-tertiary);font-weight:400}
 .mkts-item{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--dsw-alias-border-l2);border-radius:12px;margin-bottom:8px;background:var(--dsw-alias-bg-layer-3);transition:border-color .16s,box-shadow .16s,transform .16s;align-items:flex-start}
 .mkts-item:hover{border-color:var(--dsw-alias-label-dimmed);box-shadow:0 4px 18px rgba(0,0,0,.18)}
-.mkts-avatar{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:15px;font-weight:700;color:var(--dsw-alias-bg-layer-3);background:linear-gradient(135deg,var(--dsw-static-deepseek-500,#4f6bde),color-mix(in srgb,var(--dsw-static-deepseek-500,#4f6bde) 55%,#8a63d2));user-select:none}
+.mkts-avatar{flex:none;width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:15px;font-weight:700;color:var(--dsw-alias-label-primary-foreground,#fff);background:linear-gradient(135deg,var(--dsw-static-deepseek-500,#4f6bde),color-mix(in srgb,var(--dsw-static-deepseek-500,#4f6bde) 55%,#8a63d2));user-select:none}
 .mkts-no{flex:none;font-family:ui-monospace,monospace;font-size:11px;color:var(--dsw-alias-label-tertiary);padding-top:3px;min-width:40px}
 .mkts-main{flex:1;min-width:0}
 .mkts-main h3{margin:0;font-size:14px;font-weight:600;line-height:1.4}
@@ -212,8 +212,8 @@ window.__ModuleLoader__.load({ id: 'dsh-unified-market', factory: (require) => {
 .mkts-actions{flex:none;display:flex;flex-direction:column;gap:4px;align-items:flex-end}
 .mkts-cmdbtn{appearance:none;background:none;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;font:inherit;font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);padding:3px 12px;cursor:pointer;white-space:nowrap}
 .mkts-cmdbtn:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}
-.mkts-cmdbtn-primary{background:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}
-.mkts-cmdbtn-primary:hover:not(:disabled){opacity:.85;color:var(--dsw-alias-bg-layer-3)}
+.mkts-cmdbtn-primary{background:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-primary);color:var(--dsw-alias-label-primary-foreground,#fff)}
+.mkts-cmdbtn-primary:hover:not(:disabled){opacity:.9;color:var(--dsw-alias-label-primary-foreground,#fff)}
 .mkts-cmdbtn-danger{color:var(--dsw-alias-label-error)}
 .mkts-cmdbtn-danger:hover:not(:disabled){border-color:var(--dsw-alias-label-error);color:var(--dsw-alias-label-error)}
 .mkts-cmdbtn:disabled{opacity:.4;cursor:default}
