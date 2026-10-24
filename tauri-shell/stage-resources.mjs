@@ -27,10 +27,14 @@ import {
 } from './stage-platform-prune.mjs';
 import { genDistributionDescriptor } from './gen-distribution-descriptor.mjs';
 import { prepareWebView2Loader } from './prepare-webview2-loader.mjs';
+import { parseDistro, builtinPluginDirs, bundledSkinDirs, stagedDir } from './distro.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const dd = path.join(root, 'dsh-desktop');
-const staged = path.join(root, 'tauri-shell', 'staged-resources');
+// 分发档位：lite（仓库默认产物） | full（lite + 完整皮肤集）。
+// 产物目录按档位隔离，两个档位可并存、互不覆盖。
+const distro = parseDistro(process.argv);
+const staged = stagedDir(root, distro);
 const skipNpm = process.argv.includes('--skip-npm');
 const targetArg = process.argv.find((arg) => arg.startsWith('--target='));
 const targetPlatform = targetArg ? targetArg.slice('--target='.length) : process.platform;
@@ -169,6 +173,10 @@ const LIB_DESKTOP = [
   // Task 3.3 插件治理三件套 + 其 lib/desktop 依赖
   'guard-box.js', 'companion-sync.js', 'plugin-ops.js',
   'install-profile.js', 'plugin-sync-registry.js',
+  // 精简版随包皮肤播种（companion-sync.js 在 boot 时 import）：
+  // 漏装会在 sidecar 启动早期就 `Cannot find module './lite-skins'` 直接退出，
+  // 表现为「sidecar exited」+ 只显示 /died 页 —— 整树起不来，不只是少个功能。
+  'lite-skins.js',
   // Task 3.3 阶段 3：files.revert 的白名单根
   'file-roots.js',
   'client-update.js', 'update-sources.js', 'update-signature.js', 'update-platform.js',
@@ -381,9 +389,21 @@ copyRequired(path.join(dd, 'package.json'), path.join(staged, 'dsh-desktop', 'pa
 copyRequired(path.join(dd, 'package-lock.json'), path.join(staged, 'dsh-desktop', 'package-lock.json'), 'package-lock.json');
 copyRequired(path.join(dd, '.npmrc'), path.join(staged, 'dsh-desktop', '.npmrc'), '.npmrc');
 
-// 兼容历史插件启停策略：保留 full 标记，不代表 Full 已安装。
-// 本仓库完整产物是 EAC Lite；Full 需要另行实际安装 EAC-Pack 包。
-writeFileSync(path.join(staged, 'dsh-desktop', 'profile.txt'), 'full\n');
+// 安装形态标记：写入**真实档位**，不再恒写 full。
+//
+// 历史背景：此前无条件写 'full'，理由是「保留 full 标记，不代表 Full 已安装」
+// —— 因为那时只有一个产物。代价是 `readInstallProfile()` 永远返回 'full'，
+// 于是 install-profile.ts 的 `isLiteDisabled()` 这条按形态分流的路径**从未
+// 生效过**（等于死代码）。
+//
+// 现状：已引入 --distro（见 distro.mjs），lite 是仓库默认产物，标记如实写入。
+// 安全性：`LITE_DEFAULT_DISABLED` 当前是空数组（ISO-005 收敛后随包面全是
+// 核心插件，没有「随包但默认关」的增强项），因此写 'lite' 不会停用任何插件；
+// 将来若重新登记该清单，这条标记才真正起作用 —— 这正是它应有的语义。
+//
+// 注意：该标记**不能**用来判断「是否装了 EAC-Pack」。装没装看 profile 里有没有
+// `eac-plugin-suite`（见 dsh-desktop/lib/desktop/lite-skins.ts 的 isLiteProfile）。
+writeFileSync(path.join(staged, 'dsh-desktop', 'profile.txt'), distro + '\n');
 writeFileSync(
   path.join(staged, 'dsh-desktop', 'environment-policy.json'),
   JSON.stringify({
@@ -438,32 +458,13 @@ console.log('[stage] assets（v6 最简本体：图标 + WS 客户端 + skills�
     cpSync(managerLockPath, path.join(staged, 'ui-skin-manager', 'artifact.lock.json'));
     console.log('[stage] pinned UI skin manager artifacts staged');
   }
-  // v6 Task 3.3：内置插件随行。只拷当前已接回的内置插件目录
-  //（ADR 0008 builtin 集合的子集；syncCompanionPlugins 对目录缺失的插件
-  // 记录日志并跳过，因此分阶段接回无需改同步器）。
-  const BUILTIN_PLUGIN_DIRS = [
-    // 阶段 1（PR #392）：零外设依赖的试点插件
-    'dsh-viewport-lock',
-    'dsh-eac-locale-compat',
-    // 阶段 2：不依赖 window.dshDesktop 已删桥接面的 5 个 builtin 插件。
-    //（dsh-skin-switch 随 M2/#415 退役移出；dsh-eac-core-bridge 随 ISO-003
-    // 退役移出；其余阶段 1/2 项见各自行内清单。）
-    // ISO-003：eac-core-bridge 的端点生产者缺失 —— DSH_EAC_BRIDGE_URL/TOKEN
-    // 全仓零写入方（lib/desktop/proc.ts 的 childEnv() 不注入，插件 index.js
-    // 读不到端点即提前 return），随包且默认启用只会静默空转；本控制包（边界
-    // 收敛，ADR 0003 已裁废）下退役，不再随包装配。资产目录保留在
-    // assets/plugins/dsh-eac-core-bridge 不动，等进程隔离接回时恢复本行。
-    'dsh-compact',
-    'dsh-easy-setup',
-    'dsh-file-changes',
-    'dsh-settings-scroll-fix',
-    'dsh-unified-market',
-    // 阶段 3：服务端 RPC / bridge 面已随本批接回
-    'dsh-plugin-shield',
-    'dsh-client-file-changes',
-  ];
-  // EAC-CORE-SHELL-01：皮肤平台（loader + 13 款公约皮肤）已彻底外迁，宿主
-  // 最小壳不再随包皮肤/加载器。皮肤改为市场可选包（Market Core 按需安装）。
+  // v6 Task 3.3：内置插件随行。清单与口径统一在 distro.mjs（装配与发行描述符
+  // 共用，避免此前「描述符正则解析装配源码」的脆弱耦合）。
+  //  - BASE_PLUGIN_DIRS + VISUAL_CORE_PLUGIN_DIRS  = lite 面（仓库默认产物）
+  //  - FULL_ONLY_PLUGIN_DIRS                       = full 档额外项（当前为空）
+  //（dsh-skin-switch 随 M2/#415 退役移出；dsh-eac-core-bridge 随 ISO-003 退役
+  // 移出，资产目录保留等进程隔离接回时恢复。）
+  const BUILTIN_PLUGIN_DIRS = builtinPluginDirs(distro);
   for (const dir of BUILTIN_PLUGIN_DIRS) {
     const from = path.join(dd, 'assets', 'plugins', dir);
     if (!existsSync(from)) {
@@ -471,7 +472,27 @@ console.log('[stage] assets（v6 最简本体：图标 + WS 客户端 + skills�
     }
     cpSync(from, path.join(staged, 'dsh-desktop', 'assets', 'plugins', dir), { recursive: true });
   }
-  console.log(`[stage] 内置插件已随行（Task 3.3，${BUILTIN_PLUGIN_DIRS.length} 个）`);
+  console.log(`[stage] 内置插件已随行（Task 3.3，${BUILTIN_PLUGIN_DIRS.length} 个，档位 ${distro}）`);
+
+  // 随包皮肤：lite 带用户点名的 5 款，full 带完整皮肤集。
+  //
+  // 归属变更说明：原注释（EAC-CORE-SHELL-01）写明「皮肤平台已彻底外迁，最小壳
+  // 不再随包皮肤/加载器」—— 那是当时的取舍。用户 2026-10-22 明确要求精简版
+  // 开箱带皮肤（默认激活「虎鲸之链」），因此恢复随包，但**只随包数据**：
+  // 加载器（ui-skin manager）由 dsh-desktop/ui-skin-manager 独立装配，与此无关。
+  //
+  // 装配口径与 lite-skins.ts 的 LITE_BUNDLED_SKINS 对齐：assets/skins 下目录名
+  // 即皮肤包名扁平化（@scope/name → @scope_name），运行时由 companion-sync 的
+  // seedLiteBundledSkins 落位到 profile。
+  const SKIN_DIRS = bundledSkinDirs(distro);
+  for (const dir of SKIN_DIRS) {
+    const from = path.join(dd, 'assets', 'skins', dir);
+    if (!existsSync(from)) {
+      throw new Error(`[stage] 随包皮肤目录缺失: assets/skins/${dir}`);
+    }
+    cpSync(from, path.join(staged, 'dsh-desktop', 'assets', 'skins', dir), { recursive: true });
+  }
+  console.log(`[stage] 随包皮肤已随行（${SKIN_DIRS.length} 款，档位 ${distro}）`);
 }
 
 // dsh-distribution 发行版描述符（阶段 3）：组件清单来自插件来源台账

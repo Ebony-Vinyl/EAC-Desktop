@@ -1,0 +1,75 @@
+{
+  "name": "@smalltailqwq/dsh-client-ui-skin-orca-link",
+  "description": "A cool little black-whale operator, square corners throughout and icons redrawn in straight lines; functional by day, soothing by night.",
+  "icon": "assets/plugin-icon.svg",
+  "version": "0.1.7",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./skin.json": "./skin.json",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "scripts": {
+    "build": "node ../scripts/prepare-skin-assets.mjs . && tsdown && node ../scripts/write-skin-build.mjs . Small-tailqwq/dsh-deep-whale",
+    "test": "vitest run"
+  },
+  "license": "SEE LICENSE IN LICENSE",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Small-tailqwq/dsh-deep-whale.git",
+    "directory": "orca-link"
+  },
+  "homepage": "https://github.com/Small-tailqwq/dsh-deep-whale/tree/main/orca-link#readme",
+  "bugs": {
+    "url": "https://github.com/Small-tailqwq/dsh-deep-whale/issues"
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1",
+    "@deepseek-ai/dsh": ">=0.1.0-rc.6"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "^4.0.1",
+    "jsdom": "29.1.1",
+    "lightningcss": "^1.32.0",
+    "tsdown": "^0.22.2",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "^4.1.8"
+  },
+  "files": [
+    "lib/index.js",
+    "lib/client.js",
+    "cordis.patch.yml",
+    "skin.json",
+    "skin.build.json",
+    "preview",
+    "assets/icons/*.ico",
+    "LICENSE",
+    "LICENSE-ARTWORK",
+    "NOTICE",
+    "README.md",
+    "assets/runtime",
+    "locale/*.json",
+    "assets/plugin-icon.svg"
+  ]
+}

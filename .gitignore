@@ -73,3 +73,6 @@ updates/
 tmp-verify-delete/
 
 vendor/
+# full-pack 装配产物（prepare-composition.mjs 生成，约 981 MB）
+# 内容是 profile-seed 的 node_modules + composition.json，属于构建输出，不入库。
+dsh-desktop/assets/full-pack/

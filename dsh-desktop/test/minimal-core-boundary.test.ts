@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { builtinPluginDirs } from '../../tauri-shell/distro.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (...parts: string[]): string => readFileSync(join(root, ...parts), 'utf8');
@@ -120,9 +121,9 @@ test('isolation runtime leaves no compiled .js residue', () => {
 // 实物只有 9 项，35 项每次启动只留「配套插件源目录无效，跳过」，既无日志价值也让
 // 「随包面」在运行期失真。此后：清单 1:1 对齐装配面，不随包的插件一律走 RETIRED 兜底。
 test('runtime companion registry matches the staged builtin set and retires the rest', async () => {
-  const stagedMatch = /const BUILTIN_PLUGIN_DIRS = \[([\s\S]*?)\];/.exec(stage);
-  assert.ok(stagedMatch, 'BUILTIN_PLUGIN_DIRS 清单必须存在');
-  const stagedDirs = [...stagedMatch![1].matchAll(/'([^']+)'/g)].map((x) => x[1]);
+  // 随包面口径已移到 tauri-shell/distro.mjs（装配 / 描述符 / 测试共用唯一事实源），
+  // 不再从 stage-resources.mjs 源码正则解析。
+  const stagedDirs = [...builtinPluginDirs('lite')];
   assert.ok(stagedDirs.length > 0, '装配面必须至少随包一个内置插件');
 
   const companion = await import('../lib/desktop/companion-sync.js') as {
@@ -133,9 +134,17 @@ test('runtime companion registry matches the staged builtin set and retires the 
     p.dir || (p.name.includes('/') ? p.name.split('/').pop()! : p.name);
 
   // 1) 运行时登记面 = 装配面（逐项一致，无悬空项、无漏登记项）。
+  //
+  // 例外：皮肤管理器（dsh-client-ui-skin-deep-whale-manager）随包但**不走**
+  // COMPANION_PLUGINS。它自带 `dsh.bundle.patch`，挂载行由包内 cordis.patch.yml
+  // 提供；若再登记进配套表，同一包会被两处各注册一个 entry，内核报
+  // `duplicate exact route "/api/dsh/skins"` 且 `1 entry did not activate`，
+  // 管理器不激活 → 不写 body 皮肤属性 → 所有皮肤静默失效（2026-10-23 实测）。
+  // 它的「随包」由 distro 清单证明（上面的 stagedDirs + 下面的实物校验）。
+  const BUNDLE_WIRED_CORE = new Set(['dsh-client-ui-skin-deep-whale-manager']);
   assert.deepEqual(
     companion.COMPANION_PLUGINS.map(dirOf).sort(),
-    [...stagedDirs].sort(),
+    stagedDirs.filter((d) => !BUNDLE_WIRED_CORE.has(d)).sort(),
     'COMPANION_PLUGINS 必须与装配面 BUILTIN_PLUGIN_DIRS 一致（ISO-005：不再有静默跳过项）',
   );
   // 2) 每个登记项都有实物目录（装配脚本同样 fail-fast 校验）。
