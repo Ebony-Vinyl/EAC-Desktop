@@ -11,7 +11,8 @@
 //
 // 用法：node make-portable.mjs [--out <dir>]
 //   前置：tauri build 已完成（target/release/{dsh-eac-shell.exe, sidecar/, dsh-desktop/}）。
-//   产物：EAC-Lite-<version>-windows-<arch>-portable.zip + SHA256SUMS.txt
+//   产物：v<version>-<distro>-<arch>.zip + .tar.zst + SHA256SUMS.txt
+//        例如 v6.1.0beta-lite-x64.zip（详见下方 productPrefix 处关于名称长度的说明）
 
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, openSync, readSync, closeSync } from 'node:fs';
@@ -64,9 +65,15 @@ try {
 const arch = machine === 0x8664 ? 'x86_64' : machine === 0xaa64 ? 'aarch64' : '';
 if (!arch || (triple && !triple.startsWith(arch + '-'))) throw new Error('Portable shell architecture differs from target');
 const updateTarget = 'windows-' + arch + '-portable';
-// 档位前缀：lite 产物沿用 EAC-Lite-（既有消费者与 updateTarget 约定依赖）；
-// full 产物必须是 EAC-Full-，否则两个档位会产出一模一样的文件名，
-// 放到同一目录下互相覆盖，用户也无法从文件名区分。
+// 档位前缀：两个档位必须可区分，否则会产出一模一样的文件名、互相覆盖。
+//
+// 为什么用 `v<version>-<distro>-<arch>` 而不是原来的 `EAC-Full-<version>-windows-...`：
+// 6.1.0 实测发现 Explorer「全部解压缩」会在 zip 同级**自动新建与压缩包同名的
+// 文件夹**再解压，于是真实落盘路径 = 解压目标 + 1 + 产物名 + 1 + zip 内最长条目。
+// 原来的长名（54 字符）把可用解压目标压到 53 字符，在
+// `...\6.1.0beta-release\eac-6.1.0-lite-windows-x64\` 这类目录就地解压时
+// 超 259 上限 5 个字符，报 0x80010135 路径太长。
+// 缩短到 19 字符后，解压目标可放宽到 88 字符，覆盖全部常见场景。
 //
 // 判定依据是 staged 的 profile.txt（stage-resources.mjs:406 写入的档位标记），
 // 而不是命令行参数 —— 后者可能与实际装配面不一致，前者是产物的既成事实。
@@ -76,9 +83,13 @@ if (existsSync(profileTxt)) {
   const mark = readFileSync(profileTxt, 'utf8').trim();
   if (mark === 'full' || mark === 'lite') distro = mark;
 }
-const productPrefix = distro === 'full' ? 'EAC-Full-' : 'EAC-Lite-';
+// 顺序：v<version>-<distro>-<arch>，例如 v6.1.0beta-lite-x64.zip
+// 注意 arch 用简写 x64 / arm64，与 updateTarget 里的 x86_64 / aarch64 不同 ——
+// 后者是更新清单约定（不可改），前者只影响面向用户的文件名。
+const shortArch = arch === 'x86_64' ? 'x64' : arch === 'aarch64' ? 'arm64' : arch;
+const productPrefix = 'v' + version + '-' + distro + '-' + shortArch;
 console.log(`[portable] 档位: ${distro}（来自 profile.txt），产物前缀 ${productPrefix}`);
-const zipPath = path.join(outDir, productPrefix + version + '-' + updateTarget + '.zip');
+const zipPath = path.join(outDir, productPrefix + '.zip');
 if (existsSync(zipPath)) throw new Error('Portable ZIP already exists: ' + zipPath);
 
 console.log('[portable] 装配暂存目录（zip 根 = 安装树同构，顶层无包裹目录）');
