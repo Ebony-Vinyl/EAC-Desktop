@@ -16,7 +16,7 @@
 | 文档内容 | 仓库事实源 | 核对结果 |
 | --- | --- | --- |
 | 产品版本 | [package.json](../dsh-desktop/package.json)、[Tauri 配置](../tauri-shell/tauri.conf.json) | 6.0.0 |
-| 内核 | [package.json](../dsh-desktop/package.json) | 本地 tarball 固定到 0.2.0-rc.2 |
+| 内核 | [package.json](../dsh-desktop/package.json) | beta 本地 tarball 固定到 0.2.1-rc.2，运行兼容验收见 [升级记录](KERNEL-UPGRADE-021-NOTES.md) |
 | 真正随包插件 | [stage-resources.mjs](../tauri-shell/stage-resources.mjs) 的 BUILTIN_PLUGIN_DIRS | 9 项，不能按资产目录或分发账本数作宣传 |
 | 核心桥不随包 | 同上 | eac-core-bridge 资产仍在，但装配项已退役 |
 | 推荐包状态 | [推荐 pack](../.sync/packs/desktop-recommended.pack.json) | draft，plugins 为空；intendedPluginIds 仅为规划 |
@@ -24,7 +24,7 @@
 | 壳工件 | [skin-manager-artifact.lock.json](../tauri-shell/skin-manager-artifact.lock.json) | manager 0.1.0-preview.1、system.default 2.0.0 固定工件，装配做摘要检查 |
 | 数据环境 | [environment.ts](../dsh-desktop/lib/desktop/environment.ts)、[main.rs](../tauri-shell/src/main.rs)、[ADR 0004](adr/0004-eac-install-environment-isolation.md) | 正式启动注入产品数据根与通道，使用 DPX；旧宿主数据不自动迁移 |
 | 环境边界 | 同上 | 默认路径收容，不是文件系统写入沙箱；初始化失败不回退宿主 |
-| 构建工具链 | [安装包工作流](../.github/workflows/staged-runtime-artifact.yml) | Node 24、pnpm 11.7.0、Rust stable，先获取内核再 ci:install |
+| 构建工具链 | [安装包工作流](../.github/workflows/staged-runtime-artifact.yml) | Node 24、pnpm 11.28.5、Rust stable，先获取内核再 ci:install |
 | 构建平台 | 同上 | Windows/Linux x64/arm64；不把矩阵当作已发布资产 |
 | WebView2 | [Tauri 配置](../tauri-shell/tauri.conf.json) | downloadBootstrapper，不能承诺首次安装完全离线 |
 | 最简本体边界 | [ADR 0006](adr/0006-minimal-core-scope.md) 当前状态索引 | 早期设计提案不能充当现行运行契约 |

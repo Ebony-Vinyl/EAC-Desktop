@@ -180,7 +180,7 @@ const LIB_DESKTOP = [
 ];
 const SCRIPTS = [
   'eac-cli.js',
-  'patch-session-manage.js', 'patch-deps.js',
+  'patch-session-manage.js', 'patch-session-manage-021.js', 'patch-deps.js',
   // plugin-ops 消费：核心插件集合判定 + patch 行读写
   'onboarding.js', 'plugin-manager-patch.js',
   // P1 自愈链路（形态 1）：sidecar 退场后，L1 壳用随包 node 跑这个脚本做
@@ -602,8 +602,8 @@ execSync('node scripts/patch-deps.js', { cwd: path.join(staged, 'dsh-desktop'), 
 console.log('[stage] 重放既有会话管理补丁（patch-session-manage）');
 execSync('node scripts/patch-session-manage.js', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 
-// 上游修复的 vendored 覆盖（bash 输出折叠，PR #181）——npm ci 会还原成
-// registry 版本，把仓库内的修复副本盖回去。
+// 受控 bash 覆盖基于官方 0.2.1-rc.2，仅保留 optional-escalation 兼容差异。
+// npm ci 会恢复 registry 文件，装配时回填已重放补丁的项目副本。
 // （dsh-subprocess-local 的 pwsh 超时 vendored 修复已废弃：0.1.1-rc.2 上游以
 //  Promise.race(done, delay(graceMs)) 原生实现同类兜底，随 registry 版本走。）
 const vendoredBashFix = path.join(dd, 'node_modules', '@deepseek-ai', 'dsh-tool-bash', 'lib', 'index.js');

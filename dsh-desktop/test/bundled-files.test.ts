@@ -78,7 +78,7 @@ test('装配清单只包含当前运行闭包与构建期职责', () => {
       'install-profile.js', 'plugin-sync-registry.js',
     ],
     LIB_VNEXT: ['atomic-json.js', 'plugin-copy.js'],
-    SCRIPTS: ['patch-session-manage.js', 'patch-deps.js', 'onboarding.js', 'plugin-manager-patch.js'],
+    SCRIPTS: ['patch-session-manage.js', 'patch-session-manage-021.js', 'patch-deps.js', 'onboarding.js', 'plugin-manager-patch.js'],
   };
   assert.ok(lists.ROOT_FILES.includes('client-update-defaults.json'), '发布信任根必须随包装配');
   for (const [listName, required] of Object.entries(mustHave)) {

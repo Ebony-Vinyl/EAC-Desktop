@@ -17,6 +17,7 @@ const ROOT = join(fileURLToPath(import.meta.url), '..', '..');
 
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')) as {
   dependencies: Record<string, string>;
+  overrides: Record<string, string>;
 };
 
 const kernelPrefixes = Object.values(pkg.dependencies)
@@ -42,6 +43,30 @@ function hitsGithubApiHost(source: string): boolean {
 test('package.json 所有内核依赖钉同一版本', () => {
   assert.ok(kernelPrefixes.every((v) => v === kernelVersion),
     'package.json 出现多个内核版本钉: ' + [...new Set(kernelPrefixes)].join(', '));
+});
+
+test('内核 overrides 与直接依赖钉同一版本', () => {
+  for (const [name, spec] of Object.entries(pkg.overrides)) {
+    if (!name.startsWith('@deepseek-ai/')) continue;
+    assert.ok(spec.startsWith(`file:vendor/kernel/${kernelVersion}/`), `${name}: ${spec}`);
+    if (pkg.dependencies[name] !== undefined) assert.equal(spec, pkg.dependencies[name], name);
+  }
+});
+
+test('锁文件沿用同一份内核接线且不残留旧版 tarball', () => {
+  const lock = JSON.parse(readFileSync(join(ROOT, 'package-lock.json'), 'utf8')) as {
+    packages: Record<string, { dependencies?: Record<string, string>; resolved?: string }>;
+  };
+  assert.deepEqual(lock.packages['']?.dependencies, pkg.dependencies);
+  for (const [name, entry] of Object.entries(lock.packages)) {
+    if (!entry.resolved?.startsWith('file:vendor/kernel/')) continue;
+    assert.ok(entry.resolved.startsWith(`file:vendor/kernel/${kernelVersion}/`), `${name}: ${entry.resolved}`);
+  }
+});
+
+test('安装包工作流缓存版本与 package.json 内核钉一致', () => {
+  const workflow = readFileSync(join(ROOT, '..', '.github', 'workflows', 'staged-runtime-artifact.yml'), 'utf8');
+  assert.equal(/KERNEL_VERSION: '([^']+)'/.exec(workflow)?.[1], kernelVersion);
 });
 
 test('fetch-kernel DEFAULT_TAG 与 package.json 内核钉一致', () => {

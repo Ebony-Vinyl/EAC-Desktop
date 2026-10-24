@@ -12,6 +12,7 @@ const {
   patchThemeWriteConvergeSource,
   patchConfigEditorEditShortCircuitSource,
   patchAppBootReconcileGateSource,
+  hasTransactionalProfileRecompose,
 } = require('../scripts/patch-deps.js') as Record<string, (...args: unknown[]) => string | undefined>;
 
 // 内核产物路径（存在才跑安装树绊网；纯仓库 CI 无 node_modules 时跳过）。
@@ -178,6 +179,18 @@ for (const [name, rel, marker] of INSTALLED_TRIPWIRE) {
     const file = join(kernelRoot, rel);
     if (!existsSync(file)) return;
     const source = readFileSync(file, 'utf8');
+    // 0.2.1 的事务重载取代旧性能补丁。替代行为由 kernel-recompose-021.test.ts
+    // 执行真实上游函数验证；不能把无效的第五参数或旧门控继续注入新事务。
+    const appBootFile = join(kernelRoot, 'dsh-app-boot/lib/index.js');
+    const appBoot = existsSync(appBootFile) ? readFileSync(appBootFile, 'utf8') : '';
+    if ((name === 'config-edit-skip' || name === 'reconcile-gate') && hasTransactionalProfileRecompose(appBoot)) {
+      assert.equal(patchAppBootReconcileGateSource(appBoot), appBoot);
+      if (name === 'config-edit-skip') {
+        assert.doesNotMatch(source, /dsh-desktop-config-edit-reconcile-skip/);
+        assert.match(source, /await reconcileProfilePatches\(this\.ownerContext\.root, beforePatches, "dsh"\);/);
+      }
+      return;
+    }
     assert.match(
       source,
       marker,

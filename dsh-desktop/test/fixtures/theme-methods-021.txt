@@ -1,0 +1,87 @@
+			setTheme(id) {
+				if (id !== "system" && !this.themes.some((t) => t.id === id)) throw new Error(`theme "${id}" is not registered`);
+				if (this.preference === id) return;
+				this.preference = id;
+				if (isThemePreference(id)) this.write(() => this.host.set(THEME_PREFERENCE_FIELD, id));
+				this.publish();
+			}
+			/**
+			* Change one role's font size. Accepted
+			* values are written through the settings scope and emit `theme/change`.
+			* @param role - font role.
+			* @param px - integer px within the role's `FONT_SIZE_SPECS` range; out-of-range or fractional values throw.
+			*/
+			setFontSize(role, px) {
+				const spec = FONT_SIZE_SPECS[role];
+				if (!isFontSize(role, px)) throw new Error(`${role} font size ${px} is outside ${spec.min}..${spec.max}`);
+				if (this.fontSizes[role] === px) return;
+				this.fontSizes = Object.freeze({
+					...this.fontSizes,
+					[role]: px
+				});
+				this.write(() => this.host.set(spec.field, px));
+				this.publish();
+			}
+			/**
+			* Step all font sizes within their own ranges and save changed fields in one mutation.
+			* Emits one `theme/change`; no write or event occurs when every role is at its limit.
+			* @param delta - one pixel to add or remove from each role's current size.
+			*/
+			adjustFontSizes(delta) {
+				const fontSizes = { ...this.fontSizes };
+				const fields = {};
+				for (const role of FONT_ROLES) {
+					const { field, min, max } = FONT_SIZE_SPECS[role];
+					const px = Math.max(min, Math.min(max, fontSizes[role] + delta));
+					if (px === fontSizes[role]) continue;
+					fontSizes[role] = px;
+					fields[field] = px;
+				}
+				const ops = Object.entries(fields).map(([field, value]) => ({
+					op: "set",
+					path: [field],
+					value
+				}));
+				if (ops.length === 0) return;
+				this.fontSizes = Object.freeze(fontSizes);
+				this.write(() => this.host.mutate(ops));
+				this.publish();
+			}
+			/**
+			* Change one role's font list — the only font-family write entry. The value
+			* is normalized, written through the settings scope, and emits `theme/change`
+			* when the normalized list differs.
+			* @param role - font role.
+			* @param value - comma-separated family names; a value without names restores the built-in stack.
+			*/
+			setFontFamily(role, value) {
+				const list = normalizeFontFamily(value);
+				if (this.fontFamilies[role] === list) return;
+				this.fontFamilies = Object.freeze({
+					...this.fontFamilies,
+					[role]: list
+				});
+				this.write(() => this.host.set(FONT_FAMILY_FIELDS[role], list));
+				this.publish();
+			}
+			/** Queue one settings write, then adopt the durable section once no own write remains. */
+			write(operation) {
+				this.pendingWrites += 1;
+				operation().finally(() => {
+					this.pendingWrites -= 1;
+					this.adopt();
+				});
+			}
+			/** Adopt the scope's accepted durable preference without writing it back. */
+			adopt() {
+				if (this.pendingWrites > 0) return;
+				const section = this.host.getSnapshot().value;
+				if (section === void 0) return;
+				const fontFamilies = durableFontFamilies(section);
+				const fontSizes = sectionFontSizes(section);
+				if (this.preference === section.preference && FONT_ROLES.every((role) => this.fontSizes[role] === fontSizes[role] && this.fontFamilies[role] === fontFamilies[role])) return;
+				this.preference = section.preference;
+				this.fontSizes = fontSizes;
+				this.fontFamilies = fontFamilies;
+				this.publish();
+			}

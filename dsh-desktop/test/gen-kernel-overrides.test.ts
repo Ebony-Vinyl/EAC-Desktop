@@ -47,7 +47,45 @@ test('非白名单的缓存缺失包仍然硬错误', () => {
   assert.throws(() => applyKernelSpecs(manifest, SPECS), /没有对应 tarball/);
 });
 
-test('KERNEL_REMOVED_PACKAGES 覆盖 0.1.7-rc.2 实测缺失的 9 个包', () => {
+const REMOVED_021 = [
+  '@deepseek-ai/dsh-experimental-schedule-bundle',
+  '@deepseek-ai/dsh-invariants',
+  '@deepseek-ai/dsh-subagent-in-process-driver',
+];
+
+test('0.2.1-rc.2 移除包被清理，重复生成幂等且保留安全钉', () => {
+  const removedSpecs = Object.fromEntries(REMOVED_021.map((name) => [name, 'file:vendor/kernel/0.2.0-rc.2/old.tgz']));
+  const manifest = {
+    dependencies: { ...removedSpecs, '@deepseek-ai/dsh': 'file:vendor/kernel/0.2.0-rc.2/old.tgz' },
+    overrides: { ...removedSpecs, glob: '10.5.0', qs: '6.16.0' },
+  };
+  const result = applyKernelSpecs(manifest, SPECS);
+  assert.deepEqual(result.removed, REMOVED_021);
+  for (const name of REMOVED_021) {
+    assert.ok(!(name in manifest.dependencies), name);
+    assert.ok(!(name in manifest.overrides), name);
+  }
+  assert.equal(manifest.overrides.glob, '10.5.0');
+  assert.equal(manifest.overrides.qs, '6.16.0');
+  const once = structuredClone(manifest);
+  assert.deepEqual(applyKernelSpecs(manifest, SPECS).removed, []);
+  assert.deepEqual(manifest, once);
+});
+
+test('回构旧内核时保留缓存中仍存在的 0.2.1 移除包', () => {
+  const specs = new Map([...SPECS, ...REMOVED_021.map((name) => [name, V + name.slice('@deepseek-ai/'.length) + '.tgz'] as [string, string])]);
+  const manifest = {
+    dependencies: Object.fromEntries(REMOVED_021.map((name) => [name, 'old-spec'])),
+    overrides: {},
+  };
+  assert.deepEqual(applyKernelSpecs(manifest, specs).removed, []);
+  for (const name of REMOVED_021) {
+    assert.equal(manifest.dependencies[name], specs.get(name));
+    assert.equal((manifest.overrides as Record<string, string>)[name], specs.get(name));
+  }
+});
+
+test('KERNEL_REMOVED_PACKAGES 覆盖历次升级已确认移除的包', () => {
   const removed = [
     '@deepseek-ai/dsh-code-runtime',
     '@deepseek-ai/dsh-agent-presets',
@@ -58,6 +96,7 @@ test('KERNEL_REMOVED_PACKAGES 覆盖 0.1.7-rc.2 实测缺失的 9 个包', () =>
     '@deepseek-ai/dsh-settings-file',
     '@deepseek-ai/dsh-subprocess-e2b',
     '@deepseek-ai/dsh-workflow-worker-thread',
+    ...REMOVED_021,
   ];
   assert.equal(applyKernelSpecs.REMOVED_SET.size, removed.length);
   for (const name of removed) assert.ok(applyKernelSpecs.REMOVED_SET.has(name), name);

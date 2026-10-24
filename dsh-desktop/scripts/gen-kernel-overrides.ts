@@ -57,6 +57,9 @@ function packageNameOf(filename: string): string | null {
  * dsh-experimental-schedule-bundle、dsh-otel——均为上游 dependencies 正常
  * 声明，随安装闭包传递安装，无需进 KERNEL_DEP_GAPS）。本白名单成员不变，
  * 保留供降级回 0.1.7 或下次升版比对。
+ *
+ * 0.2.1-rc.2 移除 schedule 实验组合包、invariants 和进程内 subagent driver。
+ * 仅在目标缓存确实缺少它们时清理；回构旧内核仍保留存在的包。
  */
 const KERNEL_REMOVED_PACKAGES = [
   '@deepseek-ai/dsh-code-runtime',
@@ -68,6 +71,9 @@ const KERNEL_REMOVED_PACKAGES = [
   '@deepseek-ai/dsh-settings-file',
   '@deepseek-ai/dsh-subprocess-e2b',
   '@deepseek-ai/dsh-workflow-worker-thread',
+  '@deepseek-ai/dsh-experimental-schedule-bundle',
+  '@deepseek-ai/dsh-invariants',
+  '@deepseek-ai/dsh-subagent-in-process-driver',
 ] as const;
 
 /**
