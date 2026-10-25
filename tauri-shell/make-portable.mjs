@@ -142,6 +142,7 @@ shrink.shortenSeedPreviewDirs(staging, (m) => console.log('[portable] ' + m));
 shrink.pruneUnusedNestedResources(staging, (m) => console.log('[portable] ' + m));
 shrink.pruneOrphanSdks(staging, (m) => console.log('[portable] ' + m));
 shrink.finalTrim(staging, (m) => console.log('[portable] ' + m));
+shrink.shortenInspectorDescriptionPaths(staging, (m) => console.log('[portable] ' + m));
 shrink.rebuildBundleManifest(staging, (m) => console.log('[portable] ' + m));
 shrink.normalizeSkinWiringIds(staging, (m) => console.log('[portable] ' + m));
 
@@ -225,7 +226,7 @@ console.log(`[portable] 包内 ${zipEntries.length} 条目，最长路径 ${maxE
 //   超 150 说明出现新的长路径源头，必须人工评估而不是默默出货。
 if (maxEntryLength > 154) {
   const top = zipEntries.slice().sort((a, b) => b.length - a.length).slice(0, 5);
-  throw new Error(`[portable] 长路径门禁 FAIL：最长条目 ${maxEntryLength} > 150。\n最长的 5 条:\n  ${top.join('\n  ')}`);
+  throw new Error(`[portable] 长路径门禁 FAIL：最长条目 ${maxEntryLength} > 154。\n最长的 5 条:\n  ${top.join('\n  ')}`);
 }
 console.log('[portable] 长路径门禁 PASS（最长 ≤ 154；目标目录 105 字符内右键解压不炸）');
 

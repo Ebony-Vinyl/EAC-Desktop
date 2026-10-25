@@ -117,3 +117,15 @@ JSONL 删除使用后端配置的存储 root、原生路径查找与跨进程写
 [上一轮 beta CI](https://github.com/Ebony-Vinyl/EAC-Desktop/actions/runs/40071916108)（`c475718d`）四组均成功。该结果早于本轮主线合并，不能替代新提交的 CI。
 
 官方变更说明：[0.2.1-rc.1](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1)、[0.2.1-rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)。
+
+## Windows 便携包 CI 修复（2026-10-25）
+
+[`f19b9e3a` 的 CI](https://github.com/Ebony-Vinyl/EAC-Desktop/actions/runs/40174110852) 中，Linux x64/arm64 全部成功；Windows x64/arm64 均已通过测试、资源装配和 NSIS 构建，在 `Build portable package` 失败。新内核 Inspector 的 Issues Markdown 最长 ZIP 路径为 186 字符，超过既有 154 字符门槛；原错误文案误写为 150，本次一并修正显示值，判断阈值不变。
+
+便携打包仅在 `.staging-portable-*` 临时树内，将 `lib/devtools/models/issues_manager/descriptions/` 缩为 `lib/devtools/i/`。236 个 Markdown 文件保留原字节，同步唯一加载 URL、`resource-manifest.json` 路径及变更 chunk 的字节数和 SHA256；保留页面与 Worker 的根地址解析逻辑。目标目录冲突或上游 URL 锚点漂移会在移动前报错，重复执行不再修改。源安装树、staged-resources 和 NSIS 资源不受变换影响。
+
+- 新增 3 项真实 Inspector 产物回归通过：768 个资源的路径、字节数与摘要，全部说明文档的页面/Worker 加载地址，幂等性，以及目标冲突和引用漂移拒绝。
+- 本次 `npm test` 共 806 项：762 通过、44 跳过、0 失败，约 146 秒，未启用发行跳过开关。
+- 完整 lite staged 资源在隔离目录中，分别配合 x64/arm64 PE 占位夹具执行真实便携脚本；两个 ZIP 均为 46255 条目，最长路径从 186 降至 153，既有门槛和严格文件清单通过。x64 全包解压、逐文件摘要及 Inspector 全部 768 个资源的清单校验通过，打包输入未改动。两次使用同一份完整 staged 资源，仅验证资源装配和归档，不作为真实 ARM 构建或壳运行证据。
+
+本轮证据位于忽略目录 `dsh-desktop/.verify/pr491-conflicts/`：`ci-f19-failed.log`、`ci-portable-full-test.log` 与 `ci-portable-full.log`。实际安装、真实壳启动、旧数据升级及回退尚未完成，V5 仍为 **partial**；最新跨平台构建结果以修复提交的 Actions 为准。
