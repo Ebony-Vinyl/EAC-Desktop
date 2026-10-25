@@ -156,8 +156,10 @@ test('staging drops the retired plugin but preserves the ADR 0010 manager fallba
   // ISO-003：eac-core-bridge 的端点生产者缺失（DSH_EAC_BRIDGE_URL/TOKEN 零写入方）
   // → 退役出装配清单（资产目录保留，等进程隔离接回）。
   assert.equal(stagedDirs.includes('dsh-eac-core-bridge'), false, 'ISO-003：Core Bridge 不得再随包装配');
-  // 9 个基础配套 + 2 个视觉核心（壁纸引擎 / 皮肤管理器，2026-10-22 用户要求提升）
-  assert.equal(stagedDirs.length, 11, '装配清单应为 11 个随包插件（9 基础 + 2 视觉核心）');
+  // 10 个基础配套（2026-10-25 加入外链/登录授权页修复 dsh-external-links）
+  // + 2 个视觉核心（壁纸引擎 / 皮肤管理器，2026-10-22 用户要求提升）
+  assert.equal(stagedDirs.length, 12, '装配清单应为 12 个随包插件（10 基础 + 2 视觉核心）');
+  assert.equal(stagedDirs.includes('dsh-external-links'), true, '外链/登录授权页修复应随包');
   assert.equal(stagedDirs.includes('dsh-plugin-wallpaper-engine'), true, '壁纸引擎应随包');
   assert.equal(stagedDirs.includes('dsh-client-ui-skin-deep-whale-manager'), true, '皮肤管理器应随包');
   // ADR 0010：壳层 ui-skin manager 钉版产物与 boot/recovery 回退资源必须随包。
