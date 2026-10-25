@@ -1,0 +1,21 @@
+# WeChat ClawBot channel.
+#
+# Inserts one Host plugin. Everything else the channel needs — the web server for
+# the settings page, the session controller that owns conversations, and the
+# assistant stream the channel relays to WeChat — is read from the running
+# composition through the plugin's `inject` list.
+#
+# The row id matches the package name. The Client half carries the same id, and the
+# client-plugin convention keeps those three aligned (package name, Host row id,
+# Client module id), which is how the shipped bundles and the official template are
+# written. A Host row whose id differs from its package name is the one deviation
+# this file used to carry.
+#
+# `autoStart` reconnects stored bot accounts on boot. Leave it false and turn the
+# channel on from Settings; the choice is persisted in the channel's own state file.
+
+- insert:
+    - id: dsh-wechat-plugin
+      name: 'dsh-wechat-plugin'
+      config:
+        autoStart: true

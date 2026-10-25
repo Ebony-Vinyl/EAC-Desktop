@@ -119,6 +119,9 @@ Rust 与 Node 使用 **stdio JSON-RPC** 通信，协议输出与诊断日志分�
 | 插件保护 | `dsh-plugin-shield` | 快照、体检与回滚入口 |
 | 语言兼容 | `dsh-eac-locale-compat` | 配套及社区插件的英文界面兼容 |
 | 界面稳定 | `dsh-viewport-lock`、`dsh-settings-scroll-fix` | 视口约束、设置面板滚轮与溢出滚动修复 |
+| 开机动画 | `dsh-boot-animation` | 启动 / 进入钉住会话时全窗口片头动画（片源内嵌） |
+| 微信渠道 | `dsh-wechat-plugin` | 从微信远程驱动本机会话，无需 OpenClaw 与公网 IP |
+| 远程访问 | `ds-harness-remote` | 端到端加密 P2P 优先的 PC / Android / Web 远程接入 |
 
 ### 扩展分发
 

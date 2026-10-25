@@ -21,23 +21,24 @@ const NEW_BLOCK = [
   '\t});',
 ].join('\n');
 
-function patchPickerWorker(): void {
+function patchPickerWorker(): boolean {
   if (!fs.existsSync(target)) {
     console.log('[patch-deps] dsh-host-directory-picker-native 不存在，跳过');
-    return;
+    return false;
   }
   let src = fs.readFileSync(target, 'utf8');
   if (src.includes(PATCH_MARKER)) {
     console.log('[patch-deps] picker worker 退出码补丁已应用，跳过');
-    return;
+    return true;
   }
   if (!OLD_RE.test(src)) {
     console.log('[patch-deps] picker-native 未匹配到目标代码（版本可能已更新），跳过');
-    return;
+    return false;
   }
   src = src.replace(OLD_RE, NEW_BLOCK);
   writeFileAtomic(target, src);
   console.log('[patch-deps] 已补丁 picker-native：worker 退出上报 exit code / signal');
+  return true;
 }
 
 // 设置弹窗左栏导航滚动补丁：上游 dsh-client-ui-settings-general 的 .nav/.navList
@@ -49,22 +50,22 @@ const NAV_SCROLL_MARKER = 'dsh-desktop-nav-scroll';
 const NAV_RE = /\.([A-Za-z0-9_-]+)_nav\{box-sizing:border-box;flex-direction:column;flex:none;gap:18px;width:188px;padding:22px 12px 0;display:flex\}/;
 const NAVLIST_RE = /\.([A-Za-z0-9_-]+)_navList\{flex-direction:column;gap:4px;display:flex\}/;
 
-function patchSettingsNavScroll(): void {
+function patchSettingsNavScroll(): boolean {
   const file = path.join(root, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js');
   if (!fs.existsSync(file)) {
     console.log('[patch-deps] dsh-client-ui-settings-general 不存在，跳过');
-    return;
+    return false;
   }
   let src = fs.readFileSync(file, 'utf8');
   if (src.includes(NAV_SCROLL_MARKER)) {
     console.log('[patch-deps] 设置左栏滚动补丁已应用，跳过');
-    return;
+    return true;
   }
   const navMatch = NAV_RE.exec(src);
   const navListMatch = NAVLIST_RE.exec(src);
   if (!navMatch || !navListMatch || navMatch[1] !== navListMatch[1]) {
     console.log('[patch-deps] 设置左栏未匹配到目标 CSS（上游版本可能已修复/更新），跳过');
-    return;
+    return false;
   }
   const oldNav = navMatch[0];
   const oldNavList = navListMatch[0];
@@ -76,6 +77,7 @@ function patchSettingsNavScroll(): void {
   src = src.replace(oldNav, newNav).replace(oldNavList, newNavList);
   writeFileAtomic(file, src);
   console.log('[patch-deps] 已补丁 settings-general：设置弹窗左栏可滚动，底部条目不再被裁掉');
+  return true;
 }
 
 // 设置弹窗宽度自适应 + 可拖拽拉伸补丁：上游 panel 固定 width:800px，大屏
@@ -101,16 +103,16 @@ const PANEL_RE =
 const PANEL_RE_V2 =
   /\.([A-Za-z0-9_-]+)_panel\{([^{}]*?)width:800px;([^{}]*?)overflow:hidden\}/;
 
-function patchSettingsPanelResize(): void {
+function patchSettingsPanelResize(): boolean {
   const file = path.join(root, 'node_modules', '@deepseek-ai', 'dsh-client-ui-settings-general', 'lib', 'client.js');
   if (!fs.existsSync(file)) {
     console.log('[patch-deps] dsh-client-ui-settings-general 不存在，跳过');
-    return;
+    return false;
   }
   let src = fs.readFileSync(file, 'utf8');
   if (src.includes(PANEL_RESIZE_MARKER)) {
     console.log('[patch-deps] 设置弹窗宽度补丁已应用，跳过');
-    return;
+    return true;
   }
   const m = PANEL_RE.exec(src);
   if (!m) {
@@ -123,7 +125,7 @@ function patchSettingsPanelResize(): void {
       || !(v2Pre + v2Post).includes('display:flex;position:relative;')
       || !(v2Pre + v2Post).includes('max-width:')) {
       console.log('[patch-deps] 设置弹窗未匹配到 panel CSS（上游版本可能已修复/更新），跳过');
-      return;
+      return false;
     }
     const next =
       '.' + v2[1] + '_panel{' + v2[2] + 'width:min(75vw,1280px);' + v2[3] +
@@ -131,7 +133,7 @@ function patchSettingsPanelResize(): void {
     src = src.replace(v2[0], next);
     writeFileAtomic(file, src);
     console.log('[patch-deps] 已补丁 settings-general：弹窗宽度跟随主窗（≤1280px）+ 可拖拽拉伸');
-    return;
+    return true;
   }
   const next =
     '.' + m[1] + '_panel{' + m[2] + 'width:min(75vw,1280px);' + m[3] +
@@ -139,6 +141,7 @@ function patchSettingsPanelResize(): void {
   src = src.replace(m[0], next);
   writeFileAtomic(file, src);
   console.log('[patch-deps] 已补丁 settings-general：弹窗宽度跟随主窗（≤1280px）+ 可拖拽拉伸');
+  return true;
 }
 
 // 设置写入冲突重试补丁（v2，适配 0.1.7-rc.2+ 的 ctx.remote 形态）：上游
@@ -758,10 +761,12 @@ const OPTIONAL_ESCALATION_TARGETS = [
 const OPTIONAL_ESCALATION_OLD = 'defaultMode === void 0 ? [] : ESCALATION_TARGETS';
 const OPTIONAL_ESCALATION_NEW = 'defaultMode === void 0 || defaultMode === "danger-full-access" ? [] : ESCALATION_TARGETS /* dsh-desktop-optional-escalation */';
 
-function patchOptionalEscalationFields(): void {
+function patchOptionalEscalationFields(): boolean {
+  let applied = true;
   for (const file of OPTIONAL_ESCALATION_TARGETS) {
     if (!fs.existsSync(file)) {
       console.log('[patch-deps] 可选升级字段目标不存在，跳过：' + file);
+      applied = false;
       continue;
     }
     let src = fs.readFileSync(file, 'utf8');
@@ -771,12 +776,14 @@ function patchOptionalEscalationFields(): void {
     }
     if (!src.includes(OPTIONAL_ESCALATION_OLD)) {
       console.log('[patch-deps] 未匹配可选升级字段目标（上游版本可能已修复/更新），跳过：' + file);
+      applied = false;
       continue;
     }
     src = src.replace(OPTIONAL_ESCALATION_OLD, OPTIONAL_ESCALATION_NEW);
     writeFileAtomic(file, src);
     console.log('[patch-deps] 已补丁可选升级字段：' + path.basename(path.dirname(path.dirname(file))));
   }
+  return applied;
 }
 
 // 模式选择菜单二级化补丁：agent preset 选择器把 user trust（自定义 / EAC 内置）

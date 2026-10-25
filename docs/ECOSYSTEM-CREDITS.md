@@ -16,6 +16,7 @@ Historical attribution only; this list does not describe what ships with v6. Thi
 | dsh-auto-compact                                       | 自动压缩：接近上下文上限时自动发送 /compact                                                     |
 | @deepseek-ai/dsh-balance（提供者：deepseek-ai）              | 账户余额、费用估算与价格设置                                                                 |
 | dsh-better-sidebar（提供者：omdsh-dev）                      | VSCode 风格右侧栏，支持资源管理器/编辑器/终端/Git/浏览器                                            |
+| dsh-boot-animation（提供者：NativeDog1）                       | 开机动画：启动/进入钉住会话时全窗口播放片头动画（BSD-3-Clause，随包内置）                                 |
 | dsh-change-review                                      | AI 变更审核：自动复查文件改动                                                               |
 | @deepseek-ai/dsh-client-file-changes（提供者：deepseek-ai）  | 文件视图：会话文件更改追踪与一键还原                                                             |
 | dsh-compact（提供者：zixin947）                              | 请求路径上下文压缩与溢出恢复                                                                 |
@@ -66,8 +67,10 @@ Historical attribution only; this list does not describe what ships with v6. Thi
 | dsh-web-ui（提供者：zhu1090093659）                          | 9 款内置 Web UI 皮肤来源                                                              |
 | dsh-webui-market（提供者：Sanqi-normal）                     | 社区插件目录与一键安装/卸载                                                                 |
 | dsh-webui-prompt-optimizer（提取自 statem-li/dsh-webui）    | 流式提示词优化                                                                        |
+| dsh-wechat-plugin（提供者：xcisxc29）                        | 微信渠道：锁屏后从微信驱动本机会话，无需 OpenClaw 与公网 IP（MIT，随包内置）                              |
 | dsh-whale-widget（提供者：MeteorNOX）                        | 余额小鲸鱼挂件：今日已用、峰谷定价、随机台词与每轮消耗统计                                                  |
 | picturereader（提供者：jing-hy）                             | 统一图片理解插件                                                                       |
+| ds-harness-remote（提供者：liguobao）                        | 远程访问：端到端加密 P2P 优先，PC/Android/Web 远程操作 Harness 与 Codex（MIT，随包内置）              |
 
 感谢所有插件提供者对本项目与开源社区的奉献；由于插件数量众多，我们很抱歉，未能逐一统计到所有插件与其来源；如有插件的拥有者看到了自己所做的插件，欢迎您告知我们并添加到致谢名单中，也欢迎添加我们的交流群，以便一同交流、共同进步。
 

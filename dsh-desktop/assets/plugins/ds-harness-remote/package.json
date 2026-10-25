@@ -1,0 +1,154 @@
+{
+  "name": "ds-harness-remote",
+  "version": "0.5.2",
+  "description": "End-to-end encrypted remote access to DeepSeek Harness and experimental Codex workspaces from desktop, web, and Android, with dsh-TUI Host support.",
+  "keywords": [
+    "deepseek",
+    "deepseek-harness",
+    "dsh",
+    "dsh-plugin",
+    "codex",
+    "remote-development",
+    "end-to-end-encryption",
+    "webrtc"
+  ],
+  "homepage": "https://github.com/liguobao/ds-harness-remote#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/liguobao/ds-harness-remote.git"
+  },
+  "bugs": {
+    "url": "https://github.com/liguobao/ds-harness-remote/issues"
+  },
+  "author": "liguobao <lgb835485368@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "./index.js",
+  "bin": {
+    "ds-harness-remote": "./packages/plugin/bin/ds-harness-remote.js"
+  },
+  "types": "./packages/plugin/public.d.ts",
+  "exports": {
+    ".": {
+      "types": "./packages/plugin/public.d.ts",
+      "import": "./index.js"
+    },
+    "./client": "./packages/plugin/dist/client.github.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "packages/plugin/dist/index.js",
+    "packages/plugin/dist/client.github.js",
+    "packages/plugin/bin/ds-harness-remote.js",
+    "packages/plugin/public.d.ts",
+    "packages/plugin/LICENSE",
+    "dsh-plugin.json",
+    "cordis.patch.yml",
+    "locale/",
+    "README.md",
+    "package.json"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-connection",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-sidebar",
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-settings",
+        "@deepseek-ai/dsh-client-ui-settings-general",
+        "@deepseek-ai/dsh-client-ui-plugin-manager",
+        "@deepseek-ai/dsh-client-ui-settings-plugin-inventory",
+        "@deepseek-ai/dsh-client-ui-settings-plugins"
+      ],
+      "platform": "web"
+    }
+  },
+  "packageManager": "pnpm@9.15.4",
+  "dependencies": {
+    "@deepseek-ai/schemastery": "^3.18.5-alpha.1",
+    "qrcode": "^1.5.4",
+    "werift": "0.24.4",
+    "zod": "^3.24.1",
+    "ws": "^8.21.3"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.1 <5 || >=4.0.5-alpha.1 <4.0.6-0",
+    "@deepseek-ai/dsh-api-gateway": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-client-connection": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-client-locale": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-client-ui-sidebar": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-client-ui-slots": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-client-ui-settings": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-settings": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "react": ">=18.2.0 <19",
+    "@deepseek-ai/dsh-client-ui-settings-general": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0",
+    "@deepseek-ai/dsh-client-ui-settings-plugin-inventory": ">=0.2.0-rc.1 <0.3.0-0 || >=0.2.1-0 <0.2.2-0 || >=0.2.2-0 <0.2.3-0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-client-connection": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-locale": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-sidebar": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-slots": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-plugins": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-general": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-plugin-manager": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-client-ui-settings-plugin-inventory": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "4.0.5-alpha.1",
+    "@deepseek-ai/cordis-plugin-include": "1.0.10-alpha.1",
+    "@deepseek-ai/cordis-plugin-loader": "1.0.6-alpha.1",
+    "@deepseek-ai/dsh-api-gateway": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-brand": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-connection": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-locale": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-ui-settings": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-ui-settings-plugins": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-ui-sidebar": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-ui-slots": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-host-apiproxy": "0.1.1-rc.2",
+    "@deepseek-ai/dsh-scope": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-session": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-settings": "0.2.1-alpha.1",
+    "@types/node": "^22.10.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8",
+    "@types/ws": "^8.18.1",
+    "@deepseek-ai/dsh-client-ui-settings-general": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-ui-plugin-manager": "0.2.1-alpha.1",
+    "@deepseek-ai/dsh-client-ui-settings-plugin-inventory": "0.2.1-alpha.1"
+  },
+  "optionalDependencies": {
+    "@roamhq/wrtc": "0.10.0"
+  }
+}

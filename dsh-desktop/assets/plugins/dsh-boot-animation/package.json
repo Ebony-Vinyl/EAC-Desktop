@@ -1,0 +1,108 @@
+{
+  "name": "dsh-boot-animation",
+  "version": "0.4.2",
+  "description": "每次打开 DSH 播一次片头开机动画，铺满窗口；被钉住的会话每次进入都重播。Play a full-frame intro once per DSH launch, and on every entry to a pinned conversation.",
+  "type": "module",
+  "main": "./lib/index.js",
+  "types": "./lib/types/index.d.ts",
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md",
+    "CHANGELOG.md",
+    "ARCHITECTURE.md",
+    "LICENSE"
+  ],
+  "license": "BSD-3-Clause",
+  "author": "NativeDog1",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/NativeDog1/dsh-boot-animation.git"
+  },
+  "homepage": "https://github.com/NativeDog1/dsh-boot-animation#readme",
+  "bugs": {
+    "url": "https://github.com/NativeDog1/dsh-boot-animation/issues"
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "cordis",
+    "boot-animation",
+    "intro",
+    "splash",
+    "startup"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "peerDependencies": {
+    "react": "^18.2.0"
+  },
+  "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "tsdown": "^0.22.14",
+    "typescript": "^5.9.0"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:client": "node scripts/check-css-template.mjs && tsdown",
+    "embed-clips": "node scripts/embed-clips.mjs",
+      "check": "npm run verify:build && npm run verify:routes && npm run verify:selection && npm run verify:conversation && npm run verify:cache && npm run verify:blank && npm run verify:boot && npm run verify:boot-scope && npm run verify:play-decision && npm run verify:app-start-setting && npm run verify:preview && npm run verify:playback && npm run verify:random && npm run verify:fallback && npm run verify:install && npm run verify:teardown && npm run verify:version-refresh && npm run verify:session-id",
+      "verify:build": "node scripts/check-css-template.mjs && node scripts/verify-build.mjs",
+    "verify:routes": "node scripts/verify-routes.mjs",
+    "verify:selection": "node scripts/verify-selection.mjs",
+    "verify:conversation": "node scripts/verify-conversation-override.mjs",
+    "verify:preview": "node scripts/verify-preview.mjs",
+    "verify:playback": "node scripts/verify-playback.mjs",
+    "verify:random": "node scripts/verify-random.mjs",
+    "verify:cache": "node scripts/verify-cache.mjs",
+    "verify:fallback": "node scripts/verify-fallback.mjs",
+    "verify:install": "node scripts/verify-install.mjs",
+    "verify:blank": "node scripts/verify-blank.mjs",
+    "verify:boot": "node scripts/verify-client-boot.mjs",
+    "verify:boot-scope": "node scripts/verify-boot-scope.mjs",
+    "verify:play-decision": "node scripts/verify-play-decision.mjs",
+    "verify:app-start-setting": "node scripts/verify-app-start-setting.mjs",
+    "verify:letterbox": "node scripts/verify-letterbox.mjs",
+    "verify:gui-boot": "node scripts/verify-boot-animation.mjs",
+    "verify:gui-pin": "node scripts/verify-pin.mjs",
+    "verify:teardown": "node scripts/verify-teardown.mjs",
+    "verify:version-refresh": "node scripts/verify-version-refresh.mjs",
+    "verify:session-id": "node scripts/verify-session-id.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./lib/types/index.d.ts",
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "types": "./lib/types/client/index.d.ts",
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots",
+        "@deepseek-ai/dsh-client-ui-session",
+        "@deepseek-ai/dsh-client-ui-layout",
+        "@deepseek-ai/dsh-client-ui-sidebar"
+      ],
+      "platform": "web"
+    },
+    "engines": {
+      "dsh": ">=0.1.5-rc.1"
+    }
+  }
+}

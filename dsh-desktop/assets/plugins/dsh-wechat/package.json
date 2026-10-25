@@ -1,0 +1,72 @@
+{
+  "name": "dsh-wechat-plugin",
+  "version": "0.36.6",
+  "type": "module",
+  "description": "WeChat channel for DeepSeek Harness: lock the PC, walk away, and drive the agent from your phone. No OpenClaw and no public IP required.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "wechat",
+    "weixin",
+    "clawbot",
+    "ilink",
+    "chatbot",
+    "channel",
+    "plugin",
+    "remote-control"
+  ],
+  "homepage": "https://github.com/xcisxc29/dsh-wechat#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xcisxc29/dsh-wechat.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xcisxc29/dsh-wechat/issues"
+  },
+  "main": "lib/host.js",
+  "types": "lib/host.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/host.d.ts",
+      "default": "./lib/host.js"
+    },
+    "./client": "./client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "dist",
+    "client.js",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --experimental-transform-types --disable-warning=ExperimentalWarning --test --test-isolation=none tests/plugin.test.ts"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@dsh-wechat/core": "workspace:*",
+    "qrcode": "^1.5.4"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-home-paths": ">=0.1.7-rc.2 <0.3.0-0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-home-paths": {
+      "optional": true
+    }
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  }
+}

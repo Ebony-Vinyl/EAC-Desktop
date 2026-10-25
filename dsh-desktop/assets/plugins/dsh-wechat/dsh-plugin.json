@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.github.xcisxc29.dsh-wechat",
+  "name": "dsh-wechat-plugin",
+  "version": "0.36.6",
+  "facets": {
+    "host": {
+      "entry": "lib/host.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": []
+  },
+  "subscriptions": [],
+  "license": "MIT",
+  "source": {
+    "repository": "https://github.com/xcisxc29/dsh-wechat"
+  },
+  "overrides": [],
+  "x-eac": {
+    "role": "identity-metadata",
+    "note": "EAC 经 companion-sync 注册表加载（非 std adapter）；facets 为最小占位，尚未参与 std 协商",
+    "ledger": "assets/SOURCES.json#C117",
+    "sourceNote": "上游为 pnpm monorepo（xcisxc29/dsh-wechat，MIT），本目录由 packages/bundle 以 pnpm dist 构建产物组装（core 已内联，lib 无外部导入）",
+    "patched": true,
+    "patchNote": "built-from-source+added-dsh-plugin-manifest"
+  }
+}

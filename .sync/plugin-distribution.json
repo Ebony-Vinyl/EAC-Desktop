@@ -108,6 +108,26 @@
       }
     },
     {
+      "id": "ds-harness-remote",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
+    },
+    {
+      "id": "dsh-boot-animation",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
+    },
+    {
       "id": "dsh-dafeiyu",
       "distributionClass": "external",
       "delivery": "market",
@@ -218,6 +238,16 @@
         "current": "none",
         "target": "market",
         "state": "source-pending"
+      }
+    },
+    {
+      "id": "dsh-wechat-plugin",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
       }
     },
     {

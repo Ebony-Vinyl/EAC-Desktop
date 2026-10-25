@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-09-27",
+  "updatedAt": "2026-10-11",
   "audit": {
     "source": "DSH_EAC_Plugin_Audit_2026-09-05.xlsx (external full audit, 2026-09-05 Asia/Shanghai)",
     "mainBaseline": "e01d2e2a27b43e76aa3558d9729d5db3f05346ae",
@@ -2783,6 +2783,82 @@
         "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac",
         "refType": "version",
         "provenance": "Fork of https://github.com/baosfeng/my-dsh-plugins (plugins/dsh-think-zh-expand, MIT, 原作者 @baosfeng)"
+      }
+    },
+    {
+      "id": "C116",
+      "line": "main",
+      "name": "dsh-boot-animation",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.4.2",
+      "path": "dsh-desktop/assets/plugins/dsh-boot-animation",
+      "pathBaseline": "main@76ebe91a475b9279d362a5b63f327087b46d2039",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical-fileset-differs",
+        "note": "NativeDog1/dsh-boot-animation@15ff124f（v0.4.2，BSD-3-Clause）。代码字节与上游一致，随包文件集为 package.json files 白名单子集并新增 EAC identity 清单 dsh-plugin.json（x-eac.patched 记账）；lib 自包含，片源内嵌于 lib/clips.data.js，media/ 源目录与构建脚本不随包。",
+        "basis": "package.repository 明确声明 + awesome-dsh-plugin 目录收录",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/NativeDog1/dsh-boot-animation",
+        "refType": "version",
+        "pinnedHead": "15ff124ff85cd23177d9b14dc81fae5c24adb8dc",
+        "provenance": "package.repository 明确声明",
+        "catalogName": "NativeDog1/dsh-boot-animation",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/4693e5a83212154bb065abb63221a23a1dd8750a/data/plugins/NativeDog1__dsh-boot-animation.yml"
+      }
+    },
+    {
+      "id": "C117",
+      "line": "main",
+      "name": "dsh-wechat-plugin",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.36.6",
+      "path": "dsh-desktop/assets/plugins/dsh-wechat",
+      "pathBaseline": "main@76ebe91a475b9279d362a5b63f327087b46d2039",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "xcisxc29/dsh-wechat@5f7d69a8（MIT）。上游为 pnpm monorepo、仓库内无构建产物；本目录由 packages/bundle 以 pnpm dist 构建（@dsh-wechat/core 内联，lib 无外部导入），并新增 EAC identity 清单 dsh-plugin.json。client 半边依赖内核提供的 react（官方 client-plugin 惯例）。",
+        "basis": "package.repository 明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/xcisxc29/dsh-wechat",
+        "refType": "version",
+        "pinnedHead": "5f7d69a8f83faad5a1154aec23aedb969c610931",
+        "provenance": "package.repository 明确声明"
+      }
+    },
+    {
+      "id": "C118",
+      "line": "main",
+      "name": "ds-harness-remote",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.5.2",
+      "path": "dsh-desktop/assets/plugins/ds-harness-remote",
+      "pathBaseline": "main@76ebe91a475b9279d362a5b63f327087b46d2039",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical-fileset-differs",
+        "note": "liguobao/ds-harness-remote@85fb53f（v0.5.2，MIT，package.json 声明；仓库根无 LICENSE 文件，许可证以 packages/plugin/LICENSE 为准）。随包文件集为上游 files 白名单子集（packages/plugin/dist、bin、locale），字节与上游一致，未做任何修改；dist 自包含（werift 内联），@roamhq/wrtc 原生加速为可选依赖、缺失时经 helper 回退。",
+        "basis": "package.repository 明确声明 + awesome-dsh-plugin 目录收录",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/liguobao/ds-harness-remote",
+        "refType": "version",
+        "pinnedHead": "85fb53fe7ecf9854552f86b6f3a338a770812641",
+        "provenance": "package.repository 明确声明",
+        "catalogName": "liguobao/ds-harness-remote",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/4693e5a83212154bb065abb63221a23a1dd8750a/data/plugins/liguobao__ds-harness-remote.yml"
       }
     }
   ]

@@ -1,13 +1,16 @@
 // GENERATED FILE — do not edit by hand.
 // Sources: .sync/plugins.json, plugin-distribution.json, and recommended pack registry (run generate-plugin-registry.mjs).
 // plugin-sync:update-sources {"unified-market":{"npm":"dsh-unified-market"}}
-// plugin-sync:distribution {"builtinPluginIds":["client-file-changes","compact","eac-core-bridge","eac-locale-compat","easy-setup","file-changes","plugin-shield","settings-scroll-fix","unified-market","viewport-lock"],"recommendedPluginIds":["balance","better-sidebar","change-review","composer-dynamic-island","conversation-tweaks","dock-settings","dsh-navbar","dsh-raw-html","dsh-session-manager","message-rewind","mobile-fix","offpeak","picturereader","prompt-custom","soul-md"],"recommendedPackId":"dev.dsh-eac.desktop-recommended","pluginClasses":{"agent-teams":"external","balance":"recommended","better-sidebar":"recommended","change-review":"recommended","client-file-changes":"builtin","compact":"builtin","composer-dynamic-island":"recommended","computer-user":"external","conversation-tweaks":"recommended","dock-settings":"recommended","dsh-dafeiyu":"external","dsh-feature-toggles":"external","dsh-navbar":"recommended","dsh-pet":"external","dsh-pet-settings":"external","dsh-phone":"external","dsh-raw-html":"recommended","dsh-session-manager":"recommended","dsh-stt":"external","dsh-undo":"external","dsh-webui-prompt-optimizer":"external","dsh-whale-widget":"external","eac-core-bridge":"builtin","eac-locale-compat":"builtin","easy-setup":"builtin","file-changes":"builtin","float-window":"external","font-custom":"external","image-paste":"external","meow-smooth":"external","message-rewind":"recommended","mobile-fix":"recommended","offpeak":"recommended","openclaw-bridge":"external","picturereader":"recommended","plugin-shield":"builtin","plugin-wizard":"external","prompt-custom":"recommended","settings-groups":"external","settings-scroll-fix":"builtin","side-session":"external","soul-md":"recommended","think-zh-expand-eac":"external","unified-market":"builtin","viewport-lock":"builtin"}}
+// plugin-sync:distribution {"builtinPluginIds":["client-file-changes","compact","ds-harness-remote","dsh-boot-animation","dsh-wechat-plugin","eac-core-bridge","eac-locale-compat","easy-setup","file-changes","plugin-shield","settings-scroll-fix","unified-market","viewport-lock"],"recommendedPluginIds":["balance","better-sidebar","change-review","composer-dynamic-island","conversation-tweaks","dock-settings","dsh-navbar","dsh-raw-html","dsh-session-manager","message-rewind","mobile-fix","offpeak","picturereader","prompt-custom","soul-md"],"recommendedPackId":"dev.dsh-eac.desktop-recommended","pluginClasses":{"agent-teams":"external","balance":"recommended","better-sidebar":"recommended","change-review":"recommended","client-file-changes":"builtin","compact":"builtin","composer-dynamic-island":"recommended","computer-user":"external","conversation-tweaks":"recommended","dock-settings":"recommended","ds-harness-remote":"builtin","dsh-boot-animation":"builtin","dsh-dafeiyu":"external","dsh-feature-toggles":"external","dsh-navbar":"recommended","dsh-pet":"external","dsh-pet-settings":"external","dsh-phone":"external","dsh-raw-html":"recommended","dsh-session-manager":"recommended","dsh-stt":"external","dsh-undo":"external","dsh-webui-prompt-optimizer":"external","dsh-wechat-plugin":"builtin","dsh-whale-widget":"external","eac-core-bridge":"builtin","eac-locale-compat":"builtin","easy-setup":"builtin","file-changes":"builtin","float-window":"external","font-custom":"external","image-paste":"external","meow-smooth":"external","message-rewind":"recommended","mobile-fix":"recommended","offpeak":"recommended","openclaw-bridge":"external","picturereader":"recommended","plugin-shield":"builtin","plugin-wizard":"external","prompt-custom":"recommended","settings-groups":"external","settings-scroll-fix":"builtin","side-session":"external","soul-md":"recommended","think-zh-expand-eac":"external","unified-market":"builtin","viewport-lock":"builtin"}}
 
 export const PLUGIN_SYNC_REGISTRY = {
   "distribution": {
     "builtinPluginIds": [
       "client-file-changes",
       "compact",
+      "ds-harness-remote",
+      "dsh-boot-animation",
+      "dsh-wechat-plugin",
       "eac-core-bridge",
       "eac-locale-compat",
       "easy-setup",
@@ -28,6 +31,8 @@ export const PLUGIN_SYNC_REGISTRY = {
       "computer-user": "external",
       "conversation-tweaks": "recommended",
       "dock-settings": "recommended",
+      "ds-harness-remote": "builtin",
+      "dsh-boot-animation": "builtin",
       "dsh-dafeiyu": "external",
       "dsh-feature-toggles": "external",
       "dsh-navbar": "recommended",
@@ -39,6 +44,7 @@ export const PLUGIN_SYNC_REGISTRY = {
       "dsh-stt": "external",
       "dsh-undo": "external",
       "dsh-webui-prompt-optimizer": "external",
+      "dsh-wechat-plugin": "builtin",
       "dsh-whale-widget": "external",
       "eac-core-bridge": "builtin",
       "eac-locale-compat": "builtin",
@@ -112,6 +118,54 @@ export const PLUGIN_SYNC_REGISTRY = {
       "source": {
         "kind": "unknown",
         "reason": "package.json does not declare a source repository; do not infer one from the directory name"
+      },
+      "syncMode": "manual"
+    },
+    "ds-harness-remote": {
+      "class": "follow-upstream",
+      "kind": "plugin",
+      "packageName": "ds-harness-remote",
+      "path": "dsh-desktop/assets/plugins/ds-harness-remote",
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "source": {
+        "kind": "github",
+        "name": "liguobao/ds-harness-remote",
+        "repository": "https://github.com/liguobao/ds-harness-remote"
+      },
+      "syncMode": "manual"
+    },
+    "dsh-boot-animation": {
+      "class": "follow-upstream",
+      "kind": "plugin",
+      "packageName": "dsh-boot-animation",
+      "path": "dsh-desktop/assets/plugins/dsh-boot-animation",
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "source": {
+        "kind": "github",
+        "name": "NativeDog1/dsh-boot-animation",
+        "repository": "https://github.com/NativeDog1/dsh-boot-animation"
+      },
+      "syncMode": "manual"
+    },
+    "dsh-wechat-plugin": {
+      "class": "follow-upstream",
+      "kind": "plugin",
+      "packageName": "dsh-wechat-plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-wechat",
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "source": {
+        "kind": "github",
+        "name": "xcisxc29/dsh-wechat",
+        "repository": "https://github.com/xcisxc29/dsh-wechat"
       },
       "syncMode": "manual"
     },

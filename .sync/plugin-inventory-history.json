@@ -249,6 +249,21 @@
       "id": "viewport-lock",
       "path": "dsh-desktop/assets/plugins/dsh-viewport-lock",
       "patched": false
+    },
+    {
+      "id": "dsh-boot-animation",
+      "path": "dsh-desktop/assets/plugins/dsh-boot-animation",
+      "patched": true
+    },
+    {
+      "id": "dsh-wechat-plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-wechat",
+      "patched": true
+    },
+    {
+      "id": "ds-harness-remote",
+      "path": "dsh-desktop/assets/plugins/ds-harness-remote",
+      "patched": false
     }
   ]
 }
