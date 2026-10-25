@@ -1,0 +1,54 @@
+[package]
+name = "eac-launcher"
+version = "0.1.0"
+description = "EAC Launcher"
+edition = "2021"
+default-run = "eac-launcher"
+
+[lib]
+name = "eac_launcher_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[[bin]]
+name = "eac-launcher"
+path = "src/main.rs"
+required-features = ["desktop"]
+
+[[bin]]
+name = "eac-launcher-api"
+path = "src/bin/api.rs"
+required-features = ["api"]
+
+[features]
+default = ["desktop"]
+desktop = ["dep:tauri", "dep:tauri-build"]
+api = []
+
+[build-dependencies]
+tauri-build = { version = "2", features = [], optional = true }
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+dirs = "6"
+fs2 = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+regex = "1"
+semver = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+sysinfo = "0.33"
+tauri = { version = "2", features = [], optional = true }
+tempfile = "3"
+tiny_http = "0.12"
+url = "2"
+uuid = { version = "1", features = ["v4"] }
+zip = { version = "2.6", default-features = false, features = ["deflate"] }
+zstd = "0.13"
+
+[target.'cfg(windows)'.dependencies]
+junction = "1"
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

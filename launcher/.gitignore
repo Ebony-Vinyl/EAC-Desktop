@@ -1,0 +1,10 @@
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/
+.verify/
+*.log
+.env.local
+*.tsbuildinfo
+runtime/
+artifacts/
