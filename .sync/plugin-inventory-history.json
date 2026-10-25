@@ -249,6 +249,31 @@
       "id": "viewport-lock",
       "path": "dsh-desktop/assets/plugins/dsh-viewport-lock",
       "patched": false
+    },
+    {
+      "id": "dsh-boot-animation",
+      "path": "dsh-desktop/assets/plugins/dsh-boot-animation",
+      "patched": true
+    },
+    {
+      "id": "dsh-wechat-plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-wechat",
+      "patched": true
+    },
+    {
+      "id": "ds-harness-remote",
+      "path": "dsh-desktop/assets/plugins/ds-harness-remote",
+      "patched": false
+    },
+    {
+      "id": "wallpaper-engine",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-wallpaper-engine",
+      "patched": false
+    },
+    {
+      "id": "ui-skin-deep-whale-manager",
+      "path": "dsh-desktop/assets/plugins/dsh-client-ui-skin-deep-whale-manager",
+      "patched": false
     }
   ]
 }

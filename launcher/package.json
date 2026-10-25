@@ -1,0 +1,35 @@
+{
+  "name": "eac-launcher",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 5178 --strictPort",
+    "dev:connected": "node scripts/dev-connected.mjs",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview --host 127.0.0.1 --port 5179 --strictPort",
+    "catalog:sync": "node scripts/sync-catalog.mjs",
+    "runtime:prepare": "node scripts/prepare-runtime.mjs",
+    "test:backend": "cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --lib",
+    "verify:connected": "node scripts/verify-connected.mjs",
+    "tauri": "tauri",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.9.0",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.0",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.4.0",
+    "puppeteer-core": "^25.16.0",
+    "typescript": "~5.7.3",
+    "vite": "^6.1.0"
+  }
+}

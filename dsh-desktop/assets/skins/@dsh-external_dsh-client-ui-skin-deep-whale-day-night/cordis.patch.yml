@@ -1,0 +1,5 @@
+# Deep Whale is an independent profile bundle. Official Harness discovers its
+# browser half through dsh.client after this unique host row is composed.
+- insert:
+    - id: ui-skin-deep-whale-day-night
+      name: '@dsh-external/dsh-client-ui-skin-deep-whale-day-night'

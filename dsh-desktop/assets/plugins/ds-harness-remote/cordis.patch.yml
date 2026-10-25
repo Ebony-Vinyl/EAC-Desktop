@@ -1,0 +1,37 @@
+# GitHub installs resolve this repository's root package. Keep this patch at
+# the root and point it at the package/plugin id so DSH Desktop can recognize
+# and load the repository directly as a bundle.
+- insert:
+    - id: ds-harness-remote
+      name: ds-harness-remote
+      inject:
+        - webServer
+      # dsh-TUI needs a scoped entry with explicit command/scene injects.
+      # Keep this ordinary Desktop entry inactive when that front door exists.
+      disabled: !!js >-
+        [...ctx.loader.entries()].some(entry =>
+          (entry.options.id === 'dsh-tui' || entry.options.name === '@deepseek-harness-tui/dsh-tui')
+          && !entry.disabled
+        )
+      config:
+        enabled: true
+        role: host
+        serverUrl: https://dsh.r2049.cn
+        codex:
+          enabled: true
+          binary: codex
+    - id: ds-harness-remote-tui
+      name: ds-harness-remote
+      disabled: !!js >-
+        ![...ctx.loader.entries()].some(entry =>
+          (entry.options.id === 'dsh-tui' || entry.options.name === '@deepseek-harness-tui/dsh-tui')
+          && !entry.disabled
+        )
+      inject: [settings, typertGateway, commands, tuiCommandTrees, tuiScenes]
+      config:
+        enabled: true
+        role: host
+        serverUrl: https://dsh.r2049.cn
+        codex:
+          enabled: true
+          binary: codex

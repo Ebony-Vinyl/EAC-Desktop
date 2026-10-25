@@ -22,6 +22,8 @@ build/*
 !assets/plugins/*/assets/vendor/
 !assets/plugins/*/assets/vendor/**
 !assets/plugins/*/data/
+!assets/plugins/ds-harness-remote/packages/plugin/dist/
+!assets/plugins/ds-harness-remote/packages/plugin/dist/**
 
 # ---- TypeScript 编译产物（源码为同名 .ts，tsc 就地产出，勿手改） ----
 /lib/desktop/guard-box.js
@@ -143,3 +145,5 @@ lib/desktop/update-portable-helper.js
 /lib/desktop/update-linux-helper.js
 
 /lib/desktop/update-linux-root.js
+/lib/desktop/full-composition.js
+/lib/desktop/lite-skins.js

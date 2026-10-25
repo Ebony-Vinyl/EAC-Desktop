@@ -1,0 +1,34 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.github.nativedog1.dsh-boot-animation",
+  "name": "dsh-boot-animation",
+  "version": "0.4.2",
+  "facets": {
+    "host": {
+      "entry": "lib/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": []
+  },
+  "subscriptions": [],
+  "license": "BSD-3-Clause",
+  "source": {
+    "repository": "https://github.com/NativeDog1/dsh-boot-animation"
+  },
+  "overrides": [],
+  "x-eac": {
+    "role": "identity-metadata",
+    "note": "EAC 经 companion-sync 注册表加载（非 std adapter）；facets 为最小占位，尚未参与 std 协商",
+    "ledger": "assets/SOURCES.json#C116",
+    "sourceNote": "上游为独立插件仓库（NativeDog1/dsh-boot-animation，BSD-3-Clause），lib 自包含、片源内嵌于 lib/clips.data.js",
+    "patched": true,
+    "patchNote": "added-dsh-plugin-manifest"
+  }
+}

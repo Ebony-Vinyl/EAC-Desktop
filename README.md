@@ -52,6 +52,10 @@ Deepseek Harness EAC 是基于 [DeepSeek Harness](https://github.com/deepseek-ai
 
 ### 下载与启动
 
+EAC 启动器（独立的多实例 / 多内核管理器，可与桌面端并存安装）：
+[EAC-Launcher v0.1.0 Windows x64](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/tag/launcher-v0.1.0)
+自带 Node 24.22.1 运行时，无需另装 Node。使用说明见 [`launcher/README.md`](launcher/README.md)。
+
 Windows 最新稳定版：**v6.0.0**。其余平台按包格式列出最近发布的下载文件，版本分别标注。
 
 | 平台 | 版本 | 直接下载 | 更新时间（北京时间） |
@@ -119,6 +123,9 @@ Rust 与 Node 使用 **stdio JSON-RPC** 通信，协议输出与诊断日志分�
 | 插件保护 | `dsh-plugin-shield` | 快照、体检与回滚入口 |
 | 语言兼容 | `dsh-eac-locale-compat` | 配套及社区插件的英文界面兼容 |
 | 界面稳定 | `dsh-viewport-lock`、`dsh-settings-scroll-fix` | 视口约束、设置面板滚轮与溢出滚动修复 |
+| 开机动画 | `dsh-boot-animation` | 启动 / 进入钉住会话时全窗口片头动画（片源内嵌） |
+| 微信渠道 | `dsh-wechat-plugin` | 从微信远程驱动本机会话，无需 OpenClaw 与公网 IP |
+| 远程访问 | `ds-harness-remote` | 端到端加密 P2P 优先的 PC / Android / Web 远程接入 |
 
 ### 扩展分发
 

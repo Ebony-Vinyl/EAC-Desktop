@@ -76,7 +76,7 @@ JSONL 删除使用后端配置的存储 root、原生路径查找与跨进程写
 
 1. 外置插件及推荐功能包仍需按新 `activity/usage` 扩展位、Agent Team、子代理、PTC/SDK 和凭据读取规则逐项验收。随包源码未发现对旧 composer stats 槽的调用，不代表第三方插件已通过验证；外部会话管理插件的设置页与批量操作也未完成实机验收。
 2. 尚未验证真实账号登录后的模型对话、旧用户数据副本升级与回退，以及真实 Tauri 窗口运行。当前页面验证不等于真实模型请求成功。
-3. 尚未构建或安装本轮 NSIS/便携分发包；Windows 分发验收为 **partial**。四组 CI 的官方源码准备已完成，但跨平台安装包尚未构建完成；macOS 未覆盖。
+3. `c475718d` 的 Windows/Linux x64/arm64 四组 CI 已完成自动测试、装配与安装包构建；实际安装、旧数据升级及回退仍未完成，分发验收为 **partial**。本轮合并主线后的构建需以新提交的 CI 为准；macOS 未覆盖。
 
 代码通过 `beta` 分支提交进行 CI 验证。安装包工作流保留 `workflow_call`，增加 `beta` push 与手动触发，在现有 Windows/Linux x64/arm64 矩阵中运行自动测试、装配校验和安装包构建。CI 结果以对应提交的 Actions 记录为准；构建验证不代表已发布或完成上述实机验收。
 
@@ -88,5 +88,32 @@ JSONL 删除使用后端配置的存储 root、原生路径查找与跨进程写
 - Windows runner 的 TEMP 使用 8.3 别名，便携测试曾把短路径与更新器的规范路径混用。测试先以 realpath 取得临时根，再创建隔离目录；保留清理边界检查与更新器全部断言，不修改产品更新器实现。
 - 已用真实 Windows 8.3 临时路径复现三个便携测试失败，修正后 3/3 通过；工作流及主题测试 11/11 通过；core.autocrlf=true 下两个 fixture 的实际 Git 检出均保持 LF，主题补丁成功匹配。
 - 本次修正后的跨平台 CI 及安装包结果仍以最新 beta 提交的 Actions 为准，不以定向测试代替分发验收。
+
+## 主线合并与冲突解决（2026-10-25）
+
+将 `main@29458f39` 合入共享 `beta`，保留双方历史。依赖冲突保留 `0.2.1-rc.2` 全套内核钉版和主线新增的 `@shaderfrog/glsl-parser`、`jpeg-js`；锁文件经 npm 生成，相对合并前 beta 仅增加两个包。设置导航补丁在上游已提供滚动时返回成功，保留上游行为。
+
+全量回归暴露并修复了主线分发遗漏：
+
+- 开机动画、微信渠道、远程访问进入两档装配与配套插件清单，配置沿用随包 patch 的桌面默认值；已有用户配置和启停选择继续优先。
+- 微信 Host 原有产物引用 monorepo 外部 `../../core`，现以钉定源码 `5f7d69a8` 内联 core 和 `qrcode@1.5.4`。远程插件补齐 `85fb53f` 的 `dist`，Host 内联 `qrcode@1.5.4`、`werift@0.24.4`，Client 保留上游字节。构建使用 `esbuild@0.25.12`、`platform=node`、`format=esm`、`target=node24`，以 `createRequire(import.meta.url)` 提供 CommonJS 兼容；宿主 `@deepseek-ai/*` 和可选 `@roamhq/wrtc` 不内联。第三方许可随包提供。
+- 两个已在主线随包的视觉核心补齐 `.sync` 与来源台账；通过项目生成器重建 registry、lock 并执行完整 `plugin-sync validate`，共 15 个登记项。装配实物为 14 个插件；退役的 Core Bridge 继续不随包。
+- 便携测试同步辅助脚本和短产物名。解压说明与脚本在压缩前纳入 `eac-release-files.json` 及受控顶层项，保持 ZIP 严格文件清单、逐文件摘要和整包 SHA256 校验；不忽略额外条目。
+
+三个新插件均通过隔离 profile 复制后的真实 Host 导入验证；内核包由宿主提供，插件自身依赖随包闭合。双 PE 架构便携装配、完整清单及重复输出拒绝验证通过。
+
+| 检查 | 合并后的最终结果 |
+| --- | --- |
+| `npm test` | 803 项：759 通过、44 跳过、0 失败，约 162 秒；未设置发行跳过开关 |
+| 台账校验 | 项目生成器重建 registry 和 lock；`plugin-sync validate` 通过，15 个登记项 |
+| 干净装配 | `stage-resources.mjs --target=win32` 与 `verify-staged-runtime.mjs` 通过：43 个必需文件、9 个退役路径、643 个依赖包、14 个随包插件 |
+| staged 导入 | 三个新插件真实 Host 导入成功，入口 SHA256 与源树一致；壁纸的两个新增依赖实物均存在 |
+| 删除补丁重放 | staged 树修改 0 个文件，原生归档/恢复保留 |
+
+构建复现时，在钉定的微信源码目录使用 esbuild 构建 `packages/bundle/src/host.ts`，将 `@dsh-wechat/core` alias 指向同目录 `packages/core/src/index.ts`；远程 Host 使用钉定提交的 `packages/plugin/dist/index.js` 作为输入，将上述纯 JavaScript 依赖内联。两者均保留第三方许可，生成产物经 `copyPluginPackage` 的隔离导入用例验收。
+
+本轮本地日志位于忽略目录 `dsh-desktop/.verify/pr491-conflicts/`。第一次完整复跑 803 项中仅临时目录清理出现 Windows `ENOTEMPTY`，该用例单独复跑通过；没有放宽或跳过产品校验。
+
+[上一轮 beta CI](https://github.com/Ebony-Vinyl/EAC-Desktop/actions/runs/40071916108)（`c475718d`）四组均成功。该结果早于本轮主线合并，不能替代新提交的 CI。
 
 官方变更说明：[0.2.1-rc.1](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.1)、[0.2.1-rc.2](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.2.1-rc.2)。

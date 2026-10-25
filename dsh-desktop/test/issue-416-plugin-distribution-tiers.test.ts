@@ -351,9 +351,19 @@ test('plugin-ops feeds the ledger classes into rows and keeps builtin toggles re
 
 test('companion-sync applies external defaults through shared YAML identity handling', () => {
   has(syncSource, /externalDefaultDisabledPlan/, 'companion-sync 必须消费默认禁用规划');
-  has(syncSource, /registeredPatchEntryIds\(patch\)/, '用户选择必须按 YAML 条目读取');
+  // 「用户选择必须按 YAML 条目读取」——口径从 registeredPatchEntryIds 收紧为
+  // explicitDisabledEntryIds：前者把 bundle 层 `- insert:` 行也算成"已登记"，
+  // 导致自带 dsh.bundle.patch 的社区包（如 dsh-theme-endfield）永远补不上
+  // disabled 行而默认启用。后者只认显式写了 disabled 的行，仍是纯 YAML 读取。
+  has(syncSource, /explicitDisabledEntryIds\(patch\)/, '用户选择必须按 YAML 条目读取');
   has(syncSource, /toggleBundleInPatch\(patch,/, '默认禁用必须复用包启停的 YAML 写入路径');
   has(syncSource, /默认关闭（可在「设置 → 插件 → 管理」启用）/, '默认禁用需要可诊断的启动日志');
+  // catalog `defaultEnabled: false` 是"装着但默认关"的事实源。EAC 上
+  // externalDefaultDisabledPlan 不可用（PLUGIN_SYNC_REGISTRY 只覆盖 10/61 个
+  // bundle，其余得 scoped-<hex> id 与分类表对不上，解除安全网会一次误禁 45 个
+  // 插件），所以必须有一条按 catalog 精确补 disabled 行的路径。
+  has(syncSource, /defaultDisabledBundlePackages\(\)/, 'catalog 默认关闭项必须有独立落地路径');
+  has(syncSource, /catalog 默认关闭的插件已补 disabled 行/, 'catalog 默认关闭需要可诊断的启动日志');
 });
 
 // ---------------------------------------------------------------------------

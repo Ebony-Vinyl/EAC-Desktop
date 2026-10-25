@@ -35,12 +35,14 @@ export const COPY_STAMP = '.eac-copy-stamp.json';
 // 目录不存在时走树器直接跳过）。与旧实现清单逐项一致。
 // 附加项：dsh-raw-html 运行时知识层（美学风格库 styles/ + 设计文档）由
 // lib/index.js 从插件目录读取，必须随内置分发拷贝；仅存在时生效。
+// packages/ + locale/：ds-harness-remote 布局 —— 根 index.js 转发到
+// packages/plugin/dist/index.js，缺失会随包拷贝后入口断裂；仅存在时生效。
 const TOP_FILES = [
   'package.json', 'dsh-plugin.json', 'skin.json', ...EXTRA_PACKAGE_FILES,
   'EAC-ADAPTATION.md', 'index.js', 'client.js', 'recall-inject.js', 'cordis.patch.yml',
   'DESIGN.md', 'FRAMING.md', 'EDITORIAL.md', 'BREATH.md',
 ];
-const TOP_DIRS = ['lib', 'docs', 'preview', 'vendor', 'node_modules', 'data', 'assets', 'runtime', 'src', 'client', 'styles'];
+const TOP_DIRS = ['lib', 'docs', 'preview', 'vendor', 'node_modules', 'data', 'assets', 'runtime', 'src', 'client', 'styles', 'packages', 'locale'];
 
 /** 安全读 JSON（损坏/缺失返回 null）。 */
 export function readJsonFile(file: string): Record<string, unknown> | null {

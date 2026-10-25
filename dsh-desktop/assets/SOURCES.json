@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-09-27",
+  "updatedAt": "2026-10-11",
   "audit": {
     "source": "DSH_EAC_Plugin_Audit_2026-09-05.xlsx (external full audit, 2026-09-05 Asia/Shanghai)",
     "mainBaseline": "e01d2e2a27b43e76aa3558d9729d5db3f05346ae",
@@ -2783,6 +2783,124 @@
         "repository": "https://github.com/jing-hy/dsh-think-zh-expand-eac",
         "refType": "version",
         "provenance": "Fork of https://github.com/baosfeng/my-dsh-plugins (plugins/dsh-think-zh-expand, MIT, 原作者 @baosfeng)"
+      }
+    },
+    {
+      "id": "C116",
+      "line": "main",
+      "name": "dsh-boot-animation",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.4.2",
+      "path": "dsh-desktop/assets/plugins/dsh-boot-animation",
+      "pathBaseline": "main@76ebe91a475b9279d362a5b63f327087b46d2039",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "byte-identical-fileset-differs",
+        "note": "NativeDog1/dsh-boot-animation@15ff124f（v0.4.2，BSD-3-Clause）。代码字节与上游一致，随包文件集为 package.json files 白名单子集并新增 EAC identity 清单 dsh-plugin.json（x-eac.patched 记账）；lib 自包含，片源内嵌于 lib/clips.data.js，media/ 源目录与构建脚本不随包。",
+        "basis": "package.repository 明确声明 + awesome-dsh-plugin 目录收录",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/NativeDog1/dsh-boot-animation",
+        "refType": "version",
+        "pinnedHead": "15ff124ff85cd23177d9b14dc81fae5c24adb8dc",
+        "provenance": "package.repository 明确声明",
+        "catalogName": "NativeDog1/dsh-boot-animation",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/4693e5a83212154bb065abb63221a23a1dd8750a/data/plugins/NativeDog1__dsh-boot-animation.yml"
+      }
+    },
+    {
+      "id": "C117",
+      "line": "main",
+      "name": "dsh-wechat-plugin",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.36.6",
+      "path": "dsh-desktop/assets/plugins/dsh-wechat",
+      "pathBaseline": "main@76ebe91a475b9279d362a5b63f327087b46d2039",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "xcisxc29/dsh-wechat@5f7d69a8（MIT）。修复原始 tsc 产物越界引用 ../../core 的遗漏：esbuild@0.25.12 将同一钉定源码的 core 与 qrcode@1.5.4 内联到 lib/host.js；保持宿主 @deepseek-ai/* 为外部依赖，随包提供第三方许可。",
+        "basis": "package.repository 明确声明",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/xcisxc29/dsh-wechat",
+        "refType": "version",
+        "pinnedHead": "5f7d69a8f83faad5a1154aec23aedb969c610931",
+        "provenance": "package.repository 明确声明"
+      }
+    },
+    {
+      "id": "C118",
+      "line": "main",
+      "name": "ds-harness-remote",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.5.2",
+      "path": "dsh-desktop/assets/plugins/ds-harness-remote",
+      "pathBaseline": "main@76ebe91a475b9279d362a5b63f327087b46d2039",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-hit",
+        "compare": "eac-bundled",
+        "note": "liguobao/ds-harness-remote@85fb53f（v0.5.2，MIT）。补入该提交的 packages/plugin/dist；client.github.js 保持上游字节，host 经 esbuild@0.25.12 内联 qrcode@1.5.4、werift@0.24.4，保留 @deepseek-ai/* 与可选 @roamhq/wrtc 外部依赖，随包提供第三方许可。",
+        "basis": "package.repository 明确声明 + awesome-dsh-plugin 目录收录",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/liguobao/ds-harness-remote",
+        "refType": "version",
+        "pinnedHead": "85fb53fe7ecf9854552f86b6f3a338a770812641",
+        "provenance": "package.repository 明确声明",
+        "catalogName": "liguobao/ds-harness-remote",
+        "catalogEntry": "https://github.com/awesome-dsh-plugin/awesome-dsh-plugin/blob/4693e5a83212154bb065abb63221a23a1dd8750a/data/plugins/liguobao__ds-harness-remote.yml"
+      }
+    },
+    {
+      "id": "C119",
+      "line": "main",
+      "name": "dsh-plugin-wallpaper-engine",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.6.7",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-wallpaper-engine",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "package-repository",
+        "compare": "vendored-snapshot",
+        "note": "主线已有的视觉核心实物，本轮补齐分发台账；未改动其源码。",
+        "basis": "package.repository 明确声明"
+      },
+      "upstream": {
+        "repository": "https://github.com/elysia395/dsh-wallpaper-engine",
+        "refType": "version",
+        "provenance": "package.repository 明确声明；本地快照摘要由 plugins.lock.json 记录"
+      }
+    },
+    {
+      "id": "C120",
+      "line": "main",
+      "name": "@smalltailqwq/dsh-client-ui-skin-deep-whale-manager",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.1.6",
+      "path": "dsh-desktop/assets/plugins/dsh-client-ui-skin-deep-whale-manager",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "package-repository",
+        "compare": "vendored-snapshot",
+        "note": "主线已有的视觉核心实物，本轮补齐分发台账；未改动其源码。",
+        "basis": "package.repository 明确声明"
+      },
+      "upstream": {
+        "repository": "https://github.com/Small-tailqwq/dsh-deep-whale",
+        "refType": "version",
+        "provenance": "package.repository 明确声明；本地快照摘要由 plugins.lock.json 记录"
       }
     }
   ]

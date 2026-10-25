@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "EAC 启动器",
+  "version": "0.1.0",
+  "identifier": "dev.eac.launcher",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://127.0.0.1:5178",
+    "beforeBuildCommand": "npm run build && node scripts/prepare-runtime.mjs",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [{
+      "label": "main",
+      "title": "EAC 启动器",
+      "width": 1360,
+      "height": 900,
+      "minWidth": 900,
+      "minHeight": 640,
+      "decorations": false,
+      "backgroundColor": "#141719",
+      "dragDropEnabled": false
+    }],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://asset.localhost data: https://avatars.githubusercontent.com https://*.githubusercontent.com; style-src 'self' 'unsafe-inline'; font-src 'self'; connect-src ipc: http://ipc.localhost http://127.0.0.1:* http://localhost:* http: https:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "resources": {"../runtime/": "runtime/"},
+    "icon": ["icons/icon.png", "icons/icon.ico", "icons/32x32.png", "icons/128x128.png"],
+    "shortDescription": "DeepSeek Harness 多实例与多内核启动器",
+    "category": "DeveloperTool",
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico",
+        "headerImage": "icons/installer/header.bmp",
+        "sidebarImage": "icons/installer/sidebar.bmp",
+        "installMode": "currentUser",
+        "languages": ["SimpChinese", "English"]
+      }
+    }
+  }
+}

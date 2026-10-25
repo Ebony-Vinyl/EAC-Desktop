@@ -16,13 +16,15 @@ export const PROFILE_MARKER_FILE = 'profile.txt';
  * 历史 lite 策略默认停用的随包配套插件（companion id）。
  *
  * ISO-005 收敛（当前为空数组）：停用对象只能是「随包的增强插件」，而随包面
- * 收敛后（装配面 BUILTIN_PLUGIN_DIRS 9 项 = COMPANION_PLUGINS 9 项）这 9 个
+ * 收敛后（装配面 BUILTIN_PLUGIN_DIRS 与 COMPANION_PLUGINS 1:1）这些插件
  * 全部是 ADR 0008 的 builtin（= onboarding CORE_PLUGIN_IDS），既被核心组锁定
  * 停用路径（plugin-ops 拒绝停用），本身又正是精简版要保留的项：
  *   viewport-lock 视口钳制 / settings-scroll-fix 设置滚动修复 /
  *   compact 请求压缩 / plugin-shield 保护中心 / unified-market 市场管理 /
  *   file-changes + client-file-changes 文件视图 / easy-setup 快速配置 /
- *   eac-locale-compat 界面底座。
+ *   eac-locale-compat 界面底座 /
+ *   dsh-boot-animation 开机动画 / dsh-wechat-plugin 微信渠道 /
+ *   ds-harness-remote 远程访问（2026-10 集成的三项）。
  * 收敛前登记的 14 项（agent-teams / dsh-stt / dsh-phone / computer-user /
  * dsh-dafeiyu / offpeak / change-review …）自 v6 Task 3.1 起已不随包（.sync
  * 分级 recommended/external，市场按需安装），不再是本清单的合法成员 —— 它们
@@ -32,7 +34,7 @@ export const PROFILE_MARKER_FILE = 'profile.txt';
  *  - 必须是 COMPANION_PLUGINS 的子集；
  *  - 不得命中 scripts/onboarding 的 CORE_PLUGIN_IDS（核心组锁定停用路径，
  *    核心插件即便在精简版也保持默认启用 —— 如 compact）。
- * 当前 9 项随包插件全部落在上述两条约束内，故清单为空；将来有「随包但默认关」
+ * 当前随包插件全部落在上述两条约束内，故清单为空；将来有「随包但默认关」
  * 的增强插件接回时在此登记。
  */
 export const LITE_DEFAULT_DISABLED: readonly string[] = [];

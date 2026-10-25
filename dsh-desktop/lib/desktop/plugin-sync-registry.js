@@ -2,7 +2,7 @@
 // GENERATED FILE — do not edit by hand.
 // Sources: .sync/plugins.json, plugin-distribution.json, and recommended pack registry (run generate-plugin-registry.mjs).
 // plugin-sync:update-sources {"unified-market":{"npm":"dsh-unified-market"}}
-// plugin-sync:distribution {"builtinPluginIds":["client-file-changes","compact","eac-core-bridge","eac-locale-compat","easy-setup","file-changes","plugin-shield","settings-scroll-fix","unified-market","viewport-lock"],"recommendedPluginIds":["balance","better-sidebar","change-review","composer-dynamic-island","conversation-tweaks","dock-settings","dsh-navbar","dsh-raw-html","dsh-session-manager","message-rewind","mobile-fix","offpeak","picturereader","prompt-custom","soul-md"],"recommendedPackId":"dev.dsh-eac.desktop-recommended","pluginClasses":{"agent-teams":"external","balance":"recommended","better-sidebar":"recommended","change-review":"recommended","client-file-changes":"builtin","compact":"builtin","composer-dynamic-island":"recommended","computer-user":"external","conversation-tweaks":"recommended","dock-settings":"recommended","dsh-dafeiyu":"external","dsh-feature-toggles":"external","dsh-navbar":"recommended","dsh-pet":"external","dsh-pet-settings":"external","dsh-phone":"external","dsh-raw-html":"recommended","dsh-session-manager":"recommended","dsh-stt":"external","dsh-undo":"external","dsh-webui-prompt-optimizer":"external","dsh-whale-widget":"external","eac-core-bridge":"builtin","eac-locale-compat":"builtin","easy-setup":"builtin","file-changes":"builtin","float-window":"external","font-custom":"external","image-paste":"external","meow-smooth":"external","message-rewind":"recommended","mobile-fix":"recommended","offpeak":"recommended","openclaw-bridge":"external","picturereader":"recommended","plugin-shield":"builtin","plugin-wizard":"external","prompt-custom":"recommended","settings-groups":"external","settings-scroll-fix":"builtin","side-session":"external","soul-md":"recommended","think-zh-expand-eac":"external","unified-market":"builtin","viewport-lock":"builtin"}}
+// plugin-sync:distribution {"builtinPluginIds":["client-file-changes","compact","ds-harness-remote","dsh-boot-animation","dsh-wechat-plugin","eac-core-bridge","eac-locale-compat","easy-setup","file-changes","plugin-shield","settings-scroll-fix","ui-skin-deep-whale-manager","unified-market","viewport-lock","wallpaper-engine"],"recommendedPluginIds":["balance","better-sidebar","change-review","composer-dynamic-island","conversation-tweaks","dock-settings","dsh-navbar","dsh-raw-html","dsh-session-manager","message-rewind","mobile-fix","offpeak","picturereader","prompt-custom","soul-md"],"recommendedPackId":"dev.dsh-eac.desktop-recommended","pluginClasses":{"agent-teams":"external","balance":"recommended","better-sidebar":"recommended","change-review":"recommended","client-file-changes":"builtin","compact":"builtin","composer-dynamic-island":"recommended","computer-user":"external","conversation-tweaks":"recommended","dock-settings":"recommended","ds-harness-remote":"builtin","dsh-boot-animation":"builtin","dsh-dafeiyu":"external","dsh-feature-toggles":"external","dsh-navbar":"recommended","dsh-pet":"external","dsh-pet-settings":"external","dsh-phone":"external","dsh-raw-html":"recommended","dsh-session-manager":"recommended","dsh-stt":"external","dsh-undo":"external","dsh-webui-prompt-optimizer":"external","dsh-wechat-plugin":"builtin","dsh-whale-widget":"external","eac-core-bridge":"builtin","eac-locale-compat":"builtin","easy-setup":"builtin","file-changes":"builtin","float-window":"external","font-custom":"external","image-paste":"external","meow-smooth":"external","message-rewind":"recommended","mobile-fix":"recommended","offpeak":"recommended","openclaw-bridge":"external","picturereader":"recommended","plugin-shield":"builtin","plugin-wizard":"external","prompt-custom":"recommended","settings-groups":"external","settings-scroll-fix":"builtin","side-session":"external","soul-md":"recommended","think-zh-expand-eac":"external","ui-skin-deep-whale-manager":"builtin","unified-market":"builtin","viewport-lock":"builtin","wallpaper-engine":"builtin"}}
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.RECOMMENDED_PACK_ID = exports.PLUGIN_DISTRIBUTION_CLASSES = exports.RECOMMENDED_PACK_PLUGIN_IDS = exports.DISTRIBUTION_BUILTIN_PLUGIN_IDS = exports.PLUGIN_UPDATE_SOURCES = exports.PLUGIN_SYNC_REGISTRY = void 0;
 exports.PLUGIN_SYNC_REGISTRY = {
@@ -10,14 +10,19 @@ exports.PLUGIN_SYNC_REGISTRY = {
         "builtinPluginIds": [
             "client-file-changes",
             "compact",
+            "ds-harness-remote",
+            "dsh-boot-animation",
+            "dsh-wechat-plugin",
             "eac-core-bridge",
             "eac-locale-compat",
             "easy-setup",
             "file-changes",
             "plugin-shield",
             "settings-scroll-fix",
+            "ui-skin-deep-whale-manager",
             "unified-market",
-            "viewport-lock"
+            "viewport-lock",
+            "wallpaper-engine"
         ],
         "pluginClasses": {
             "agent-teams": "external",
@@ -30,6 +35,8 @@ exports.PLUGIN_SYNC_REGISTRY = {
             "computer-user": "external",
             "conversation-tweaks": "recommended",
             "dock-settings": "recommended",
+            "ds-harness-remote": "builtin",
+            "dsh-boot-animation": "builtin",
             "dsh-dafeiyu": "external",
             "dsh-feature-toggles": "external",
             "dsh-navbar": "recommended",
@@ -41,6 +48,7 @@ exports.PLUGIN_SYNC_REGISTRY = {
             "dsh-stt": "external",
             "dsh-undo": "external",
             "dsh-webui-prompt-optimizer": "external",
+            "dsh-wechat-plugin": "builtin",
             "dsh-whale-widget": "external",
             "eac-core-bridge": "builtin",
             "eac-locale-compat": "builtin",
@@ -63,8 +71,10 @@ exports.PLUGIN_SYNC_REGISTRY = {
             "side-session": "external",
             "soul-md": "recommended",
             "think-zh-expand-eac": "external",
+            "ui-skin-deep-whale-manager": "builtin",
             "unified-market": "builtin",
-            "viewport-lock": "builtin"
+            "viewport-lock": "builtin",
+            "wallpaper-engine": "builtin"
         },
         "recommendedPackId": "dev.dsh-eac.desktop-recommended",
         "recommendedPluginIds": [
@@ -114,6 +124,54 @@ exports.PLUGIN_SYNC_REGISTRY = {
             "source": {
                 "kind": "unknown",
                 "reason": "package.json does not declare a source repository; do not infer one from the directory name"
+            },
+            "syncMode": "manual"
+        },
+        "ds-harness-remote": {
+            "class": "follow-upstream",
+            "kind": "plugin",
+            "packageName": "ds-harness-remote",
+            "path": "dsh-desktop/assets/plugins/ds-harness-remote",
+            "runtimeUpdate": {
+                "allowed": false,
+                "defaultAction": "prompt"
+            },
+            "source": {
+                "kind": "github",
+                "name": "liguobao/ds-harness-remote",
+                "repository": "https://github.com/liguobao/ds-harness-remote"
+            },
+            "syncMode": "manual"
+        },
+        "dsh-boot-animation": {
+            "class": "follow-upstream",
+            "kind": "plugin",
+            "packageName": "dsh-boot-animation",
+            "path": "dsh-desktop/assets/plugins/dsh-boot-animation",
+            "runtimeUpdate": {
+                "allowed": false,
+                "defaultAction": "prompt"
+            },
+            "source": {
+                "kind": "github",
+                "name": "NativeDog1/dsh-boot-animation",
+                "repository": "https://github.com/NativeDog1/dsh-boot-animation"
+            },
+            "syncMode": "manual"
+        },
+        "dsh-wechat-plugin": {
+            "class": "follow-upstream",
+            "kind": "plugin",
+            "packageName": "dsh-wechat-plugin",
+            "path": "dsh-desktop/assets/plugins/dsh-wechat",
+            "runtimeUpdate": {
+                "allowed": false,
+                "defaultAction": "prompt"
+            },
+            "source": {
+                "kind": "github",
+                "name": "xcisxc29/dsh-wechat",
+                "repository": "https://github.com/xcisxc29/dsh-wechat"
             },
             "syncMode": "manual"
         },
@@ -210,6 +268,22 @@ exports.PLUGIN_SYNC_REGISTRY = {
             },
             "syncMode": "manual"
         },
+        "ui-skin-deep-whale-manager": {
+            "class": "follow-upstream",
+            "kind": "plugin",
+            "packageName": "@smalltailqwq/dsh-client-ui-skin-deep-whale-manager",
+            "path": "dsh-desktop/assets/plugins/dsh-client-ui-skin-deep-whale-manager",
+            "runtimeUpdate": {
+                "allowed": false,
+                "defaultAction": "prompt"
+            },
+            "source": {
+                "kind": "github",
+                "name": "Small-tailqwq/dsh-deep-whale",
+                "repository": "https://github.com/Small-tailqwq/dsh-deep-whale"
+            },
+            "syncMode": "manual"
+        },
         "unified-market": {
             "class": "follow-upstream",
             "kind": "plugin",
@@ -243,6 +317,22 @@ exports.PLUGIN_SYNC_REGISTRY = {
                 "kind": "internal",
                 "name": "dsh-viewport-lock",
                 "reason": "maintained in this repository; no external source is declared"
+            },
+            "syncMode": "manual"
+        },
+        "wallpaper-engine": {
+            "class": "follow-upstream",
+            "kind": "plugin",
+            "packageName": "dsh-plugin-wallpaper-engine",
+            "path": "dsh-desktop/assets/plugins/dsh-plugin-wallpaper-engine",
+            "runtimeUpdate": {
+                "allowed": false,
+                "defaultAction": "prompt"
+            },
+            "source": {
+                "kind": "github",
+                "name": "elysia395/dsh-wallpaper-engine",
+                "repository": "https://github.com/elysia395/dsh-wallpaper-engine"
             },
             "syncMode": "manual"
         }

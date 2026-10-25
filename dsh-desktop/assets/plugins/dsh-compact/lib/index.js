@@ -1,7 +1,7 @@
 import Schema from '@deepseek-ai/schemastery'
 // 0.1.3：dsh-settings 移除 settingsNamespace 独立导出 —— 改走共享兼容垫片
 //（lib/settings-compat.js 随插件自包含分发，行为与 0.1.2 逐行一致）。
-import { settingsNamespace } from './settings-compat.js'
+import { settingsNamespace, createSettingsScope } from './settings-compat.js'
 import {
   DEFAULT_CONFIG,
   compactStatus,
@@ -28,7 +28,7 @@ const ModelPolicy = Schema.object({
   retryTransientBadRequest: Schema.boolean(),
 })
 
-export const Config = Schema.object({
+const BaseConfig = Schema.object({
   enabled: Schema.boolean().default(DEFAULT_CONFIG.enabled).description('启用请求前自动压缩'),
   thresholdRatio: Schema.number().min(0.5).max(0.95).step(0.01)
     .default(DEFAULT_CONFIG.thresholdRatio).role('slider').description('自动压缩触发比例'),
@@ -42,6 +42,13 @@ export const Config = Schema.object({
     .description('非溢出的 400 瞬态错误（会话此前成功过）自动重试一次'),
   modelPolicies: Schema.array(ModelPolicy).default([]).description('provider/model 专属策略'),
 }).description('DSH 请求路径上下文压缩')
+
+// 0.2.x：根 schema 标 volatile()。volatileForm() 的第一行就是
+//   if (schema.meta.volatile) return plainSchema(schema)
+// 所以根标记直接返回整张表单；不标则投影为 undefined、表单不生成，
+// 客户端 configForms 只能回 unavailable（设置卡永远空白）。
+// 用 typeof 探测，避免 schemastery 无此方法时在导入期就抛。
+export const Config = typeof BaseConfig.volatile === 'function' ? BaseConfig.volatile() : BaseConfig
 
 function jsonResponse(res, status, body) {
   const payload = JSON.stringify(body)
@@ -148,11 +155,10 @@ export function createCompactNowHandler(ctx) {
 export function apply(ctx, config = {}) {
   let scope
   try {
-    scope = ctx.settings.register(NS, Config, {
-      base: sanitizeConfig(config),
-      applies: 'live',
-      validate: sanitizeConfig,
-    })
+    // 0.2.x 没有 ctx.settings.register（命名空间注册模型已退役，表单改由
+    // Config schema 派生）；用垫片在 describe()/update() 之上重建同形 scope。
+    scope = createSettingsScope(ctx, NS, Config, sanitizeConfig(config))
+    if (scope === null) throw new Error('no settings transport on this kernel')
   } catch (error) {
     ctx.logger?.warn?.(
       `dsh-compact settings unavailable: ${error instanceof Error ? error.message : String(error)}; using defaults`,

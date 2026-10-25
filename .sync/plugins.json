@@ -362,6 +362,186 @@
         "reviewOnChange": true
       },
       "owner": "desktop-plugins"
+    },
+    {
+      "id": "dsh-boot-animation",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-boot-animation",
+      "packageName": "dsh-boot-animation",
+      "class": "follow-upstream",
+      "source": {
+        "kind": "github",
+        "name": "NativeDog1/dsh-boot-animation",
+        "repository": "https://github.com/NativeDog1/dsh-boot-animation"
+      },
+      "request": {
+        "mode": "exact",
+        "version": "0.4.2"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "lib/index.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "BSD-3-Clause",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
+    },
+    {
+      "id": "dsh-wechat-plugin",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-wechat",
+      "packageName": "dsh-wechat-plugin",
+      "class": "follow-upstream",
+      "source": {
+        "kind": "github",
+        "name": "xcisxc29/dsh-wechat",
+        "repository": "https://github.com/xcisxc29/dsh-wechat"
+      },
+      "request": {
+        "mode": "exact",
+        "version": "0.36.6"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "lib/host.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
+    },
+    {
+      "id": "ds-harness-remote",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/ds-harness-remote",
+      "packageName": "ds-harness-remote",
+      "class": "follow-upstream",
+      "source": {
+        "kind": "github",
+        "name": "liguobao/ds-harness-remote",
+        "repository": "https://github.com/liguobao/ds-harness-remote"
+      },
+      "request": {
+        "mode": "exact",
+        "version": "0.5.2"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "index.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
+    },
+    {
+      "id": "wallpaper-engine",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-wallpaper-engine",
+      "packageName": "dsh-plugin-wallpaper-engine",
+      "class": "follow-upstream",
+      "source": {
+        "kind": "github",
+        "name": "elysia395/dsh-wallpaper-engine",
+        "repository": "https://github.com/elysia395/dsh-wallpaper-engine"
+      },
+      "request": {
+        "mode": "exact",
+        "version": "0.6.7"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "lib/index.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
+    },
+    {
+      "id": "ui-skin-deep-whale-manager",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-client-ui-skin-deep-whale-manager",
+      "packageName": "@smalltailqwq/dsh-client-ui-skin-deep-whale-manager",
+      "class": "follow-upstream",
+      "source": {
+        "kind": "github",
+        "name": "Small-tailqwq/dsh-deep-whale",
+        "repository": "https://github.com/Small-tailqwq/dsh-deep-whale"
+      },
+      "request": {
+        "mode": "exact",
+        "version": "0.1.6"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "lib/index.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
     }
   ],
   "skins": [],

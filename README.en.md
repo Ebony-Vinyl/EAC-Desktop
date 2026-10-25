@@ -52,6 +52,11 @@ Model requests use your configured provider. Activation, compatibility and addit
 
 ### Download and launch
 
+EAC Launcher (standalone multi-instance / multi-kernel manager, installs alongside the desktop app):
+[EAC-Launcher v0.1.0 for Windows x64](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/tag/launcher-v0.1.0)
+ships its own Node 24.22.1 runtime, so no separate Node install is needed. See
+[`launcher/README.md`](launcher/README.md) for usage.
+
 Latest stable Windows release: **v6.0.0**. Other platforms link to the most recent published package for each listed format.
 
 | Platform | Version | Download | Updated (UTC+8) |
@@ -133,6 +138,9 @@ Companion plugins use Harness host/client contracts. The [staging script](tauri-
 | Protection | `dsh-plugin-shield` | Snapshots, health checks and rollback controls |
 | Localization | `dsh-eac-locale-compat` | English UI compatibility for companion and community plugins |
 | UI stability | `dsh-viewport-lock`, `dsh-settings-scroll-fix` | Viewport constraints and settings-panel wheel/overflow fixes |
+| Boot animation | `dsh-boot-animation` | Full-frame intro animation on launch / pinned-session entry (clips embedded) |
+| WeChat channel | `dsh-wechat-plugin` | Drive local sessions from WeChat; no OpenClaw or public IP needed |
+| Remote access | `ds-harness-remote` | End-to-end encrypted, P2P-first remote access from PC / Android / Web |
 
 ### Extension distribution
 

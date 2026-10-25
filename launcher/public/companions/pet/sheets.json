@@ -1,0 +1,59 @@
+{
+  "idle": {
+    "frames": 241,
+    "cellHeight": 200,
+    "cols": 16,
+    "cellWidth": 240,
+    "bytes": 1562374
+  },
+  "poke": {
+    "frames": 241,
+    "cellHeight": 200,
+    "cols": 16,
+    "cellWidth": 240,
+    "bytes": 1539190
+  },
+  "dragging": {
+    "frames": 144,
+    "cellHeight": 200,
+    "cols": 16,
+    "cellWidth": 240,
+    "bytes": 1002524
+  },
+  "success": {
+    "frames": 241,
+    "cellHeight": 200,
+    "cols": 16,
+    "cellWidth": 240,
+    "bytes": 1653304
+  },
+  "error": {
+    "frames": 118,
+    "cellHeight": 200,
+    "cols": 16,
+    "cellWidth": 240,
+    "bytes": 796872
+  },
+  "thinking": {
+    "frames": 241,
+    "cellHeight": 200,
+    "cols": 16,
+    "cellWidth": 240,
+    "bytes": 1649352
+  },
+  "idle_yawn": {
+    "frames": 241,
+    "cellHeight": 200,
+    "cols": 16,
+    "cellWidth": 240,
+    "bytes": 1584488
+  },
+  "eat_token": {
+    "frames": 241,
+    "cellHeight": 200,
+    "cols": 16,
+    "cellWidth": 240,
+    "bytes": 1822424
+  },
+  "_quality": 84
+}

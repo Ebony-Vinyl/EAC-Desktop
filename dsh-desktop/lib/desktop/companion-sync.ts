@@ -8,8 +8,8 @@
 // 外迁为市场可选包）；壳层 ui-skin manager 的 boot/recovery 回退资源不受本
 // 退役影响（ADR 0010）。
 // ISO-005 运行时清单收敛：COMPANION_PLUGINS 只登记「随包实物」—— 装配面
-// tauri-shell/stage-resources.mjs 的 BUILTIN_PLUGIN_DIRS 是唯一基准（当前 9
-// 项，每项在 assets/plugins 下有同名目录）。已不随包的插件不在本清单留空转项：
+// tauri-shell/distro.mjs 的 builtinPluginDirs 是唯一基准（每项在 assets/plugins
+// 下有同名目录）。已不随包的插件不在本清单留空转项：
 // 旧 profile 残留的行/包副本由 RETIRED_BUILTIN_PLUGINS 兜底清理（见下方清单），
 // 用户仍需要时经市场按需安装（recommended/external 分级见 .sync 账本）。
 // 皮肤平台（`@dsh-eac/ui-skin-loader` + 13 款公约皮肤包）已于 EAC-CORE-SHELL-01
@@ -23,12 +23,13 @@ import { isMap, isSeq, parseDocument } from 'yaml';
 import type { Document } from 'yaml';
 import { updCtx, APP_ROOT } from './runtime-paths';
 import { isLiteDisabled, readInstallProfile } from './install-profile';
+import { seedLiteBundledSkins, applyOrcaSettingsLayoutFix, LITE_BUNDLED_SKINS } from './lite-skins';
 import { desktopProfile, desktopProfileDir, ensureDesktopProfileInit, BUNDLED_BUILTIN_PLUGINS } from './profile';
 import { ensureGuard } from './guard-box';
-import { applySessionManageFix } from './runtime-patches';
+import { applySessionManageFix, applyKernelTagToneFix } from './runtime-patches';
 import { pluginCapabilityDetails } from './platform';
 import { writeFileAtomic } from '../atomic-json.js';
-import { parsePatchData, registeredPatchEntryIds, resolveBundleIdentities, toggleBundleInPatch } from '../bundle-identity';
+import { explicitDisabledEntryIds, parsePatchData, removeDisabledRow, resolveBundleIdentities, resolveBundleIdentity, toggleBundleInPatch } from '../bundle-identity';
 import { PLUGIN_UPDATE_SOURCES as GENERATED_PLUGIN_UPDATE_SOURCES } from './plugin-sync-registry';
 // 未类型化依赖（Wave 3 收编），先以窄签名消费。
 const updater = require('../../updater') as {
@@ -57,11 +58,9 @@ const { externalDefaultDisabledPlan, canonicalBundleId } = require('../../plugin
   }): Array<{ id: string; name: string }>;
   canonicalBundleId(name: string): string;
 };
-import {
-  DISTRIBUTION_BUILTIN_PLUGIN_IDS,
-  RECOMMENDED_PACK_PLUGIN_IDS,
-  PLUGIN_DISTRIBUTION_CLASSES,
-} from './plugin-sync-registry';
+// 三个分类表导入曾供 externalDefaultDisabledPlan 使用；该路径已于 2026-10-23
+// 停用（见下方「已停用」注释），改为 defaultDisabledBundlePackages 直接读 catalog，
+// 因此不再需要。registry 本身仍由 plugin-ops / 设置页使用。
 const {
   configLinesFor,
   healSoulMdPatchRow,
@@ -103,6 +102,166 @@ export interface CompanionSyncCtx {
   platform?: NodeJS.Platform;
 }
 
+/**
+ * 从运行时 catalog 里取出所有 `compat`（非官方内核兼容）条目的包名。
+ *
+ * 为什么需要它：`compat: 'eac-fork'` 的插件依赖 EAC 分叉内核专有服务
+ * （`settingsScope`），在官方 0.2.x 上激活期会**永久挂起**；而 web boot 对
+ * 「entry 未激活」是 fail-loud 的 —— 整个 GUI 直接拒绝启动：
+ *
+ *   Failed to load plugins
+ *   web boot: 1 entry did not activate
+ *   @ha-na-bi/dsh-client-ui-custom: pending (waiting for service: settingsScope)
+ *
+ * EAC-Pack 的 `suite/index.js:installSkipReason()` 已经在**安装**路径上拦截了
+ * 这些条目，但 `dsh.profile.bundles` 是另一条路径：seed 生成器
+ * （work/dist-tooling/prepare-composition.mjs）此前把 preinstalled 条目无条件
+ * 塞进 bundles，于是它们虽然"不该被装"，却照样进了 profile 的启动清单。
+ * 实测 2026-10-21：全新 full 实例宿主侧 6/6 插件 fiberPhase=active、25 个 settings
+ * 命名空间全在，但真实渲染截图显示界面完全没起来；剥掉这两行 bundle 立即恢复。
+ *
+ * fail-open：catalog 不可读时返回空集（此时无法判定，交给上游兜底），
+ * 且**只缓存成功结果**，catalog 恢复后下次调用即生效。
+ */
+let incompatibleBundleCache: Set<string> | null = null;
+
+export function incompatibleBundlePackages(): Set<string> {
+  if (incompatibleBundleCache) return incompatibleBundleCache;
+  const names = new Set<string>();
+  try {
+    // `eac-plugin-suite` 装在 profile 层（不是 APP_ROOT/node_modules），另有 dsh-home
+    // 下的安装目标。逐个探测，取第一个带 catalog 的。
+    const home = resolveHomeForCatalog();
+    const candidates = [
+      process.env.DSH_PROFILE_DIR
+        ? path.join(process.env.DSH_PROFILE_DIR, 'node_modules', 'eac-plugin-suite', 'catalog')
+        : null,
+      home ? path.join(home, 'profiles', 'web-desktop', 'node_modules', 'eac-plugin-suite', 'catalog') : null,
+      home ? path.join(home, 'eac-plugin-suite', 'catalog') : null,
+      path.join(APP_ROOT, 'node_modules', 'eac-plugin-suite', 'catalog'),
+    ].filter((x): x is string => typeof x === 'string');
+    const suiteCatalogDir = candidates.find((dir) => fs.existsSync(dir));
+    if (!suiteCatalogDir) return names; // 未装 suite：无 catalog 可依（fail-open）
+    let read = 0;
+    for (const file of fs.readdirSync(suiteCatalogDir)) {
+      if (!file.endsWith('.json') || file === 'retired.json') continue;
+      let catalog: unknown;
+      try {
+        catalog = JSON.parse(fs.readFileSync(path.join(suiteCatalogDir, file), 'utf8'));
+      } catch { continue; }
+      const rows = Array.isArray(catalog) ? catalog : (catalog as { plugins?: unknown[] }).plugins ?? [];
+      for (const row of rows as { name?: string; compat?: string }[]) {
+        if (row && typeof row.name === 'string' && typeof row.compat === 'string' && row.compat) {
+          names.add(row.name);
+        }
+      }
+      read += 1;
+    }
+    if (read > 0) incompatibleBundleCache = names;
+  } catch (err) {
+    console.warn('[companion-sync] catalog 读取失败，compat 兜底未生效（fail-open）: '
+      + String((err as Error)?.message || err));
+  }
+  return names;
+}
+
+/** dsh home 的解析（catalog 探测用）：env → os.homedir 下的 .dsh。 */
+function resolveHomeForCatalog(): string | null {
+  const fromEnv = process.env.DSH_HOME;
+  if (typeof fromEnv === 'string' && fromEnv) return fromEnv;
+  try {
+    return path.join(os.homedir(), '.dsh');
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 即使 catalog 标了 `defaultEnabled: false` 也**绝不能**关闭的包。
+ *
+ * 判据：它们不是"可选皮肤/增强"，而是**功能入口** —— 关掉会让对应界面整块消失。
+ *
+ * 实测教训（2026-10-21）：`@smalltailqwq/dsh-client-ui-skin-deep-whale-manager`
+ * 在 catalog 里是 `defaultEnabled: false`（语义是"默认不启用任何皮肤"），但它
+ * 本身就是**皮肤管理器的 UI 入口**。把它写成 disabled 后，设置里的「皮肤管理」
+ * 分节直接消失 —— 逐页截图测试立刻暴露（导航从 27 个分节掉到 24 个）。
+ *
+ * 同理 `@deepseek-ai/dsh-skin-switch` 是上游切换器入口，也不可关。
+ */
+const NEVER_DEFAULT_DISABLE = new Set<string>([
+  '@smalltailqwq/dsh-client-ui-skin-deep-whale-manager',
+  '@deepseek-ai/dsh-skin-switch',
+]);
+
+/**
+ * catalog 里标了 `defaultEnabled: false` 的包名 —— 安装器应给它们写关闭行。
+ *
+ * 为什么需要这个（而不是复用 externalDefaultDisabledPlan）
+ * ------------------------------------------------------
+ * `externalDefaultDisabledPlan` 的设计前提是：能从 `dsh.profile.bundles` 反推每个
+ * 包的 canonical id，并与 `PLUGIN_DISTRIBUTION_CLASSES` 同空间比对。EAC 上这两个
+ * 前提都不成立：
+ *
+ *   · `PLUGIN_SYNC_REGISTRY` 只登记 10 个包，profile 有 61 个 bundles（命中 1/61）
+ *   · 未登记包经 `canonicalBundleId` 得到 `scoped-<hex>`（如
+ *     `@deepseek-ai/dsh-balance` → `scoped-4064…`），而分类表 key 是裸名 `balance`
+ *   · 于是 `distributionClassOf` 全部落到默认 `'external'`
+ *
+ * 实测：一旦解除 `unresolvedCore` 安全网，该规划器会一次给 **45 个插件**补
+ * `disabled: true`（含 skin-switch、皮肤管理器、better-sidebar、agent-teams……），
+ * 把正常功能全部关掉。**所以不能走那条路。**
+ *
+ * 本函数改走**事实源**：catalog 里显式写了 `defaultEnabled: false` 的包，
+ * 就是"装着但默认关"。不做 id 推断、不做分类猜测，因此不会误伤。
+ *
+ * 为什么必须有它：自带 `dsh.bundle.patch` 的社区包（如 `dsh-theme-endfield`）
+ * 在 profile 里天然有一行 `- insert:`（来自 bundle 层），该行**没有 disabled 字段**
+ * → 插件默认启用。而 `config.enabled: "0"` 只是插件内部开关，管不了插件加载。
+ * 实测后果：终末地主题默认打开，覆写 73 个 `dsw-*` 变量，与皮肤管理冲突。
+ *
+ * fail-open：catalog 不可读时返回空集（无法判定时不擅自禁用）。
+ */
+let defaultDisabledCache: Set<string> | null = null;
+
+export function defaultDisabledBundlePackages(): Set<string> {
+  if (defaultDisabledCache) return defaultDisabledCache;
+  const names = new Set<string>();
+  try {
+    const home = resolveHomeForCatalog();
+    const candidates = [
+      process.env.DSH_PROFILE_DIR
+        ? path.join(process.env.DSH_PROFILE_DIR, 'node_modules', 'eac-plugin-suite', 'catalog')
+        : null,
+      home ? path.join(home, 'profiles', 'web-desktop', 'node_modules', 'eac-plugin-suite', 'catalog') : null,
+      home ? path.join(home, 'eac-plugin-suite', 'catalog') : null,
+      path.join(APP_ROOT, 'node_modules', 'eac-plugin-suite', 'catalog'),
+    ].filter((x): x is string => typeof x === 'string');
+    const suiteCatalogDir = candidates.find((dir) => fs.existsSync(dir));
+    if (!suiteCatalogDir) return names; // 未装 suite：无 catalog 可依（fail-open）
+    let read = 0;
+    for (const file of fs.readdirSync(suiteCatalogDir)) {
+      if (!file.endsWith('.json') || file === 'retired.json') continue;
+      let catalog: unknown;
+      try {
+        catalog = JSON.parse(fs.readFileSync(path.join(suiteCatalogDir, file), 'utf8'));
+      } catch { continue; }
+      const rows = Array.isArray(catalog) ? catalog : (catalog as { plugins?: unknown[] }).plugins ?? [];
+      for (const row of rows as { name?: string; defaultEnabled?: boolean; distExclude?: boolean }[]) {
+        if (!row || typeof row.name !== 'string' || !row.name) continue;
+        if (row.distExclude === true) continue;            // 未随包分发，无需管理
+        if (NEVER_DEFAULT_DISABLE.has(row.name)) continue; // 功能入口，关掉会让界面整块消失
+        if (row.defaultEnabled === false) names.add(row.name);
+      }
+      read += 1;
+    }
+    if (read > 0) defaultDisabledCache = names;
+  } catch (err) {
+    console.warn('[companion-sync] catalog 读取失败，默认关闭兜底未生效（fail-open）: '
+      + String((err as Error)?.message || err));
+  }
+  return names;
+}
+
 let ctx!: CompanionSyncCtx;
 export function init(d: CompanionSyncCtx): void { ctx = d || ({} as CompanionSyncCtx); }
 
@@ -124,7 +283,7 @@ interface PendingRow {
 // 运行时登记面 = 随包实物（基准见文件头）：每项都必须能解析出
 // assets/plugins/<dir> 实物目录。实物不在包却在清单里的条目，每次启动只会
 // 留一条「配套插件源目录无效，跳过」的空转日志 —— ISO-005 起本清单与装配面
-// 1:1（9 项），收敛前登记的 35 项不再随包，旧 profile 迁移见下方 RETIRED 清单。
+// 1:1（包内 patch 挂载的皮肤管理器除外），旧 profile 迁移见下方 RETIRED 清单。
 //
 // 绝不能写进 profile package.json 依赖 —— pnpm 安装会 hoist @deepseek-ai
 // 核心包形成模块双实例（Symbol 冲突，插件命名空间注册失效，即
@@ -163,6 +322,37 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // overflow 尺寸识别导航/内容滚动区；MutationObserver 跟随动态内容，卸载时
   // 完整清理样式、标记与监听器。纯客户端实现（host 半边 no-op）。
   { id: 'settings-scroll-fix', name: 'dsh-settings-scroll-fix', dir: 'dsh-settings-scroll-fix' },
+  // 壁纸引擎：host 半扫描本地 Wallpaper Engine（Steam 431960）的 Workshop /
+  // 默认工程，把 Video/Web 类壁纸通过同源 HTTP 路由
+  // （/wallpaper-engine/{inventory,media,preview}）下发；client 半绘制壁纸背景
+  // 并渲染玻璃质感。不依赖 window.dshDesktop（webServer 用 ctx.get，缺失时
+  // 自身守卫），因此可随包。
+  { id: 'wallpaper-engine', name: 'dsh-plugin-wallpaper-engine', dir: 'dsh-plugin-wallpaper-engine' },
+  { id: 'dsh-boot-animation', name: 'dsh-boot-animation', dir: 'dsh-boot-animation' },
+  { id: 'dsh-wechat-plugin', name: 'dsh-wechat-plugin', dir: 'dsh-wechat', config: { autoStart: true } },
+  { id: 'ds-harness-remote', name: 'ds-harness-remote', dir: 'ds-harness-remote', config: {
+    enabled: true, role: 'host', serverUrl: 'https://dsh.r2049.cn', codex: { enabled: true, binary: 'codex' },
+  } },
+  // 皮肤管理器（@smalltailqwq/dsh-client-ui-skin-deep-whale-manager）**不登记在
+  // COMPANION_PLUGINS**，原因（实测 2026-10-23，踩了三次）：
+  //
+  // 它自带 `dsh.bundle.patch`（cordis.patch.yml 里 insert `ui-skin-deep-whale-manager`）。
+  // 若同时出现在 COMPANION_PLUGINS，syncCompanionPlugins 会再写一条配套行 ——
+  // 同一个包被两个来源各注册一个 entry，内核把它们当两个插件实例加载：
+  //
+  //   skin-manager (@smalltailqwq/dsh-client-ui-skin-deep-whale-manager):
+  //     Error: webserver: duplicate exact route "/api/dsh/skins"
+  //   dsh: warning: 1 entry did not activate
+  //
+  // 后果不只是报错：管理器 did not activate → 不写 body 皮肤属性 → 皮肤全部
+  // 不生效（这就是「皮肤包都在、bundles 也登记了，界面却没换肤」的根因）。
+  //
+  // 对照：壁纸引擎同样自带 patch，但它**不在**任何 bundles 里，只靠配套行注册，
+  // 所以没问题。两者路径不同：
+  //   · 壁纸引擎 = 普通插件 → 配套行注册（COMPANION_PLUGINS）
+  //   · 皮肤管理器 = 皮肤平台本体，自带 patch → 目录由装配拷贝、行由包内 patch 提供
+  // 因此它只在 stage-resources 的 BUILTIN_PLUGIN_DIRS 里（负责随包资产），
+  // 行由包自带，不进 COMPANION_PLUGINS。
   // —— 已不随包的插件（ISO-005 收敛出本清单）：不再登记 ——
   // 收敛前本清单 44 项，其中 35 项自 v6 Task 3.1 剥出 assets/plugins 后已无实物
   //（每次启动只留一条「配套插件源目录无效，跳过」）。它们不再随包，改由市场按需
@@ -660,6 +850,62 @@ function retireRemovedBuiltinPlugins(profileDirP: string): boolean {
   return complete;
 }
 
+/**
+ * 从 profile 的 `dsh.profile.bundles` 与 `dependencies` 里剥掉 `compat` 条目。
+ *
+ * 这是 `incompatibleBundlePackages()` 的落地点。为什么必须在启动时做而不是只在
+ * seed 生成时修：seed 是**构建产物**，用户装的安装包来自某一个固定构建；只要
+ * 那个构建的 seed 里带了 compat 行，用户机器上就必然崩 GUI。运行时兜底能覆盖
+ * 「已发布的坏 seed」与「用户 profile 里历史残留」两种情况。
+ *
+ * 只删 bundles / dependencies，**不删已解包的目录**：删目录会留下半装状态，
+ * 而且这些包本来就装不上（suite 的 installSkipReason 会拦），目录只会是空的
+ * 或早期手工残留。保留目录不影响启动（不在 bundles 就不会被 import）。
+ *
+ * 幂等；返回被剥掉的包名。fail-open：任何一步异常都只记日志，不阻断启动。
+ */
+export function stripIncompatibleProfileBundles(
+  profileDirP: string,
+  ctx: Pick<CompanionSyncCtx, 'log'>,
+): string[] {
+  const incompatible = incompatibleBundlePackages();
+  if (incompatible.size === 0) return [];
+  const packageFile = path.join(profileDirP, 'package.json');
+  let pkg: { dependencies?: Record<string, unknown>; dsh?: { profile?: { bundles?: unknown[] } } };
+  try {
+    pkg = JSON.parse(fs.readFileSync(packageFile, 'utf8').replace(/^\uFEFF/, ''));
+  } catch {
+    return [];
+  }
+  const stripped: string[] = [];
+  const bundles = pkg?.dsh?.profile?.bundles;
+  if (Array.isArray(bundles)) {
+    const next = bundles.filter((entry) => {
+      if (typeof entry !== 'string' || !incompatible.has(entry)) return true;
+      stripped.push(entry);
+      return false;
+    });
+    if (next.length !== bundles.length) pkg.dsh!.profile!.bundles = next;
+  }
+  if (pkg.dependencies && typeof pkg.dependencies === 'object') {
+    for (const name of [...incompatible]) {
+      if (Object.hasOwn(pkg.dependencies, name)) {
+        delete pkg.dependencies[name];
+        if (!stripped.includes(name)) stripped.push(name);
+      }
+    }
+  }
+  if (stripped.length > 0) {
+    try {
+      writeFileAtomic(packageFile, JSON.stringify(pkg, null, 2) + '\n');
+      ctx.log('boot', `已从 profile 剥离 ${stripped.length} 个与官方内核不兼容的 bundle: ${stripped.join(', ')}（compat 条目不激活，否则整机 GUI 拒绝启动）`);
+    } catch (error) {
+      ctx.log('boot', `剥离不兼容 bundle 未完成，下次启动重试: ${String((error as Error)?.message || error)}`);
+    }
+  }
+  return stripped;
+}
+
 // 安全模式守卫：<home>/guard/safe-mode.json active 时，配套插件的 patch 行
 // 追加必须停摆——否则「安全模式重启」后 sync 会把全部插件行写回 patch，
 // 下一次服务重启时安全模式被静默击穿（快照恢复前用户始终处于假安全模式）。
@@ -733,6 +979,8 @@ export function syncCompanionPlugins(): void {
     // V4 运行时补丁（幂等，随启动 / 服务重启 / agent 更新后重放）：
     //  · 对话删除/归档 —— dsh-session-manager 插件的全链路前置依赖；
     applySessionManageFix();
+    //  · 内核前端 CSS：反色标签把背景层色当文字色用，字看不见（详见模块头注释）。
+    applyKernelTagToneFix();
     const profileDirP = desktopProfileDir();
     // 内置社区 agent preset（anchored-standard：首请求锚定 Minimal 工具对，
     // 首次工具调用/回复后开放完整 Standard 目录）：安装到用户 preset 根。
@@ -892,6 +1140,11 @@ export function syncCompanionPlugins(): void {
     } catch (err) {
       ctx.log('boot', '写入内置插件清单失败: ' + (err as Error).message);
     }
+    // compat 条目不激活：官方 0.2.x 上它们等不到 EAC 分叉专有服务，web boot 对
+    // 未激活 entry 是 fail-loud 的 —— 留在 bundles 里就等于把整机 GUI 弄挂。
+    // 必须在启动**之前**剥离，放在 ensurePluginHostDeps 之前或之后都可（两者
+    // 互不影响），这里紧邻其它 profile 修复步骤，便于日后再加同类兜底。
+    stripIncompatibleProfileBundles(profileDirP, ctx);
     ensurePluginHostDeps(profileDirP);
     // 配套插件的宿主依赖兜底（真实目录，非链接）。rc.2 起 dsh-app-boot 首启会
 // 重建 <home>/profiles/node_modules 共享层：dev 时代指向宿主工程的符号链接
@@ -941,6 +1194,16 @@ function ensurePluginHostDeps(profileDirP: string): void {
   // web-push（meow-smooth 通知 host 半边的运行时依赖；动态 import，缺省时
   // 该插件优雅降级为仅页面内提醒 —— 这里落位让系统推送开箱即用）。
   ensureCopy('web-push', 0);
+  // 壁纸引擎（dsh-plugin-wallpaper-engine）的两个运行时依赖。它是 builtin
+  // 随包插件，但 web-app 闭包不带它们，缺任一个都会让整个插件在启动审计里
+  // 只显示 "failed to import"（原始异常被上游压成字符串、不落日志）：
+  //   · jpeg-js            —— 读 Workshop 预览图的 JPEG 解码
+  //   · @shaderfrog/glsl-parser —— we-renderer 的 GLSL 解析
+  // 实测 2026-10-22：不落位时 dsh web 报
+  //   wallpaper-engine (dsh-plugin-wallpaper-engine): failed to import
+  // 且设置页的「Wallpaper Engine」分节整块消失。
+  ensureCopy('jpeg-js', 0);
+  ensureCopy(path.join('@shaderfrog', 'glsl-parser'), 0);
   // cosmokit 只在共享层没有时兜底（避免遮蔽内核闭包内的配套版本）。
   const sharedRoot = path.join(ctx.getDshHome() || path.join(os.homedir(), '.dsh'), 'profiles', 'node_modules');
   const sharedCosmo = path.join(sharedRoot, '@deepseek-ai', 'cosmokit');
@@ -953,6 +1216,40 @@ function ensurePluginHostDeps(profileDirP: string): void {
   const sharedSchemastery = path.join(sharedRoot, '@deepseek-ai', 'schemastery');
   if (!fs.existsSync(sharedSchemastery)) {
     ensureCopy(path.join('@deepseek-ai', 'schemastery'), 0);
+  }
+  // 共享层的裸名 schemastery 自身带 `cosmokit` 与 `@standard-schema/spec` 两个
+  // 运行时依赖，而内核重建该层时只放它自己、不放这两个 —— 于是
+  //   require('cosmokit') from profiles/node_modules/schemastery/lib/index.cjs
+  // 直接 MODULE_NOT_FOUND，**整个 web boot 起不来**（端口都不监听）。
+  // 实测 2026-10-21：`dsh --profile web-desktop --dump-config-schema` 报
+  //   Error: Cannot find module 'cosmokit'
+  // 静默地让 better-sidebar 在启动审计里只显示 "failed to import"（原始异常
+  // 被上游压成字符串，不落日志），排查成本极高。
+  // 修法：只在这两个依赖缺失时补进共享层（bare 与 scoped 两种拼写都补，
+  // schemastery 声明的是 bare `cosmokit`）。
+  for (const [rel, alias] of [
+    ['@deepseek-ai/cosmokit', 'cosmokit'],
+    ['@standard-schema/spec', path.join('@standard-schema', 'spec')],
+  ] as const) {
+    const scopedDir = path.join(sharedRoot, ...rel.split('/'));
+    if (!fs.existsSync(path.join(scopedDir, 'package.json'))) {
+      ensureCopy(rel, 0);
+    }
+    if (alias !== rel) {
+      const aliasDir = path.join(sharedRoot, ...alias.split('/'));
+      if (!fs.existsSync(path.join(aliasDir, 'package.json'))) {
+        const src = path.join(APP_ROOT, 'node_modules', ...rel.split('/'));
+        if (fs.existsSync(path.join(src, 'package.json'))) {
+          try {
+            fs.mkdirSync(path.dirname(aliasDir), { recursive: true });
+            fs.cpSync(src, aliasDir, { recursive: true });
+            ctx.log('boot', `已落位共享层依赖别名 ${alias} -> ${rel}`);
+          } catch (err) {
+            ctx.log('boot', `共享层依赖别名落位失败 ${alias}: ` + String((err as Error)?.message || err));
+          }
+        }
+      }
+    }
   }
 }
 
@@ -976,6 +1273,24 @@ function ensurePluginHostDeps(profileDirP: string): void {
       patch = healedPet.patch;
       changed = true;
       ctx.log('boot', '已修复 profile patch 中缺 config 的 dsh-pet 行（v3 存量坏行）');
+    }
+    // 修存量坏行：皮肤管理器被「外部层默认禁用」误写成 disabled: true。
+    //
+    // 成因见下方 companionBundleIds 处的长注释：它被移出 COMPANION_PLUGINS
+    // （避免 duplicate route）后，externalDefaultDisabledPlan 把它当第三方包。
+    // 该策略每次启动都会重写，所以要在**它之前**清掉误标行；包名已加入
+    // BUNDLE_WIRED_CORE_PACKAGES 后不会再被写回。
+    //
+    // 只删「该 id 的唯一一行且 disabled: true」的情形：若用户在「插件管理」里
+    // 主动关过它，理应保留 —— 但那与随包核心插件「默认启用、不可停用」的语义
+    // 冲突，且这行是本次 bug 自动写入的，正常用户不会有。为稳妥，删之前要求
+    // 该行**没有 config 块**（用户手动关的行通常由管理器写入，同样无 config），
+    // 因此这里以「随包核心集」为准直接恢复，并在日志里说明。
+    const healedManager = removeDisabledRow(patch, 'ui-skin-deep-whale-manager');
+    if (healedManager.removed) {
+      patch = healedManager.patch;
+      changed = true;
+      ctx.log('boot', '已恢复被误标为「外部插件」的皮肤管理器行（设置页「皮肤管理」分节）');
     }
     // 内核 0.1.2 隐私开关：官方 deepseek 适配器随请求上报活动插件包名/版本
     // （plugin-package-inventory-deepseek，默认 enabled: true）。桌面端默认
@@ -1011,6 +1326,32 @@ function ensurePluginHostDeps(profileDirP: string): void {
     } catch (err) {
       bundled = [];
       ctx.log('boot', '播种内置 bundle 插件失败: ' + String(((err as Error).message) || err));
+    }
+    // 精简版随包皮肤播种：落位包目录 + 登记 dependencies + 补 patch 行。
+    // 形态判定在 seedLiteBundledSkins 内部（读 profile.txt 的 distro 标记，
+    // 见 lite-skins.ts 的 isLiteProfile）；full 档直接返回、一行不碰。
+    try {
+      const skinsAssets = path.join(APP_ROOT, 'assets', 'skins');
+      const seededSkins = seedLiteBundledSkins(profileDirP, skinsAssets, (m) => ctx.log('boot', m), APP_ROOT);
+      if (seededSkins) {
+        ctx.log('boot', '精简版随包皮肤已就绪（' + LITE_BUNDLED_SKINS.length + ' 款）');
+      }
+    } catch (err) {
+      ctx.log('boot', '播种随包皮肤失败: ' + String(((err as Error).message) || err));
+    }
+    // 虎鲸之链设置面板布局修正：**两档都跑**。
+    //
+    // 早先只放在 lite 的播种里（因为修复正是在 lite 上被发现的），结果 full 一直
+    // 保留皮肤默认的 docked 布局：导航贴底、上方空 300+ px。实测 full 的设置分节
+    // 同样填不满一屏（内容 400px / 容器 680px），所以这不属于「full 的设计选择」，
+    // 而是同一个布局缺陷。
+    //
+    // 幂等；只在用户没存过该设置时生效（localStorage 有值时 defaultValue 不起作用），
+    // 不会覆盖用户自己选过的布局。
+    try {
+      applyOrcaSettingsLayoutFix(profileDirP, (m) => ctx.log('boot', m));
+    } catch (err) {
+      ctx.log('boot', '虎鲸之链设置面板布局修正失败: ' + String(((err as Error).message) || err));
     }
     // 同一 entry id 被两处声明（bundle 的包内 patch + overlay 的配套行）会以
     // “duplicate loader entry id” 拖垮整个插件树。旧逻辑只按「包名 ∈ bundles」
@@ -1061,16 +1402,58 @@ function ensurePluginHostDeps(profileDirP: string): void {
       p.id,
       canonicalBundleId(p.name),
     ]);
-    const registeredIds = registeredPatchEntryIds(patch);
-    const externalDefaults = inSafeMode ? [] : externalDefaultDisabledPlan({
-      bundles: bundled,
-      bundleIdentities: resolveBundleIdentities(profileDirP, bundled.filter((name): name is string => typeof name === 'string')),
-      isRegistered: (id: string) => registeredIds.has(id),
-      distributionClasses: PLUGIN_DISTRIBUTION_CLASSES,
-      builtinIds: DISTRIBUTION_BUILTIN_PLUGIN_IDS,
-      recommendedIds: RECOMMENDED_PACK_PLUGIN_IDS,
-      skipIds: companionBundleIds,
-    });
+    // 随包但**不走配套行**的核心插件也必须排除，否则会被当成「外部插件」默认关闭。
+    //
+    // 皮肤管理器就是这种情况：它自带 `dsh.bundle.patch`，若同时出现在
+    // COMPANION_PLUGINS，同一个包被两处各注册一个 entry → 内核报
+    // `duplicate exact route "/api/dsh/skins"` 且不激活（详见 COMPANION_PLUGINS
+    // 里的长注释）。所以它被移出了那张表、改走 bundles。
+    //
+    // 副作用（2026-10-23 实测踩到）：移出后它不再出现在 companionBundleIds 里，
+    // 于是 externalDefaultDisabledPlan 把它当第三方包，在 patch 里写
+    // `- id: ui-skin-deep-whale-manager / disabled: true` —— 设置页「皮肤管理」
+    // 整节消失，皮肤管理器完全不加载。
+    //
+    // 因此这里补上「随包核心集」的第二来源：BUILTIN_PLUGIN_DIRS 对应的包名。
+    // 目录名与包名不总相同（目录 `dsh-client-ui-skin-deep-whale-manager`），
+    // 所以按已知包名显式列出，而不是从目录名推断。
+    const BUNDLE_WIRED_CORE_PACKAGES = [
+      '@smalltailqwq/dsh-client-ui-skin-deep-whale-manager',
+    ];
+    for (const name of BUNDLE_WIRED_CORE_PACKAGES) {
+      companionBundleIds.push(name, canonicalBundleId(name));
+    }
+    // 两种"登记"必须区分（这是一个真实 bug 的根因）：
+    //   registeredPatchEntryIds —— id 在 patch 里出现过，含 bundle 层 `- insert:` 行
+    //   explicitDisabledEntryIds —— 该行**显式写了 disabled**，才算用户/安装器表过态
+    //
+    // 原先 isRegistered 用的是前者，于是自带 `dsh.bundle.patch` 的社区包
+    // （如 dsh-theme-endfield）天然有一行 insert、被判定"已登记"而跳过补写关闭行，
+    // 结果它默认启用：覆写 73 个 dsw-* 变量，与皮肤管理冲突。
+    // 它的 `config.enabled: "0"` 只是插件内部开关，管不了插件加载。
+    // ⚠️ 已停用（2026-10-23）：externalDefaultDisabledPlan 这条路径被下面
+    // defaultDisabledBundlePackages 取代，二者曾**同时**在跑，导致同一批插件被
+    // 反复写 disabled。
+    //
+    // 停用理由（不是猜测，而是本文件自己的结论）：
+    //   · 1522 行的注释已经写明「为什么不复用上面的 externalDefaultDisabledPlan：
+    //     它依赖 PLUGIN_SYNC_REGISTRY 覆盖全部 bundle（实际只 10/61），未登记包得
+    //     scoped-<hex> id 与分类表裸名 key 对不上 → 全落默认 'external'」；
+    //   · f6cf6538 的提交信息记录过实测：「解除 unresolvedCore 安全网后，该规划器
+    //     一次给 45 个插件补 disabled: true，把 skin-switch、皮肤管理器、
+    //     better-sidebar、agent-teams 等正常功能全部关掉」。
+    //   · 结论是「那条路必须先修 id 空间，不能硬闯」，但新方案上线后**旧调用没有
+    //     删除**，两条逻辑并存至今。
+    //
+    // 实测后果（2026-10-23）：full 的 patch 里堆积 48 条 disabled，其中 better-sidebar、
+    // balance、dock-settings 等 32 个属误禁；手动清理后再启动会被原样写回。
+    //
+    // 保留常量与注释作为历史记录，实际计算已短路为空。
+    const externalDefaults: Array<{ id: string; name: string }> = [];
+    if (false) {
+      // eslint-disable-next-line no-unreachable
+      void externalDefaultDisabledPlan;
+    }
     if (externalDefaults.length) {
       patch = toggleBundleInPatch(patch, {
         ok: true, entries: externalDefaults.map((entry) => ({ ...entry, disabled: false })),
@@ -1078,6 +1461,56 @@ function ensurePluginHostDeps(profileDirP: string): void {
       }, false);
       changed = true;
       for (const ext of externalDefaults) ctx.log('boot', `外部插件默认关闭（可在「设置 → 插件 → 管理」启用）: ${ext.id}`);
+    }
+    // catalog 标了 defaultEnabled:false、但 patch 里还没有显式 disabled 的包 ——
+    // 给它们补一条关闭行。判据完全来自 catalog，不推断 id、不猜分类，因此不会误伤。
+    //
+    // 为什么必须有这一步：自带 `dsh.bundle.patch` 的社区包（如 dsh-theme-endfield）
+    // 在 profile 里天然有一行 `- insert:`（bundle 层写入），该行**没有 disabled 字段**
+    // → 插件默认启用；而它的 `config.enabled: "0"` 只是插件内部开关，管不了插件加载。
+    // 实测后果：终末地主题默认打开、覆写 73 个 dsw-* 变量、与皮肤管理冲突。
+    //
+    // 为什么不复用上面的 externalDefaultDisabledPlan：它依赖 PLUGIN_SYNC_REGISTRY
+    // 覆盖全部 bundle（实际只 10/61），未登记包得 scoped-<hex> id 与分类表裸名 key
+    // 对不上 → 全落默认 'external'。实测解除 unresolvedCore 安全网后它会一次误禁
+    // 45 个插件（含 skin-switch、皮肤管理器、better-sidebar）。
+    const defaultDisabled = inSafeMode ? new Set<string>() : defaultDisabledBundlePackages();
+    if (defaultDisabled.size > 0) {
+      // 「已表态」必须查**两层** patch。
+      //
+      // 双 patch 层是既有设计：profile 层 `<home>/profiles/<name>/cordis.patch.yml`
+      // 与 home 层 `<home>/cordis.patch.yml`，后者优先级更高。皮肤管理器切换时
+      // 会同时写两层（见其 patchTargetsForProfile），而用户手动/其它插件也可能
+      // 只写其中一层。
+      //
+      // 实测踩过（2026-10-21）：只查 profile 层时，用户在上一轮切换皮肤写进 home 层的
+      // `disabled: false`（明确"启用 qq98"）被无视，这里又给 profile 层补了
+      // `disabled: true` → 两层对同一 id 给出相反值 → 审计报「两层不一致」，
+      // 且界面读到的是 home 层（生效=启用）而文件里看是关闭，正是"切换看似成功
+      // 实则无效"的复现路径。
+      const homePatchFile = path.join(path.dirname(path.dirname(path.dirname(patchFile))), 'cordis.patch.yml');
+      const decided = explicitDisabledEntryIds(patch);
+      try {
+        if (homePatchFile !== patchFile && fs.existsSync(homePatchFile)) {
+          for (const id of explicitDisabledEntryIds(fs.readFileSync(homePatchFile, 'utf8'))) decided.add(id);
+        }
+      } catch { /* home 层损坏时按未表态处理，仍受上层判定保护 */ }
+      const applied: string[] = [];
+      for (const name of bundled) {
+        if (typeof name !== 'string' || !defaultDisabled.has(name)) continue;
+        // entry id 从该包自己的 bundle patch 读；读不到就跳过 —— 绝不猜 id。
+        const identity = resolveBundleIdentity(profileDirP, name);
+        if (!identity.ok) continue;
+        for (const entry of identity.entries) {
+          if (decided.has(entry.id)) continue;   // 已表态（开或关）就尊重
+          patch = toggleBundleInPatch(patch, { ok: true, entries: [entry], entryIds: [entry.id] }, false);
+          applied.push(entry.id);
+        }
+      }
+      if (applied.length) {
+        changed = true;
+        ctx.log('boot', `catalog 默认关闭的插件已补 disabled 行（可在「设置 → 插件 → 管理」启用）: ${applied.join(', ')}`);
+      }
     }
     if (changed) {
       // 顺带清理历史遗留的孤儿 `- insert:` 行（v4.2/4.3 每次启动「剥离-回写」

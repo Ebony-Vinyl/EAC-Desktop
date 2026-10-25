@@ -51,8 +51,11 @@ interface InjectEntry { owner: string; rel: string; half: Half; injects: string[
 // 采集规则（单一事实源：本文件即门禁）
 // ---------------------------------------------------------------------------
 
-/** cordis 服务名：小写起头的标识符，可带 `.` 分段（`remote.pluginInventory`）。 */
-const SERVICE_SUPER_RE = /super\(\s*[A-Za-z_$][\w$]*\s*,\s*["']([a-z][\w]*(?:\.[\w]+)*)["']\s*\)/g;
+/** cordis 服务名：小写起头的标识符，可带 `.` 分段（`remote.pluginInventory`）。
+ *  注册允许带尾部选项参（0.2.0 的 sessionController 是
+ *  `super(ctx, "sessionController", { namespace: "session" })`），故名字后
+ *  允许再跟参数列表，只锁名字本身。 */
+const SERVICE_SUPER_RE = /super\(\s*[A-Za-z_$][\w$]*\s*,\s*["']([a-z][\w]*(?:\.[\w]+)*)["']\s*(?:,[^)]*)?\)/g;
 const SERVICE_PROVIDE_RE = /(?:reflect\.)?provide\(\s*["']([a-z][\w]*(?:\.[\w]+)*)["']/g;
 /** client runner 的 client 服务目录（生成数据：key/summary 对）。 */
 const SERVICE_CATALOG_RE = /key:\s*["']([a-z][\w]*(?:\.[\w]+)*)["'],\s*\n\s*summary:/g;
