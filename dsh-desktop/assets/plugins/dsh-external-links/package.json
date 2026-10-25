@@ -1,0 +1,28 @@
+{
+  "name": "dsh-external-links",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Route app-level external links (window.open / target=_blank) to the system browser and auto-open the DeepSeek sign-in authorization page once per attempt.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "tests",
+    "README.md"
+  ],
+  "scripts": {
+    "test": "node tests/smoke.mjs",
+    "check": "node --check lib/index.js && node --check lib/client.js"
+  },
+  "dsh": {
+    "client": {
+      "platform": "web"
+    }
+  },
+  "license": "MIT"
+}
