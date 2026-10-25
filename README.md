@@ -52,6 +52,10 @@ Deepseek Harness EAC 是基于 [DeepSeek Harness](https://github.com/deepseek-ai
 
 ### 下载与启动
 
+EAC 启动器（独立的多实例 / 多内核管理器，可与桌面端并存安装）：
+[EAC-Launcher v0.1.0 Windows x64](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/tag/launcher-v0.1.0)
+自带 Node 24.22.1 运行时，无需另装 Node。使用说明见 [`launcher/README.md`](launcher/README.md)。
+
 Windows 最新稳定版：**v6.0.0**。其余平台按包格式列出最近发布的下载文件，版本分别标注。
 
 | 平台 | 版本 | 直接下载 | 更新时间（北京时间） |

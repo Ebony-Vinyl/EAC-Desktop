@@ -52,6 +52,11 @@ Model requests use your configured provider. Activation, compatibility and addit
 
 ### Download and launch
 
+EAC Launcher (standalone multi-instance / multi-kernel manager, installs alongside the desktop app):
+[EAC-Launcher v0.1.0 for Windows x64](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/tag/launcher-v0.1.0)
+ships its own Node 24.22.1 runtime, so no separate Node install is needed. See
+[`launcher/README.md`](launcher/README.md) for usage.
+
 Latest stable Windows release: **v6.0.0**. Other platforms link to the most recent published package for each listed format.
 
 | Platform | Version | Download | Updated (UTC+8) |
