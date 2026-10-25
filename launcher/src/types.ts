@@ -224,6 +224,8 @@ export interface Backup {
   id: string;
   createdAt: string;
   path: string;
+  /** manual = 手动备份；automatic = 操作前自动安全点（按数量轮换）。 */
+  kind: "manual" | "automatic";
 }
 export type View = "overview" | "instances" | "market" | "kernels" | "releases" | "packs" | "tasks" | "achievements" | "profile" | "settings";
 export type JsonPayload = Record<string, unknown>;

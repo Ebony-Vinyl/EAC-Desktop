@@ -65,6 +65,8 @@ impl Engine {
             session: Arc::new(Mutex::new(social::Session::default())),
         };
         engine.state(|_| Ok(()))?;
+        // trash 只是回滚缓冲；启动时轮换一次，避免长期占用磁盘。
+        let _ = engine.prune_trash();
         // 启动次数是真实事件：每次引擎进程打开只记录一次。
         let _ = engine.achievement_event("open", None);
         Ok(engine)
@@ -249,7 +251,7 @@ impl Engine {
                 let id = required(payload, "id")?;
                 let _guard = self.instance_lock(id)?;
                 let instance = self.stopped(id)?;
-                self.backup(&instance)?;
+                self.backup_kind(&instance, BackupKind::Manual)?;
                 let _ = self.achievement_event("backup_created", None);
                 self.snapshot()
             }
@@ -543,7 +545,41 @@ impl Engine {
             let rollback = fs::rename(&destination, &source);
             return Err(format!("{error}; deletion rollback: {rollback:?}"));
         }
+        // 实例已删除，它的备份不会再被任何 UI 引用；留在磁盘上只会成为无法清理的孤儿数据。
+        if let Ok(backups) = self.path(format!("backups/{id}")) {
+            let _ = fs::remove_dir_all(&backups);
+        }
+        let _ = self.prune_trash();
         self.snapshot()
+    }
+
+    // trash 只是回滚缓冲：限制条目总数与保留天数，避免长期运行后无限增长。
+    fn prune_trash(&self) -> Result<()> {
+        const KEEP: usize = 20;
+        const MAX_AGE: Duration = Duration::from_secs(30 * 24 * 60 * 60);
+        let root = self.path("trash")?;
+        let mut entries: Vec<(PathBuf, std::time::SystemTime)> = Vec::new();
+        for entry in fs::read_dir(&root).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let Ok(metadata) = entry.metadata() else {
+                continue;
+            };
+            let modified = metadata.modified().unwrap_or(std::time::SystemTime::UNIX_EPOCH);
+            entries.push((entry.path(), modified));
+        }
+        entries.sort_by(|a, b| b.1.cmp(&a.1));
+        let now = std::time::SystemTime::now();
+        for (index, (path, modified)) in entries.into_iter().enumerate() {
+            let expired = now.duration_since(modified).is_ok_and(|age| age > MAX_AGE);
+            if index >= KEEP || expired {
+                let _ = if path.is_dir() {
+                    fs::remove_dir_all(&path)
+                } else {
+                    fs::remove_file(&path)
+                };
+            }
+        }
+        Ok(())
     }
 
     // 扫描本机常见安装位置，列出可注册的 @deepseek-ai/dsh 内核目录与
@@ -1661,6 +1697,12 @@ writeProfileBundles(profileDir, inventory.manifest, bundles);
     }
 
     fn backup(&self, instance: &Instance) -> Result<Backup> {
+        self.backup_kind(instance, BackupKind::Automatic)
+    }
+
+    // 备份是完整 home 副本，必须限流：自动安全点只保留最近几份，用户手动备份
+    // 保留更多。轮换在写入成功后执行，失败时不影响本次备份的可用性。
+    fn backup_kind(&self, instance: &Instance, kind: BackupKind) -> Result<Backup> {
         let id = new_id();
         let base = self.path(format!("backups/{}/{id}", instance.id))?;
         files::copy_tree(Path::new(&instance.home), &base.join("home"))?;
@@ -1672,43 +1714,81 @@ writeProfileBundles(profileDir, inventory.manifest, bundles);
                 instance_id: instance.id.clone(),
                 kernel_id: instance.kernel_id.clone(),
                 created_at: created_at.clone(),
+                kind,
             },
         )?;
+        let _ = self.prune_backups(&instance.id, kind);
         Ok(Backup {
             id,
             created_at,
             path: text(&base),
+            kind,
         })
+    }
+
+    // 每类备份的保留数量。自动安全点在每次插件操作前都会产生，是磁盘增长的主因。
+    fn backup_keep(kind: BackupKind) -> usize {
+        match kind {
+            BackupKind::Automatic => 3,
+            BackupKind::Manual => 10,
+        }
+    }
+
+    fn prune_backups(&self, id: &str, kind: BackupKind) -> Result<()> {
+        let keep = Self::backup_keep(kind);
+        let mut same_kind: Vec<(String, String)> = self
+            .backup_entries(id)?
+            .into_iter()
+            .filter(|(_, manifest)| manifest.kind == kind)
+            .map(|(backup_id, manifest)| (backup_id, manifest.created_at))
+            .collect();
+        same_kind.sort_by(|a, b| b.1.cmp(&a.1));
+        for (backup_id, _) in same_kind.into_iter().skip(keep) {
+            let path = self.path(format!("backups/{id}/{backup_id}"))?;
+            let _ = fs::remove_dir_all(&path);
+        }
+        Ok(())
+    }
+
+    // 读取实例全部完整备份（跳过中断的复制：没有 manifest 的目录）。
+    fn backup_entries(&self, id: &str) -> Result<Vec<(String, BackupManifest)>> {
+        let base = self.path(format!("backups/{id}"))?;
+        let mut entries = Vec::new();
+        if !base.exists() {
+            return Ok(entries);
+        }
+        for entry in fs::read_dir(&base).map_err(|e| e.to_string())? {
+            let entry = entry.map_err(|e| e.to_string())?;
+            let backup_id = entry.file_name().to_string_lossy().into_owned();
+            if files::valid_id(&backup_id).is_err() {
+                continue;
+            }
+            let path = managed(&base, &entry.path())?;
+            let manifest_path = managed(&base, &path.join("manifest.json"))?;
+            if !manifest_path.is_file() {
+                continue;
+            }
+            let manifest: BackupManifest = files::read_json(&manifest_path)?;
+            if manifest.schema_version != 1 || manifest.instance_id != id {
+                return Err("Backup manifest does not belong to this instance".into());
+            }
+            entries.push((backup_id, manifest));
+        }
+        entries.sort_by(|a, b| b.1.created_at.cmp(&a.1.created_at));
+        Ok(entries)
     }
 
     fn backups(&self, id: &str) -> Result<Value> {
         self.instance(id)?;
-        let base = self.path(format!("backups/{id}"))?;
         let mut backups = Vec::new();
-        if base.exists() {
-            for entry in fs::read_dir(&base).map_err(|e| e.to_string())? {
-                let entry = entry.map_err(|e| e.to_string())?;
-                let backup_id = entry.file_name().to_string_lossy().into_owned();
-                if files::valid_id(&backup_id).is_err() {
-                    continue;
-                }
-                let path = managed(&base, &entry.path())?;
-                let manifest = managed(&base, &path.join("manifest.json"))?;
-                if !manifest.is_file() {
-                    continue; // An interrupted copy is never presented as a complete backup.
-                }
-                let manifest: BackupManifest = files::read_json(&manifest)?;
-                if manifest.schema_version != 1 || manifest.instance_id != id {
-                    return Err("Backup manifest does not belong to this instance".into());
-                }
-                backups.push(Backup {
-                    id: backup_id,
-                    created_at: manifest.created_at,
-                    path: text(&path),
-                });
-            }
+        for (backup_id, manifest) in self.backup_entries(id)? {
+            backups.push(Backup {
+                id: backup_id.clone(),
+                created_at: manifest.created_at,
+                path: text(&self.path(format!("backups/{id}/{backup_id}"))?),
+                kind: manifest.kind,
+            });
         }
-        backups.sort_by(|a, b| b.created_at.cmp(&a.created_at));
         Ok(json!({"backups": backups}))
     }
 
@@ -1727,13 +1807,15 @@ writeProfileBundles(profileDir, inventory.manifest, bundles);
         if let Some(kernel_id) = &manifest.kernel_id {
             self.kernel(kernel_id)?;
         }
-        self.backup(&instance)?;
+        // 被替换下来的当前 home 会移入 trash（可回滚），因此不再额外生成一份
+        // 完整备份——那样一次恢复会同时占用两份全量磁盘空间。
         self.restore_home(
             &instance,
             &Backup {
                 id: backup_id.into(),
                 created_at: manifest.created_at,
                 path: text(&path),
+                kind: manifest.kind,
             },
         )?;
         self.state(|state| {
@@ -2567,5 +2649,83 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    // 自动安全点在每次插件操作前产生；磁盘占用必须被限制住。
+    #[test]
+    fn automatic_backups_rotate_and_manual_ones_are_kept_longer() {
+        let (_root, engine) = test_engine();
+        let id = engine
+            .create_instance_record(&json!({"name":"Rotate","kind":"official-desktop"}))
+            .unwrap();
+        let instance = engine.instance(&id).unwrap();
+        for _ in 0..8 {
+            engine.backup_kind(&instance, BackupKind::Automatic).unwrap();
+        }
+        let automatic = engine.backup_entries(&id).unwrap();
+        assert_eq!(automatic.len(), 3, "automatic safety points must rotate");
+        assert!(automatic
+            .iter()
+            .all(|(_, manifest)| manifest.kind == BackupKind::Automatic));
+
+        for _ in 0..14 {
+            engine.backup_kind(&instance, BackupKind::Manual).unwrap();
+        }
+        let entries = engine.backup_entries(&id).unwrap();
+        let manual = entries.iter().filter(|(_, m)| m.kind == BackupKind::Manual).count();
+        let auto = entries.iter().filter(|(_, m)| m.kind == BackupKind::Automatic).count();
+        assert_eq!(manual, 10, "manual backups keep a longer history");
+        assert_eq!(auto, 3, "automatic rotation is independent of manual ones");
+    }
+
+    // 删除实例后，它的备份目录不能再作为孤儿数据留在磁盘上。
+    #[test]
+    fn deleting_an_instance_removes_its_backups() {
+        let (_root, engine) = test_engine();
+        let id = engine
+            .create_instance_record(&json!({"name":"Delete","kind":"official-desktop"}))
+            .unwrap();
+        let instance = engine.instance(&id).unwrap();
+        engine.backup_kind(&instance, BackupKind::Manual).unwrap();
+        let backups = engine.path(format!("backups/{id}")).unwrap();
+        assert!(backups.exists());
+
+        engine.call("delete_instance", json!({"id":id})).unwrap();
+        assert!(
+            !backups.exists(),
+            "instance backups must not survive instance deletion"
+        );
+    }
+
+    // 中断的复制不产生 manifest，不能被当作可用备份，也不应阻塞轮换。
+    #[test]
+    fn interrupted_backup_directories_are_ignored() {
+        let (_root, engine) = test_engine();
+        let id = engine
+            .create_instance_record(&json!({"name":"Partial","kind":"official-desktop"}))
+            .unwrap();
+        let partial = engine
+            .path(format!("backups/{id}/{}", new_id()))
+            .unwrap();
+        fs::create_dir_all(partial.join("home")).unwrap();
+        assert!(engine.backup_entries(&id).unwrap().is_empty());
+        let instance = engine.instance(&id).unwrap();
+        engine.backup_kind(&instance, BackupKind::Automatic).unwrap();
+        assert_eq!(engine.backup_entries(&id).unwrap().len(), 1);
+    }
+
+    // trash 只是回滚缓冲，条目数量必须有上限。
+    #[test]
+    fn trash_is_rotated_to_a_bounded_size() {
+        let (_root, engine) = test_engine();
+        let trash = engine.path("trash").unwrap();
+        for index in 0..26 {
+            let entry = trash.join(format!("entry-{index}"));
+            fs::create_dir_all(&entry).unwrap();
+            fs::write(entry.join("file.txt"), "x").unwrap();
+        }
+        engine.prune_trash().unwrap();
+        let remaining = fs::read_dir(&trash).unwrap().count();
+        assert!(remaining <= 20, "trash kept {remaining} entries");
     }
 }

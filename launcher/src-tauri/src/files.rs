@@ -171,7 +171,7 @@ pub fn copy_tree(source: &Path, destination: &Path) -> Result<()> {
             destination.display()
         ));
     }
-    fs::create_dir_all(destination).map_err(|e| e.to_string())?;
+    fs::create_dir_all(destination).map_err(display_error)?;
     let destination = canonical(destination)?;
     if destination.starts_with(&source) || source.starts_with(&destination) {
         return Err("Copy trees must not overlap".into());
@@ -238,6 +238,18 @@ fn rebase_entries(root: &Path, current: &Path, old_root: &Path) -> Result<()> {
     Ok(())
 }
 
+// 磁盘写满是最常见的失败原因，但它只在 os error 112 / ENOSPC 时出现。
+// 把系统错误翻译成用户能直接采取行动的文字，其它错误保持原样。
+pub fn display_error(error: std::io::Error) -> String {
+    const DISK_FULL: i32 = 112; // ERROR_DISK_FULL (Windows)
+    if error.raw_os_error() == Some(DISK_FULL) || error.kind() == std::io::ErrorKind::StorageFull {
+        return format!(
+            "磁盘空间不足，无法写入备份或实例文件：{error}。请先清理磁盘后再重试。"
+        );
+    }
+    error.to_string()
+}
+
 fn copy_entries(
     root: &Path,
     source: &Path,
@@ -256,10 +268,10 @@ fn copy_entries(
                 .map_err(|_| format!("Link escapes copied home: {}", path.display()))?;
             links.push((dest, relative.to_owned(), target.is_dir()));
         } else if meta.is_dir() {
-            fs::create_dir(&dest).map_err(|e| e.to_string())?;
+            fs::create_dir(&dest).map_err(display_error)?;
             copy_entries(root, &path, &dest, links)?;
         } else if meta.is_file() {
-            fs::copy(&path, &dest).map_err(|e| format!("Copy {}: {e}", path.display()))?;
+            fs::copy(&path, &dest).map_err(|e| format!("复制 {} 失败：{}", path.display(), display_error(e)))?;
         } else {
             return Err(format!("Unsupported special file: {}", path.display()));
         }

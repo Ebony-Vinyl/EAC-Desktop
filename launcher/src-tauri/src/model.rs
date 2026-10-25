@@ -140,12 +140,23 @@ pub struct State {
     pub processes: BTreeMap<String, OwnedProcess>,
 }
 
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum BackupKind {
+    // 用户主动创建的备份；保留得更久。
+    #[default]
+    Manual,
+    // 插件安装/启停、切换内核前的安全点；数量少，自动轮换。
+    Automatic,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Backup {
     pub id: String,
     pub created_at: String,
     pub path: String,
+    pub kind: BackupKind,
 }
 
 #[derive(Deserialize, Serialize)]
@@ -155,6 +166,9 @@ pub struct BackupManifest {
     pub instance_id: String,
     pub kernel_id: Option<String>,
     pub created_at: String,
+    // 旧版 manifest 没有该字段：按用户备份处理，行为保持不变。
+    #[serde(default)]
+    pub kind: BackupKind,
 }
 
 #[derive(Deserialize, Serialize)]
