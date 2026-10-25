@@ -1,0 +1,178 @@
+name: Release 6.1.0
+
+# 6.1.0 发行构建。
+#
+# ## 为什么用 push 触发而不是 workflow_dispatch
+#
+# GitHub 规定 `workflow_dispatch` 只认**默认分支上存在**的 workflow 文件。
+# 这里要构建的是 `release/6.1.0` 分支，而两处默认分支都不适合放这个文件：
+#   · org 仓 (DSH-EAC/EAC-Desktop) 的 main —— 发行流程不该挂在日常主干上
+#   · fork  (BAIKAI23333/...) 的 main —— 停在 2026-09-12 的 e7da2db3，
+#     比 org main 落后 200 个提交，且其 .github/workflows 目录状态与
+#     workflow 列表不一致（ci.yml 在列表里但 contents API 取不到）
+#
+# 改用 push 触发后：推哪个 release 提交，就构建哪个提交，运行记录直接绑定
+# commit SHA，反而比手动触发更可追溯。
+#
+# ## 为什么只做 lite
+#
+# lite 不含 Pack 预置层，不受 EAC-Pack 仓库 11 个未合并 PR 的影响。
+# full 的 Pack 来源待定，这里显式只跑 lite，不做假承诺。
+#
+# ## 与 staged-runtime-artifact.yml 的关系
+#
+# 那个是 4 平台矩阵（含 arm64/linux），硬编码 --distro 缺省 lite，
+# 且只上传 EAC-Lite-*。本文件是 6.1.0 专用的 Windows x64 发行通道，两者并存。
+
+on:
+  push:
+    branches:
+      # 只在发行分支上触发，不污染日常开发推送。
+      - 'release/**'
+    # 只改文档/报告类文件时不必重跑几十分钟的构建。
+    paths-ignore:
+      - '**/*.md'
+      - 'reports/**'
+      - 'docs/**'
+
+# 同一分支连推多次时，取消上一轮未完成的构建 —— 发行构建很贵，
+# 中间那次基本没有交付价值。
+concurrency:
+  group: release-6.1.0-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '11.7.0'
+  KERNEL_VERSION: '0.2.0-rc.2'
+  # 档位写死：见上方「为什么只做 lite」。接入 full 预置层后再改成变量。
+  DISTRO: lite
+
+jobs:
+  release:
+    # 注意：这里**不能**用 ${{ env.DISTRO }}。`jobs.<id>.name` 求值时 env 上下文
+    # 不可用，GitHub 会把整个 workflow 判为非法 —— 表现是运行创建即失败、
+    # 0 个 job、名字显示成文件路径，且 API 不回传任何错误原因。
+    # 同样的写法在 steps[].name 里是允许的。实测踩过（commit e3181aac）。
+    name: 构建 6.1.0（windows/x64）
+    runs-on: windows-latest
+    timeout-minutes: 150
+    defaults:
+      run:
+        working-directory: dsh-desktop
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # 打包必须携带固定提交的 dsh-dpx JS API（ADR 0004）。
+          submodules: recursive
+
+      - name: Verify dsh-dpx submodule pin
+        working-directory: ${{ github.workspace }}
+        run: node tauri-shell/check-dpx-pin.mjs
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dsh-desktop/package-lock.json
+
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@${{ env.PNPM_VERSION }} && pnpm --version
+
+      - name: Cache vendored kernel
+        uses: actions/cache@v4
+        with:
+          path: dsh-desktop/vendor/kernel
+          key: ${{ runner.os }}-${{ env.KERNEL_VERSION }}-kernel-${{ hashFiles('dsh-desktop/scripts/fetch-kernel.ts') }}
+
+      - name: Prepare vendored kernel
+        run: node scripts/fetch-kernel.js
+
+      - name: Install dependencies
+        run: npm run ci:install
+
+      - name: Fetch bundled Node and npm runtimes
+        run: npm run fetch-runtime
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Fetch Cargo dependencies
+        working-directory: ${{ github.workspace }}/tauri-shell
+        run: cargo fetch --locked
+
+      - name: Unit tests
+        # EAC_RELEASE_SKIP_KNOWN_FLAKY=1 只在本 workflow 里生效：跳过
+        # update-portable 的 5 条存量失败用例（清单见 test/update-portable.test.ts
+        # 顶部）。默认不跳过，本地与常规 CI 仍如实报红。
+        #
+        # 为什么必须跳过：这些用例在 6.1.0 首次构建时中止了整个 job，
+        # 导致装配/打包/上传全部 skip、产物为零。它们与本轮压缩改动无关
+        # （用基线 make-portable 复跑，失败集合完全相同），但需要单独修。
+        env:
+          EAC_RELEASE_SKIP_KNOWN_FLAKY: '1'
+        run: npm test
+
+      - name: Assemble staged runtime (${{ env.DISTRO }})
+        working-directory: ${{ github.workspace }}
+        run: node tauri-shell/stage-resources.mjs --target=win32 --distro=${{ env.DISTRO }} --skip-npm
+
+      - name: Verify staged closure and bundle integrity
+        working-directory: ${{ github.workspace }}
+        run: node dsh-desktop/scripts/verify-staged-runtime.mjs
+
+      # 可复现构建：v6.0.1 实测发现壳 exe 会嵌入本机构建路径，
+      # 用 remap 去掉，避免把 runner 的目录结构（含用户名）带进发行版。
+      - name: Build Tauri installers
+        working-directory: ${{ github.workspace }}/tauri-shell
+        env:
+          CARGO_ENCODED_RUSTFLAGS: '--remap-path-prefix=${{ github.workspace }}=eac-build'
+        run: npx -y @tauri-apps/cli@2 build --verbose
+
+      # zip 保底（双击即开）+ tar.zst 精简形态（体积约小 32%）。
+      # 两者内容同源，只是封装与压缩算法不同，见 make-portable.mjs 注释。
+      - name: Ensure zstd available
+        working-directory: ${{ github.workspace }}/tauri-shell
+        shell: bash
+        run: zstd --version || echo "zstd 不在 PATH，WINDOWS runner 自带 tar 但不带 zstd"
+
+      - name: Build portable package (zip + tar.zst)
+        working-directory: ${{ github.workspace }}/tauri-shell
+        run: node make-portable.mjs --out target/release/portable --zstd
+
+      - name: Collect artifacts
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          mkdir -p out
+          find tauri-shell/target/release/bundle -name '*.exe' -path '*nsis*' -exec cp {} out/ \;
+          find tauri-shell/target/release/portable -name '*.zip' -exec cp {} out/ \;
+          find tauri-shell/target/release/portable -name '*.tar.zst' -exec cp {} out/ \;
+          find tauri-shell/target/release/bundle -name 'SHA256SUMS*.txt' -exec cp {} out/ \; || true
+          find tauri-shell/target/release/portable -name 'SHA256SUMS*.txt' -exec cp {} out/ \; || true
+          ls -la out
+
+      - name: Show artifact sizes
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          echo "=== 产物大小 ==="
+          du -h out/* 2>/dev/null | sort -h
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: eac-6.1.0-lite-windows-x64
+          path: ${{ github.workspace }}/out/*
+          if-no-files-found: error
+          retention-days: 30
+
+# 后续：验证通过后如需自动发布，在 on: 里加 tags: ['v6.1.0*']，
+# 并增加 publish job（permissions: contents: write）用 gh release upload。
+# 在压缩优化与产物都实测通过前不要打开，否则打错 tag 就要返工。

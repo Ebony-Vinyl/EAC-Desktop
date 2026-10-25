@@ -823,6 +823,31 @@ fn eac_data_root() -> std::path::PathBuf {
     )
 }
 
+/// sidecar stderr 的落盘目标（2026-10-24 缺陷修复）。
+///
+/// 为什么必须有：release 壳是 windows 子系统程序、无控制台，此前把 sidecar
+/// stderr 设成 `Stdio::null()` 直接丢弃。sidecar 一旦在启动早期失败
+/// （环境初始化 EPERM、注册表冲突、依赖缺失…），用户只看到主窗关闭，
+/// 没有任何可自助诊断的信息，支持侧也无从取证。
+///
+/// 行为：`<data_root>/logs/sidecar.log`，追加写。打不开文件时退回 `Stdio::null()`
+/// —— 日志能力是诊断增强，**绝不能**因为它让启动失败。
+fn sidecar_stderr_sink(data_root: &std::path::Path) -> Stdio {
+    let dir = data_root.join("logs");
+    if std::fs::create_dir_all(&dir).is_err() {
+        return Stdio::null();
+    }
+    let file = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("sidecar.log"));
+    match file {
+        Ok(f) => Stdio::from(f),
+        Err(_) => Stdio::null(),
+    }
+}
+
+
 /// `eac_data_root` 的**纯函数**核心：不读全局环境，参数即输入。
 ///
 /// 拆出来是为了可测：`std::env::set_var` 是进程全局的，直接改它会让并行运行的
@@ -2129,6 +2154,9 @@ impl Sidecar {
     async fn spawn(app: Option<&tauri::AppHandle>) -> Result<Self, String> {
         let node = resolve_node();
         let script = sidecar_script();
+        // 产品数据根：既用于注入 sidecar 的隔离 env（下方），也用于 sidecar
+        // stderr 日志落盘位置。提前取一次，避免同一值算两遍。
+        let data_root = eac_data_root();
         eprintln!(
             "[sidecar] spawning node={} script={}",
             node,
@@ -2145,12 +2173,20 @@ impl Sidecar {
         cmd.arg(&script)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            // 开发期诊断直通终端；release 无控制台，显式丢弃（inherit 在
-            // windows 子系统下无有效句柄）。
+            // 开发期诊断直通终端；release 无控制台，改为**落盘**（2026-10-24）。
+            //
+            // 此前 release 用 Stdio::null() 直接丢弃 sidecar 的 stderr —— 后果是
+            // sidecar 启动失败时（环境初始化 EPERM / 注册表冲突 / 任何崩溃）
+            // 用户只看到主窗关闭（「双击闪退」），零线索；支持侧也无从取证。
+            // 实测踩过：一个 "Environment --eac-stable is already registered at
+            // <旧路径>" 的 fail-closed 退出，因为日志被丢，排查花了数小时。
+            //
+            // 落盘位置：<产品数据根>/logs/sidecar.log（随安装位置隔离，
+            // 与 runtime.log 同目录，用户反馈时可直接取）。
             .stderr(if cfg!(debug_assertions) {
                 Stdio::inherit()
             } else {
-                Stdio::null()
+                sidecar_stderr_sink(&data_root)
             });
         // node.exe 是控制台子系统程序：GUI 父进程派生时若不加
         // CREATE_NO_WINDOW 会自建控制台窗口（0x08000000）。
@@ -2167,8 +2203,21 @@ impl Sidecar {
         // 安装环境隔离（ADR 0004）：正式壳启动始终注入隔离根 —— 只给产品数据根
         // 与通道，dpx 的 storageRoot/环境名/环境根由 L2 调 dsh-dpx 推导。
         let channel = eac_channel();
-        cmd.env("DSH_EAC_DATA_ROOT", eac_data_root());
+        cmd.env("DSH_EAC_DATA_ROOT", &data_root);
         cmd.env("DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL", channel);
+        // dpx 注册表也必须隔离（2026-10-24 用户实测缺陷）。
+        //
+        // 此前只隔离 storageRoot，registryHome 回落到真实 %LOCALAPPDATA%\DSH\DPX
+        // —— 那是一台机器上**所有安装位置共享**的全局注册表。后果：
+        //   1) 用户把装好的产品挪到别的目录 → storageRoot 变了但注册表仍记着
+        //      旧环境根 → create 抛 "already registered at <旧路径>" → sidecar
+        //      fail-closed 退出 → 主窗关闭 = 用户看到「双击闪退」，且此后每次
+        //      启动都一样（旧记录永不失效，只能手工删注册表才能恢复）；
+        //   2) 同机多实例（不同版本/不同位置）互相抢同一份注册表。
+        //
+        // 修法与调试启动器 tools/launch.mjs 一致（它早就显式设了这个变量，
+        // 所以调试版从未暴露该问题）：注册表收进产品数据根，随安装位置走。
+        cmd.env("DSH_EAC_DPX_REGISTRY_HOME", data_root.join("dpx").join("registry"));
         // A release default must not impersonate an explicit environment choice.
         // L2 resolves the persisted binding and dpx's existing beta identity first.
         if let Some(app) = app {
@@ -5255,7 +5304,11 @@ fn main() {
                 }
                 "feedback" => {
                     tauri::async_runtime::spawn(async move {
-                        if let Err(error) = open_external("https://github.com/Ebony-Vinyl/Deepseek-Harness-EAC/issues").await {
+                        // 仓库在 2026 年迁到 org 命名空间 EAC-Desktop（DSH-EAC/EAC-Desktop
+                        // 已重定向到 Ebony-Vinyl/EAC-Desktop）。旧地址
+                        // `Ebony-Vinyl/Deepseek-Harness-EAC` 不存在，用户点击后得到 404
+                        // （issue #472）。这里用重定向后的规范地址。
+                        if let Err(error) = open_external("https://github.com/Ebony-Vinyl/EAC-Desktop/issues").await {
                             eprintln!("[tray] open feedback failed: {}", error);
                         }
                     });

@@ -17,6 +17,7 @@ import path = require('node:path');
 import fs = require('node:fs');
 import os = require('node:os');
 import { updCtx, APP_ROOT } from './runtime-paths';
+import { seedFullProfile, adoptFullProfile, bindFullHostClosure } from './full-composition';
 // updater.js 尚未类型化（Wave 3 收编），先以窄签名消费。
 const updater = require('../../updater') as {
   loadSettings(c: ReturnType<typeof updCtx>): { shareWebProfile?: boolean };
@@ -89,6 +90,22 @@ export function ensureDesktopProfileInit() {
     const home = ctx.getDshHome() || path.join(os.homedir(), '.dsh');
     const dir = desktopProfileDir();
     if (desktopProfile() === 'web') return; // 共享模式走官方模板
+    if (seedFullProfile(dir)) {
+      bindFullHostClosure(home);
+      ctx.log('boot', '已从随包完整离线种子初始化 profile: ' + dir);
+    } else {
+      // issue #464：旧版最简本体（不带 full-pack）建出的隔离环境里，profile 只有
+      // 官方 base/web-app。full 包装进这种环境时 seedFullProfile 因「profile 已
+      // 存在」直接跳过，随包插件永远补不上，UI 里看不到任何插件且全程无提示。
+      // 这里只做增量补齐（绝不覆盖用户数据），补齐后 bindFullHostClosure 兜住
+      // 新增包所需的宿主闭包。
+      const adopted = adoptFullProfile(dir);
+      if (adopted) {
+        bindFullHostClosure(home);
+        ctx.log('boot', '已将既有 profile 补齐到随包完整清单: '
+          + `新增 ${adopted.adopted.length}、刷新 ${adopted.refreshed.length}、保留用户包 ${adopted.kept.length}`);
+      }
+    }
     fs.mkdirSync(dir, { recursive: true });
     const manifest = path.join(dir, 'package.json');
     if (!fs.existsSync(manifest)) {

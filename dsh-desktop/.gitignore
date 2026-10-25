@@ -142,3 +142,4 @@ lib/desktop/update-portable-helper.js
 /lib/desktop/update-linux-helper.js
 
 /lib/desktop/update-linux-root.js
+/lib/desktop/full-composition.js
