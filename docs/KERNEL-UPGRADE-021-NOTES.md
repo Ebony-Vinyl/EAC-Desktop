@@ -143,3 +143,11 @@ JSONL 删除使用后端配置的存储 root、原生路径查找与跨进程写
 - 分类器补齐本轮插件台账与 `tauri-shell/distro.mjs` 的路径；PowerShell 7 与 Windows PowerShell 5.1 回归通过，分类结果为 `ready`。Skill 自检保留两个环境警告：所选 Python 缺少 PyYAML，且当前工作流未通过 paths 过滤覆盖 Skill 路径。
 
 本轮日志位于忽略目录 `dsh-desktop/.verify/pr491-conflicts/main-1026-*.log`。上一版 `21e43dce` 的 [Windows/Linux x64/arm64 CI](https://github.com/Ebony-Vinyl/EAC-Desktop/actions/runs/40178269881) 已全部成功；本轮结果以新的 beta 提交为准。实际安装、真实模型请求和旧数据升级/回退仍未验收，V5 保持 **partial**。
+
+## 装配校验测试夹具修复（2026-10-26）
+
+`e5a939e6` 的 CI 在 Linux x64/arm64 和 Windows x64 的自动测试阶段各有 5 项失败；均由 `ci-runtime-scripts.test.ts` 的装配夹具缺少新必需文件 `full-composition.js` 引起，尚未进入安装包构建。上一节 809 项全量结果早于最后的装配校验器修改；之后只复跑的 31 项专项没有覆盖该夹具，不能作为最终提交的全量通过证据。
+
+本次在夹具中补齐该文件，并将必需文件数量断言从 43 更新为 44；新增缺失该文件时必须拒绝的回归。生产装配及校验要求保持不变。修正前本地重现相同 5 项失败，修正后该文件 8 项测试全部通过。
+
+最终代码重新执行完整 `npm test`：810 项，766 通过、44 跳过、0 失败，约 149 秒；未设置发行跳过开关。日志为忽略目录下的 `ci-1026-fixture-before.log` 和 `ci-1026-fixture-full.log`。本次仅修改测试夹具与验收记录，沿用同一生产代码的干净装配和隔离启动证据；跨平台构建以修复提交的 CI 为准。
