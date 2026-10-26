@@ -4,11 +4,30 @@ import { existsSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { hasNativeModelInputTypes, patchModelImageInputSource } = require('../scripts/patch-deps.js');
+const { hasNativeModelInputTypes, patchModelImageInputSource, patchModelSelectContrastSource } = require('../scripts/patch-deps.js');
 const modelsFile = new URL('../node_modules/@deepseek-ai/dsh-client-ui-settings-models/lib/client.js', import.meta.url);
 const presetFile = new URL('../node_modules/@deepseek-ai/dsh-client-ui-agent-preset/lib/client.js', import.meta.url);
 const jsx = (type: unknown, props: any) => ({ type, props });
 const runtime = { jsx, jsxs: jsx };
+
+test('0.2.1 model selects retain the mainline contrast fix on the real bundle', {
+  skip: !existsSync(modelsFile),
+}, () => {
+  const source = readFileSync(modelsFile, 'utf8');
+  const anchor = source.match(/select\.([A-Za-z0-9_-]+_input)\{cursor:pointer;max-width:240px\}/);
+  assert.ok(anchor, 'the reviewed model select anchor must remain present');
+  const patched = patchModelSelectContrastSource(source);
+  assert.ok(patched);
+  const selector = `select.${anchor[1]}`;
+  assert.ok(patched.includes(`${selector}{background-color:#232324;color:#f9fafb;color-scheme:light}`));
+  assert.ok(patched.includes(`${selector}::picker(select){background-color:#ffffff!important;color:#1b1b1c!important`));
+  assert.ok(patched.includes(`${selector} option{background-color:#ffffff!important;color:#1b1b1c!important`));
+  assert.ok(patched.includes(`${selector} option:checked{background-color:#e8f0fe!important;color:#1b1b1c!important}`));
+  assert.equal(patched.split('/*dsh-desktop-select-contrast*/').length, 2);
+  assert.equal(patchModelSelectContrastSource(patched), patched);
+  assert.equal(patchModelSelectContrastSource('const upstreamChanged = true;'), undefined);
+  assert.ok(hasNativeModelInputTypes(patched), 'native image input controls must remain intact');
+});
 
 test('0.2.1 native input types retain nonempty selection and image metadata semantics', {
   skip: !existsSync(modelsFile),

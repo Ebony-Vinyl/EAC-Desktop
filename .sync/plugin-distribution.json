@@ -515,6 +515,16 @@
         "target": "bundled",
         "state": "migrated"
       }
+    },
+    {
+      "id": "external-links",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
     }
   ]
 }

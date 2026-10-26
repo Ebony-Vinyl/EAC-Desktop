@@ -168,7 +168,7 @@ const ROOT_FILES = [
   'preset-sync.js', 'compact-preset-migrate.js', 'router-persona-preset-migrate.js',
 ];
 const LIB_DESKTOP = [
-  'proc.js', 'platform.js', 'runtime-paths.js', 'environment.js', 'profile.js',
+  'proc.js', 'platform.js', 'runtime-paths.js', 'environment.js', 'profile.js', 'full-composition.js',
   'runtime-patches.js', 'boot-server.js', 'package-manager.js', 'plugin-remove.js',
   // Task 3.3 插件治理三件套 + 其 lib/desktop 依赖
   'guard-box.js', 'companion-sync.js', 'plugin-ops.js',

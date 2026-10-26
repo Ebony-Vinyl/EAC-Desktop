@@ -129,3 +129,17 @@ JSONL 删除使用后端配置的存储 root、原生路径查找与跨进程写
 - 完整 lite staged 资源在隔离目录中，分别配合 x64/arm64 PE 占位夹具执行真实便携脚本；两个 ZIP 均为 46255 条目，最长路径从 186 降至 153，既有门槛和严格文件清单通过。x64 全包解压、逐文件摘要及 Inspector 全部 768 个资源的清单校验通过，打包输入未改动。两次使用同一份完整 staged 资源，仅验证资源装配和归档，不作为真实 ARM 构建或壳运行证据。
 
 本轮证据位于忽略目录 `dsh-desktop/.verify/pr491-conflicts/`：`ci-f19-failed.log`、`ci-portable-full-test.log` 与 `ci-portable-full.log`。实际安装、真实壳启动、旧数据升级及回退尚未完成，V5 仍为 **partial**；最新跨平台构建结果以修复提交的 Actions 为准。
+
+## 再次同步主线（2026-10-26）
+
+将 `main@1858ce3d` 合入共享 `beta`，保留 #494 外链/登录授权页修复和 #495 模型选择器对比度修复，以及既有 `0.2.1-rc.2` 适配。补丁导出冲突保留双方 API；装配清单冲突按实际并集更新为 15 个随包插件。
+
+- 新版模型设置产物仍匹配主线对比度补丁；真实产物回归检查控件、弹层、选项与选中项样式、重复应用及原生图片输入控件共存，并将 marker 加入安装树门禁。
+- 外链插件补齐 manifest、分发与历史台账，使用项目生成器重建 registry 和 lock，共 16 个登记项；退役 Core Bridge 仍不装配，实际随包 15 个。修正来源引用为 `SOURCES.json#C119`，保持 EAC 自研、禁用自动更新的既有策略。
+- 外链插件 6 项 smoke 通过，覆盖外链、同源地址、登录尝试去重、account 流和桥缺失回退；新版官方 account 契约仍提供 `watch`、`attempt.id/phase/authorizeUrl`。新增隔离 profile 复制后的真实 Host 导入用例通过；未进行真实账号登录。
+- `npm test`：809 项，765 通过、44 跳过、0 失败，约 161 秒；未设置发行跳过开关。补丁重放两次成功，第二次没有新增对比度改写。
+- 干净装配通过（15 个随包插件、643 个生产依赖包）。启动冒烟发现主线 profile 顶层依赖 `full-composition.js` 未装配，已补齐清单、必需文件校验与回归断言；相关 31 项测试通过。随后重新装配及 `verify-staged-runtime.mjs` 通过（44 个必需文件、9 个退役路径），隔离 DSH_HOME 的 sidecar 启动、鉴权重定向 303、页面 HTTP 200、停止/退出及端口关闭通过。没有模型请求或用户会话操作。
+- 装配后的外链 Host 真实导入通过；插件 Host/Client、身份元数据、补丁脚本及模型设置产物共五组源树/staged SHA256 一致，对比度 marker 存在。
+- 分类器补齐本轮插件台账与 `tauri-shell/distro.mjs` 的路径；PowerShell 7 与 Windows PowerShell 5.1 回归通过，分类结果为 `ready`。Skill 自检保留两个环境警告：所选 Python 缺少 PyYAML，且当前工作流未通过 paths 过滤覆盖 Skill 路径。
+
+本轮日志位于忽略目录 `dsh-desktop/.verify/pr491-conflicts/main-1026-*.log`。上一版 `21e43dce` 的 [Windows/Linux x64/arm64 CI](https://github.com/Ebony-Vinyl/EAC-Desktop/actions/runs/40178269881) 已全部成功；本轮结果以新的 beta 提交为准。实际安装、真实模型请求和旧数据升级/回退仍未验收，V5 保持 **partial**。

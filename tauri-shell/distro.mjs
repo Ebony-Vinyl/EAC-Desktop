@@ -49,6 +49,7 @@ export const BASE_PLUGIN_DIRS = [
   'dsh-easy-setup',
   'dsh-file-changes',
   'dsh-settings-scroll-fix',
+  'dsh-external-links',
   'dsh-unified-market',
   // 阶段 3：服务端 RPC / bridge 面已接回
   'dsh-plugin-shield',

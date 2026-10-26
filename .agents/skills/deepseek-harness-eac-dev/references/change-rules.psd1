@@ -197,7 +197,7 @@
         @{
             Name = 'plugin-source-ledger'
             Domain = 'plugins'
-            Pattern = '^dsh-desktop/assets/SOURCES\.json$'
+            Pattern = '^dsh-desktop/assets/SOURCES\.json$|^\.sync/(?:plugin-distribution|plugin-inventory-history|plugins(?:\.lock)?|policies)\.json$'
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
             Tests = @('test/minimal-core-boundary.test.ts', 'test/issue-415-skin-switch-retirement.test.ts')
@@ -352,7 +352,7 @@
         @{
             Name = 'packaging'
             Domain = 'updates-packaging'
-            Pattern = 'stage-resources|stage-platform-cache|stage-node-modules|audit-linux-bundle|name-lite-installers|lite-artifact-names|make-portable|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
+            Pattern = '^tauri-shell/distro\.mjs$|stage-resources|stage-platform-cache|stage-node-modules|audit-linux-bundle|name-lite-installers|lite-artifact-names|make-portable|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(

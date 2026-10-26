@@ -274,6 +274,11 @@
       "id": "ui-skin-deep-whale-manager",
       "path": "dsh-desktop/assets/plugins/dsh-client-ui-skin-deep-whale-manager",
       "patched": false
+    },
+    {
+      "id": "external-links",
+      "path": "dsh-desktop/assets/plugins/dsh-external-links",
+      "patched": false
     }
   ]
 }

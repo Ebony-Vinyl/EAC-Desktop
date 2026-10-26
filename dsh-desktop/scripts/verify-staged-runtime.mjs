@@ -29,6 +29,7 @@ const REQUIRED_FILES = [
   'dsh-desktop/vendor/npm/bin/npm-cli.js',
   'dsh-desktop/vendor/npm/package.json',
   'dsh-desktop/lib/desktop/profile.js',
+  'dsh-desktop/lib/desktop/full-composition.js',
   'dsh-desktop/lib/desktop/runtime-patches.js',
   'dsh-desktop/lib/desktop/boot-server.js',
   // v6 Task 3.3：插件治理闭包随包（companion-sync 顶层 require 链）

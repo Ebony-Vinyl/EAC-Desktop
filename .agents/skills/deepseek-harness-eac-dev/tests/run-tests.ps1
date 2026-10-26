@@ -194,7 +194,7 @@ Assert-Fixture -Name 'shell-skin-classification' -Condition (
 $tauriPackaging = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
     '-RepoPath', $repoRoot,
     '-FilesJsonBase64',
-    (ConvertTo-FilesJsonBase64 '["tauri-shell/audit-linux-bundle.mjs","tauri-shell/stage-platform-cache.mjs","tauri-shell/stage-node-modules.mjs","tauri-shell/tauri.linux.conf.json","tauri-shell/gen/schemas/linux-schema.json"]')
+    (ConvertTo-FilesJsonBase64 '["tauri-shell/audit-linux-bundle.mjs","tauri-shell/stage-platform-cache.mjs","tauri-shell/stage-node-modules.mjs","tauri-shell/distro.mjs","tauri-shell/tauri.linux.conf.json","tauri-shell/gen/schemas/linux-schema.json"]')
 )
 Assert-Fixture -Name 'tauri-packaging-root-files' -Condition (
     $tauriPackaging.exitCode -eq 0 -and
@@ -223,7 +223,7 @@ Assert-Fixture -Name 'client-full-update-classification' -Condition (
 
 $sourceLedger = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
     '-RepoPath', $repoRoot,
-    '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 '["dsh-desktop/assets/SOURCES.json"]')
+    '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 '["dsh-desktop/assets/SOURCES.json",".sync/plugin-distribution.json",".sync/plugin-inventory-history.json",".sync/plugins.json",".sync/plugins.lock.json",".sync/policies.json"]')
 )
 Assert-Fixture -Name 'plugin-source-ledger-classification' -Condition (
     $sourceLedger.exitCode -eq 0 -and

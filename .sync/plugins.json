@@ -542,6 +542,45 @@
         "reviewOnChange": true
       },
       "owner": "desktop-plugins"
+    },
+    {
+      "id": "external-links",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-external-links",
+      "packageName": "dsh-external-links",
+      "class": "internal",
+      "source": {
+        "kind": "internal",
+        "name": "dsh-external-links",
+        "reason": "maintained in this repository; no external source is declared"
+      },
+      "request": {
+        "mode": "exact",
+        "version": "1.0.0"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "lib/index.js",
+          "lib/client.js"
+        ],
+        "commands": [
+          "node tests/smoke.mjs"
+        ]
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
     }
   ],
   "skins": [],

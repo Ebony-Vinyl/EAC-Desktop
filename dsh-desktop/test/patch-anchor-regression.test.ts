@@ -169,6 +169,7 @@ test('transform/settings: 未知上游形态显式失败（拒绝静默跳过的
 // ── 安装树绊网：内核在位但补丁 marker 缺失 = postinstall 静默跳过 → 直接红。
 // 纯仓库 CI（无内核 node_modules）自动跳过；打包/发布 CI 必有内核，必检。──
 const INSTALLED_TRIPWIRE: Array<[string, string, RegExp]> = [
+  ['model-select-contrast', 'dsh-client-ui-settings-models/lib/client.js', /dsh-desktop-select-contrast/],
   ['settings-write-retry', 'dsh-client-ui-settings/lib/client.js', /dsh-desktop-settings-write-retry/],
   ['theme-write-converge', 'dsh-client-ui-theme/lib/client.js', /dsh-desktop-theme-write-converge/],
   ['config-edit-skip', 'dsh-config-editor/lib/index.js', /dsh-desktop-config-edit-reconcile-skip/],

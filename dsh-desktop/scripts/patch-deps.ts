@@ -825,6 +825,99 @@ function patchModelImageInputToggle(targetFile = MODEL_SETTINGS_FILE): boolean {
   return true;
 }
 
+// 默认皮肤（未启用皮肤包）下「设置 → 模型 → 添加模型提供商」的原生 <select>：
+// 控件本体吃主题色，但 Chromium 展开的弹出列表用系统浅色底，选项又继承主题的
+// 浅色前景，于是白底白字看不清（深色主题最明显）。给 option 补上主题底色/前景，
+// 展开列表才与页面观感一致；三处 select（提供者 / 自定义协议 / 探针协议）共用
+// 同一个 input 类，一处补丁全覆盖。
+const MODEL_SELECT_CONTRAST_MARKER = '/*dsh-desktop-select-contrast*/';
+const MODEL_SELECT_CONTRAST_RE = /select\.([A-Za-z0-9_-]+_input)\{cursor:pointer;max-width:240px\}/;
+
+function modelSelectContrastCssV1(selector: string): string {
+  // v1：靠 color-scheme 让原生弹层跟主题变深 + option 用主题变量。实测 WebView2
+  // 不跟随 color-scheme，且皮肤把 --dsw-alias-bg-layer-1 解析成半透明白，落到
+  // 白色弹层上仍是白底白字，故废弃。
+  return [
+    `${selector}{color-scheme:light}`,
+    `body[data-ds-dark-theme] ${selector}{color-scheme:dark}`,
+    `${selector} option{background-color:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary)}`,
+    MODEL_SELECT_CONTRAST_MARKER,
+  ].join('');
+}
+
+function modelSelectContrastCssV2(selector: string): string {
+  // v2：弹层行内改成固定白底深字（生效），但收起状态的本体仍吃
+  // `background: var(--dsw-alias-bg-layer-1)`——皮肤把它解析成 18% 半透明白，
+  // 白字落在浅底上依旧看不清，故 v3 再补本体底色。
+  return [
+    `${selector}{color-scheme:light}`,
+    `${selector} option{background-color:#ffffff;color:#1b1b1c}`,
+    MODEL_SELECT_CONTRAST_MARKER,
+  ].join('');
+}
+
+function modelSelectContrastCssV3(selector: string): string {
+  // v3：本体固定深底浅字 + option 固定白底深字。实测被皮肤（深海女仆工坊）的
+  // `body[data-dsh-orca-link] :is(...) select option` 高特异性规则压掉，故 v4
+  // 改用 !important 并接管 ::picker(select)。
+  return [
+    `${selector}{background-color:#232324;color:#f9fafb;color-scheme:light}`,
+    `${selector} option{background-color:#ffffff;color:#1b1b1c}`,
+    MODEL_SELECT_CONTRAST_MARKER,
+  ].join('');
+}
+
+function modelSelectContrastCss(selector: string): string {
+  // v4：Chromium 的 `appearance: base-select` 弹层是页面内绘制的（皮肤把
+  // ::picker(select) 画成深色，却把 option 文字设成深灰，于是深底深字）。
+  // 弹层容器与行内都用 !important 定成浅底深字：base-select 下直接生效；
+  // 老内核回退原生弹层时，::picker 规则被忽略，option 的深色文字落在系统
+  // 浅色弹层上同样可读。选中行用浅蓝底，避免系统高亮与深字打架。
+  return [
+    `${selector}{background-color:#232324;color:#f9fafb;color-scheme:light}`,
+    `${selector}::picker(select){background-color:#ffffff!important;color:#1b1b1c!important;border-color:rgba(0,0,0,.14)!important}`,
+    `${selector} option{background-color:#ffffff!important;color:#1b1b1c!important;background-image:none!important}`,
+    `${selector} option:checked{background-color:#e8f0fe!important;color:#1b1b1c!important}`,
+    MODEL_SELECT_CONTRAST_MARKER,
+  ].join('');
+}
+
+function patchModelSelectContrastSource(source: string): string | undefined {
+  const match = MODEL_SELECT_CONTRAST_RE.exec(source);
+  if (!match) return undefined;
+  const selector = `select.${match[1]}`;
+  const current = modelSelectContrastCss(selector);
+  if (source.includes(current)) return source;
+  for (const previous of [
+    modelSelectContrastCssV3(selector),
+    modelSelectContrastCssV2(selector),
+    modelSelectContrastCssV1(selector),
+  ]) {
+    if (source.includes(previous)) return source.replace(previous, current);
+  }
+  return source.replace(match[0], match[0] + current);
+}
+
+function patchModelSelectContrast(targetFile = MODEL_SETTINGS_FILE): boolean {
+  if (!fs.existsSync(targetFile)) {
+    console.log('[patch-deps] dsh-client-ui-settings-models 不存在，跳过');
+    return false;
+  }
+  const source = fs.readFileSync(targetFile, 'utf8');
+  const patched = patchModelSelectContrastSource(source);
+  if (patched === source) {
+    console.log('[patch-deps] 模型提供商下拉对比度补丁已应用，跳过');
+    return true;
+  }
+  if (patched === undefined) {
+    console.log('[patch-deps] 模型提供商下拉对比度锚点未命中（上游版本可能已更新），跳过');
+    return false;
+  }
+  writeFileAtomic(targetFile, patched);
+  console.log('[patch-deps] 已补丁 settings-models：原生下拉选项改用主题底色/前景（修默认皮肤白底白字）');
+  return true;
+}
+
 // 函数工具桥接兼容补丁：部分外部工具适配器忽略 JSON Schema 的 required 数组，
 // 把所有 properties 错当成必填。全权限默认策略下不存在可升级的更宽模式，仍
 // 暴露 sandbox_permissions/justification 会让适配器强制提交一条必然失败的同级
@@ -1265,6 +1358,7 @@ function main(): void {
     ['config-edit-skip', patchConfigEditorEditShortCircuit],
     ['app-boot-reconcile-gate', patchAppBootReconcileGate],
     ['model-image-input', patchModelImageInputToggle],
+    ['model-select-contrast', patchModelSelectContrast],
     ['optional-escalation-fields', patchOptionalEscalationFields],
     ['agent-preset-menu', patchAgentPresetMenu],
     ['menu-submenu-scroll', patchMenuSubmenuScroll],
@@ -1297,6 +1391,8 @@ module.exports = {
   patchModelImageInputSource,
   patchModelImageInputToggle,
   hasNativeModelInputTypes,
+  patchModelSelectContrastSource,
+  patchModelSelectContrast,
   patchSettingsWriteFailureSource,
   patchSettingsWriteFailure,
   patchThemeWriteConvergeSource,

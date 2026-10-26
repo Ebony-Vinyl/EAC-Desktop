@@ -322,6 +322,13 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // overflow 尺寸识别导航/内容滚动区；MutationObserver 跟随动态内容，卸载时
   // 完整清理样式、标记与监听器。纯客户端实现（host 半边 no-op）。
   { id: 'settings-scroll-fix', name: 'dsh-settings-scroll-fix', dir: 'dsh-settings-scroll-fix' },
+  // 外链路由 + 登录授权页自动打开：主窗 WebView 里 `window.open` / `<a
+  // target=_blank>` 被 wry 静默吞掉（主窗没有 new_window_req_handler），
+  // 账号菜单「意见反馈」、账号设置页「打开」因此点了没反应；登录流程在官方
+  // Desktop 由 Electron main 负责把 authorizeUrl 交给系统浏览器，Tauri 壳
+  // 没有这一层，弹窗只会停在「等待登录」。客户端半边把两类入口统一交给
+  // dshDesktop.openExternal（壳执行 ShellExecuteW），host 半边 no-op。
+  { id: 'external-links', name: 'dsh-external-links', dir: 'dsh-external-links' },
   // 壁纸引擎：host 半扫描本地 Wallpaper Engine（Steam 431960）的 Workshop /
   // 默认工程，把 Video/Web 类壁纸通过同源 HTTP 路由
   // （/wallpaper-engine/{inventory,media,preview}）下发；client 半绘制壁纸背景

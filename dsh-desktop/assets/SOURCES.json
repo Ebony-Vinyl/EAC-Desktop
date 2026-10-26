@@ -907,6 +907,29 @@
       }
     },
     {
+      "id": "C119",
+      "line": "main",
+      "name": "dsh-external-links",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "1.0.0",
+      "path": "dsh-desktop/assets/plugins/dsh-external-links",
+      "pathBaseline": "main@29458f39d5fbd15c27feef8f22cee85942bce279",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "no-upstream",
+        "note": "EAC 原研：主窗 window.open / target=_blank 外链改走系统浏览器，登录授权页按 attempt 自动打开",
+        "basis": "无独立上游证明",
+        "conflict": null
+      },
+      "resolution": {
+        "date": "2026-10-25",
+        "decision": "eac-original",
+        "evidence": "EAC 独有：Tauri 主窗未注册 new_window_req_handler，wry 静默吞掉 window.open；上游 dsh_desktop / npm @deepseek-ai/* 均无同名实现。"
+      }
+    },
+    {
       "id": "C037",
       "line": "main",
       "name": "@dsh-external/dsh-side-session",

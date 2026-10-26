@@ -27,7 +27,7 @@ test('copyPluginPackage repairs a missing file even when the source stamp remain
   }
 });
 
-for (const dir of ['dsh-boot-animation', 'dsh-wechat', 'ds-harness-remote']) {
+for (const dir of ['dsh-boot-animation', 'dsh-wechat', 'ds-harness-remote', 'dsh-external-links']) {
   test(`bundled ${dir} imports after copying into an isolated profile`, async (t) => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-plugin-copy-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));

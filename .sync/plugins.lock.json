@@ -1,7 +1,7 @@
 {
   "generatedRegistry": "dsh-desktop/lib/desktop/plugin-sync-registry.ts",
   "manifest": ".sync/plugins.json",
-  "manifestRevision": "e927f5a7103a0fd270f075e95ec5cb3d234c6600e4e4531140d79a3d196a09dd",
+  "manifestRevision": "3320bfe39b07d31a3b407f27373ede20751b826302401463bebba292aa1321da",
   "plugins": {
     "client-file-changes": {
       "compatibility": {},
@@ -224,6 +224,35 @@
         "name": "@deepseek-ai/dsh-easy-setup",
         "sha256": "8474eec1db5d50884090051cf1c6b72d53b6d41603b2b364e1aaec271a5ae4b9",
         "version": "0.1.0"
+      },
+      "sourceCommit": null
+    },
+    "external-links": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/index.js",
+          "lib/client.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 6,
+        "license": "MIT",
+        "packageName": "dsh-external-links",
+        "packageVersion": "1.0.0",
+        "path": "dsh-desktop/assets/plugins/dsh-external-links",
+        "treeSha256": "b4d5bb4a7f2fc3783bcca9b4964c7dff04ca8e3857feb6d14dab2a72987c99b7"
+      },
+      "manifestEntrySha256": "c226ece9cac544ce4d0bdfe29a5bcf6a68c4aeb0a4674774e1cda51d2300b6bf",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "1.0.0",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "internal",
+        "name": "dsh-external-links",
+        "sha256": "b4d5bb4a7f2fc3783bcca9b4964c7dff04ca8e3857feb6d14dab2a72987c99b7",
+        "version": "1.0.0"
       },
       "sourceCommit": null
     },
