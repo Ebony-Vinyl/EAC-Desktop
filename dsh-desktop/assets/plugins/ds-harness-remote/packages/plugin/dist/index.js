@@ -79213,7 +79213,8 @@ var TypertGatewaySwitch = class {
       this.runtime.stream = (request) => this.remoteTarget === void 0 || isLocalOnlyEndpoint(endpointOf(request)) ? this.localStream(request) : this.remoteTarget.open(endpointOf(request), { args: request.args }, request.signal ?? new AbortController().signal);
     }
     if (this.originalDispatch !== void 0) {
-      this.runtime.dispatchRpc = (endpoint, payload, signal) => this.remoteTarget === void 0 || isLocalOnlyEndpoint(endpoint) ? this.localDispatch(endpoint, payload, signal) : this.remoteTarget.dispatch(endpoint, payload, signal);
+      // EAC: preserve the authenticated Peer required by kernel 0.2.1.
+      this.runtime.dispatchRpc = (endpoint, payload, signal, ...context) => this.remoteTarget === void 0 || isLocalOnlyEndpoint(endpoint) ? this.localDispatch(endpoint, payload, signal, ...context) : this.remoteTarget.dispatch(endpoint, payload, signal);
     }
     if (this.originalOpen !== void 0) {
       const open = this.originalOpen;

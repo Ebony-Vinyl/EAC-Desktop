@@ -126,6 +126,19 @@ test('builtin rows are default-enabled, non-disableable and labelled', () => {
   assert.equal(locked.distributionClass, 'builtin');
 });
 
+test('bundled wallpaper is optional, defaults off and remains non-removable', () => {
+  const [row] = rows([{ insert: [{ id: 'wallpaper-engine', name: 'dsh-plugin-wallpaper-engine', disabled: true }] }], {
+    companion: [{ id: 'wallpaper-engine', name: 'dsh-plugin-wallpaper-engine' }],
+    coreIds: ['wallpaper-engine'],
+    distributionClasses: classes,
+  });
+  assert.equal(row.enabled, false);
+  assert.equal(row.defaultEnabled, false);
+  assert.equal(row.toggleable, true);
+  assert.equal(row.enableChoice, true);
+  assert.equal(row.removable, false);
+});
+
 test('recommended rows stay installable and enable-choice aware', () => {
   const [row] = rows([], {
     companion: [{ id: 'dsh-navbar', name: '@vlln/dsh-navbar' }],

@@ -334,7 +334,7 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // （/wallpaper-engine/{inventory,media,preview}）下发；client 半绘制壁纸背景
   // 并渲染玻璃质感。不依赖 window.dshDesktop（webServer 用 ctx.get，缺失时
   // 自身守卫），因此可随包。
-  { id: 'wallpaper-engine', name: 'dsh-plugin-wallpaper-engine', dir: 'dsh-plugin-wallpaper-engine' },
+  { id: 'wallpaper-engine', name: 'dsh-plugin-wallpaper-engine', dir: 'dsh-plugin-wallpaper-engine', disabled: true },
   { id: 'dsh-boot-animation', name: 'dsh-boot-animation', dir: 'dsh-boot-animation' },
   { id: 'dsh-wechat-plugin', name: 'dsh-wechat-plugin', dir: 'dsh-wechat', config: { autoStart: true } },
   { id: 'ds-harness-remote', name: 'ds-harness-remote', dir: 'ds-harness-remote', config: {
@@ -1260,7 +1260,20 @@ function ensurePluginHostDeps(profileDirP: string): void {
   }
 }
 
-// 注册到 profile 的 patch 层（幂等：已有行不重写，用户选择的皮肤/disabled 状态保留）。
+    // 精简版随包皮肤播种：落位包目录 + 登记 dependencies + 补 patch 行。
+    // 形态判定在 seedLiteBundledSkins 内部（读 profile.txt 的 distro 标记，
+    // 见 lite-skins.ts 的 isLiteProfile）；full 档直接返回、一行不碰。
+    try {
+      const skinsAssets = path.join(APP_ROOT, 'assets', 'skins');
+      const seededSkins = seedLiteBundledSkins(profileDirP, skinsAssets, (m) => ctx.log('boot', m), APP_ROOT);
+      if (seededSkins) {
+        ctx.log('boot', '精简版随包皮肤已就绪（' + LITE_BUNDLED_SKINS.length + ' 款）');
+      }
+    } catch (err) {
+      ctx.log('boot', '播种随包皮肤失败: ' + String(((err as Error).message) || err));
+    }
+
+    // 注册到 profile 的 patch 层（幂等：已有行不重写，用户选择的皮肤/disabled 状态保留）。
     const patchFile = path.join(profileDirP, 'cordis.patch.yml');
     let patch = '';
     try { patch = fs.readFileSync(patchFile, 'utf8'); } catch { patch = ''; }
@@ -1333,18 +1346,6 @@ function ensurePluginHostDeps(profileDirP: string): void {
     } catch (err) {
       bundled = [];
       ctx.log('boot', '播种内置 bundle 插件失败: ' + String(((err as Error).message) || err));
-    }
-    // 精简版随包皮肤播种：落位包目录 + 登记 dependencies + 补 patch 行。
-    // 形态判定在 seedLiteBundledSkins 内部（读 profile.txt 的 distro 标记，
-    // 见 lite-skins.ts 的 isLiteProfile）；full 档直接返回、一行不碰。
-    try {
-      const skinsAssets = path.join(APP_ROOT, 'assets', 'skins');
-      const seededSkins = seedLiteBundledSkins(profileDirP, skinsAssets, (m) => ctx.log('boot', m), APP_ROOT);
-      if (seededSkins) {
-        ctx.log('boot', '精简版随包皮肤已就绪（' + LITE_BUNDLED_SKINS.length + ' 款）');
-      }
-    } catch (err) {
-      ctx.log('boot', '播种随包皮肤失败: ' + String(((err as Error).message) || err));
     }
     // 虎鲸之链设置面板布局修正：**两档都跑**。
     //

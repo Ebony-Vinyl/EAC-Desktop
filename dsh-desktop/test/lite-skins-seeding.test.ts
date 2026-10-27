@@ -4,22 +4,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// 精简版随包皮肤播种的回归契约。
-//
-// 这里钉住的是 2026-10-23 踩了一整天的那个 bug：**home 层 patch 压过 profile 层**。
-//
-// 内核 compose 的层序（@deepseek-ai/dsh 的 profile-boot，原文）：
-//   bundle layers → profile layer (cordis.patch.yml) → home layer
-//   ($DSH_HOME/cordis.patch.yml — "outranks the per-profile layer") → overlays
-//
-// 皮肤管理器把「当前激活哪款皮肤」写成 home 层的 `- id: ui-skin-<x> / disabled:` 行。
-// 装过、切过皮肤后，home 层会留下 `disabled: true` 的残留。只在 profile 层写
-// `disabled: false` 完全无效：最终生效值仍是 true → 插件不挂载 → 不进客户端
-// roster → body 上没有 data-dsh-* → 界面无皮肤。
-//
-// 当时的症状极具误导性：播种日志全绿（「随包皮肤已就绪（5 款）」）、
-// profile 的 patch 看起来完全正确、测试也全过。只有 `--dump-config` 的最终值
-// 才暴露真相。所以这里直接用真实文件布局测「最终值」。
+// 原生默认、用户配置优先与重复播种的行为回归。
 
 const liteSkins = await import('../lib/desktop/lite-skins.js') as {
   seedLiteBundledSkins: (profileDir: string, assetsSkins: string, log?: (m: string) => void, appRoot?: string) => boolean;
@@ -77,7 +62,7 @@ function makeAppRoot(root: string, distro: 'lite' | 'full'): string {
   return appRoot;
 }
 
-test('播种：lite 档把默认激活的皮肤写到 profile 层', (t) => {
+test('播种：lite 档五款皮肤默认关闭，不重复插入 bundle entry', (t) => {
   const { root, profileDir } = makeLayout();
   t.after(() => rmSync(root, { recursive: true, force: true }));
   // assets/skins 为空目录：只验 patch 行逻辑，不验包落位。
@@ -90,110 +75,75 @@ test('播种：lite 档把默认激活的皮肤写到 profile 层', (t) => {
     assert.equal(map.has(s.wiringId), true, `profile 层缺少 ${s.wiringId} 的 disabled 行`);
     assert.equal(map.get(s.wiringId), !s.active, `${s.wiringId} 的 disabled 基线值错误`);
   }
-  assert.deepEqual(ACTIVE.map((s) => s.wiringId), ['ui-skin-orca-link'], '默认激活款应唯一且为 orca-link');
+  assert.deepEqual(ACTIVE.map((s) => s.wiringId), [], '出厂不应激活任何皮肤');
 });
 
-test('播种：home 层的 stale disabled:true 会被纠正（否则静默压过 profile 层）', (t) => {
+for (const activeId of [null, 'ui-skin-maid-atelier', 'ui-skin-orca-link']) {
+  test(`播种：保留 profile/home 的用户选择 ${activeId ?? 'official'}`, (t) => {
+    const { root, home, profileDir } = makeLayout();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const appRoot = makeAppRoot(root, 'lite');
+    const profilePatch = join(profileDir, 'cordis.patch.yml');
+    const homePatch = join(home, 'cordis.patch.yml');
+    const choice = [
+      '# user comment', liteSkins.MANAGED_BEGIN,
+      ...SKINS.map((s) => `- id: ${s.wiringId}\n  disabled: ${s.wiringId !== activeId}`),
+      liteSkins.MANAGED_END, '',
+    ].join('\n');
+    writeFileSync(profilePatch, choice);
+    writeFileSync(homePatch, choice + '# home user override\n');
+    for (let i = 0; i < 2; i++) {
+      liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot);
+      assert.equal(readFileSync(profilePatch, 'utf8'), choice);
+      assert.equal(readFileSync(homePatch, 'utf8'), choice + '# home user override\n');
+    }
+  });
+}
+
+test('播种：幂等且不创建 home patch，不重复 insert', (t) => {
   const { root, home, profileDir } = makeLayout();
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const appRoot = makeAppRoot(root, 'lite');
+  const seed = () => liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot);
+  seed();
+  const before = readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8');
+  assert.doesNotMatch(before, /insert:/);
+  assert.equal(seed(), false);
+  assert.equal(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8'), before);
+  assert.equal(existsSync(join(home, 'cordis.patch.yml')), false);
+});
 
-  // 复刻「装过皮肤后 home 层留下的残留」：默认激活款被写死 disabled: true。
+test('播种：home 段外的显式启停原样保留', (t) => {
+  const { root, home, profileDir } = makeLayout();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const appRoot = makeAppRoot(root, 'lite');
   const homePatch = join(home, 'cordis.patch.yml');
-  writeFileSync(homePatch, [
-    liteSkins.MANAGED_BEGIN,
-    ...SKINS.map((s) => `- id: ${s.wiringId}\n  disabled: true`),
-    liteSkins.MANAGED_END,
-    '',
-  ].join('\n'));
-  const before = disabledMap(readFileSync(homePatch, 'utf8'));
-  assert.equal(before.get(ORCA!.wiringId), true, '前置条件：home 层初始为禁用');
-
+  const choice = `- id: ${ORCA!.wiringId}\n  disabled: false\n# user\n`;
+  writeFileSync(homePatch, choice);
   liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot);
-
-  const after = disabledMap(readFileSync(homePatch, 'utf8'));
-  assert.equal(
-    after.get(ORCA!.wiringId), false,
-    '默认激活款在 home 层必须被纠正为 enabled —— home 层优先级高于 profile 层，'
-    + '不纠正则最终生效值仍为 true，皮肤静默不生效',
-  );
-  // 非激活款保持禁用：纠正只针对默认激活项，不能顺手把其它皮肤打开。
-  for (const s of SKINS.filter((x) => !x.active)) {
-    assert.equal(after.get(s.wiringId), true, `${s.wiringId} 不是默认激活款，不应被打开`);
-  }
+  assert.equal(readFileSync(homePatch, 'utf8'), choice);
 });
 
-test('播种：home 层不存在时不凭空创建（避免在无该文件的环境多出一份配置）', (t) => {
-  const { root, home, profileDir } = makeLayout();
+test('播种：保留带引号、注释与 CRLF 的用户选择', (t) => {
+  const { root, profileDir } = makeLayout();
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const appRoot = makeAppRoot(root, 'lite');
-
+  const patch = join(profileDir, 'cordis.patch.yml');
+  const choice = SKINS.map(s => `- id: "${s.wiringId}" # user\r\n  disabled: false\r\n`).join('');
+  writeFileSync(patch, choice);
   liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot);
-  assert.equal(existsSync(join(home, 'cordis.patch.yml')), false, 'home 层文件不应被创建');
+  assert.equal(readFileSync(patch, 'utf8'), choice);
 });
 
-test('播种：home 层段外的手写 disabled:true 也会被纠正（否则同样压死默认激活款）', (t) => {
-  const { root, home, profileDir } = makeLayout();
+test('播种：畸形 YAML 保持原文件并报告错误', (t) => {
+  const { root, profileDir } = makeLayout();
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const appRoot = makeAppRoot(root, 'lite');
-
-  // 段外（没有 managed 标记）手写一行：模拟用户或早期管理器留下的显式禁用。
-  const homePatch = join(home, 'cordis.patch.yml');
-  writeFileSync(homePatch, `- id: ${ORCA!.wiringId}\n  disabled: true\n`);
-
-  liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot);
-
-  const text = readFileSync(homePatch, 'utf8');
-  // patch 层后写者胜：取最后一处该 id 的 disabled 值，必须已放开。
-  const all = [...text.matchAll(new RegExp(`^- id:\\s*${ORCA!.wiringId}\\s*\\n\\s+disabled:\\s*(true|false)`, 'gm'))];
-  assert.ok(all.length > 0, 'home 层应仍有该 id 的行');
-  assert.equal(all[all.length - 1][1], 'false', '段外的旧 true 必须被纠正，否则默认激活款静默失效');
-});
-
-test('播种：home 层只有段外阻挠行时也必须纠正（早退条件不对称的回归）', (t) => {
-  const { root, home, profileDir } = makeLayout();
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const appRoot = makeAppRoot(root, 'lite');
-
-  // 关键构造：home 层里 **managed 段已存在且完整**（其它皮肤行齐全），唯独
-  // 默认激活款只在**段外**有一行 true。这样 missingInserts / missingDisabled /
-  // wrongDisabled 全为空，`lines` 也为空，只有 blockedOutside 命中。
-  //
-  // 曾因此静默失效：两处早退条件不对称（第一处含 blockedOutside，第二处漏了），
-  // 判定命中却直接 return false —— 没日志、没改动，与「没命中」完全无法区分。
-  const homePatch = join(home, 'cordis.patch.yml');
-  const others = SKINS.filter((s) => !s.active);
-  writeFileSync(homePatch, [
-    `- id: ${ORCA!.wiringId}`,
-    '  disabled: true',
-    liteSkins.MANAGED_BEGIN,
-    ...others.flatMap((s) => [`- id: ${s.wiringId}`, '  disabled: true']),
-    liteSkins.MANAGED_END,
-    '',
-  ].join('\n'));
-
-  liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot);
-
-  const text = readFileSync(homePatch, 'utf8');
-  const all = [...text.matchAll(new RegExp(`^- id:\\s*${ORCA!.wiringId}\\s*\\n\\s+disabled:\\s*(true|false)`, 'gm'))];
-  assert.ok(all.length > 0, '该行应仍在原位');
-  assert.equal(all[all.length - 1][1], 'false', '仅凭段外阻挠行也应触发纠正');
-});
-
-test('播种：非激活款在段外手写 disabled:true 时保持不动（不越权打开）', (t) => {
-  const { root, home, profileDir } = makeLayout();
-  t.after(() => rmSync(root, { recursive: true, force: true }));
-  const appRoot = makeAppRoot(root, 'lite');
-
-  const nonActive = SKINS.find((s) => !s.active)!;
-  const homePatch = join(home, 'cordis.patch.yml');
-  writeFileSync(homePatch, `- id: ${nonActive.wiringId}\n  disabled: true\n`);
-
-  liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot);
-
-  const text = readFileSync(homePatch, 'utf8');
-  const all = [...text.matchAll(new RegExp(`^- id:\\s*${nonActive.wiringId}\\s*\\n\\s+disabled:\\s*(true|false)`, 'gm'))];
-  assert.equal(all[all.length - 1][1], 'true', '非默认激活款的显式禁用是用户选择，不能被播种打开');
+  const patch = join(profileDir, 'cordis.patch.yml');
+  const invalid = '- id: [broken\n';
+  writeFileSync(patch, invalid);
+  assert.throws(() => liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot), /YAML/);
+  assert.equal(readFileSync(patch, 'utf8'), invalid);
 });
 
 test('播种：lite 把虎鲸之链「居中设置面板」默认打开（设置栏贴底留白）', (t) => {
