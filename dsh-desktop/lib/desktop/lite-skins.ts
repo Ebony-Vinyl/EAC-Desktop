@@ -29,9 +29,11 @@
 
 import fs = require('node:fs');
 import path = require('node:path');
+import { createHash } from 'node:crypto';
 import { PROFILE_MARKER_FILE } from './install-profile';
 import { registeredPatchEntryIds } from '../bundle-identity';
 import { writeFileAtomic } from '../atomic-json';
+import { COPY_STAMP, copyPluginPackage } from '../plugin-copy';
 
 /** 精简版随包的 5 款皮肤。dir 是 assets/skins 下的目录名。 */
 export interface LiteSkinSpec {
@@ -83,7 +85,7 @@ const MANAGED_BEGIN = '# --- dsh-skin managed (auto-generated; do not edit) ---'
 const MANAGED_END = '# --- end dsh-skin managed ---';
 
 /**
- * 落位皮肤管理器（assets/plugins → profile/node_modules）。已存在则跳过。
+ * 落位皮肤管理器；更新本应用播种的副本，保留用户安装或修改的版本。
  *
  * 为什么不登记 COMPANION_PLUGINS 而在 bundles 里：见 companion-sync.ts 对应
  * 注释 —— 两条路径只能选一条，否则内核加载双实例报
@@ -100,12 +102,23 @@ function materializeSkinManager(profileDir: string, assetsPlugins: string, log: 
   if (!fs.existsSync(path.join(src, 'package.json'))) return false;
   const dest = path.join(profileDir, 'node_modules', ...name.split('/'));
   let changed = false;
-  if (!fs.existsSync(path.join(dest, 'package.json'))) {
+  const legacyFiles: Record<string, string> = {
+    'lib/index.js': 'e92e0fc882b6b456dadf259dc37d4ae411e4bb753a3e9be159b7a312c4e5aed0',
+    'lib/client.js': '0e24436b06c491d41a6cadf9607832a7873281ed2a1b30403a7115ca1356ed84',
+  };
+  const legacyCopy = Object.entries(legacyFiles).every(([file, hash]) => {
     try {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.cpSync(src, dest, { recursive: true });
-      log('已落位皮肤管理器: ' + name);
-      changed = true;
+      const text = fs.readFileSync(path.join(dest, file), 'utf8').replace(/\r\n/g, '\n');
+      return createHash('sha256').update(text).digest('hex') === hash;
+    } catch { return false; }
+  });
+  if (!fs.existsSync(path.join(dest, 'package.json')) || fs.existsSync(path.join(dest, COPY_STAMP)) || legacyCopy) {
+    try {
+      const stampFile = path.join(dest, COPY_STAMP);
+      const before = fs.existsSync(stampFile) ? fs.readFileSync(stampFile, 'utf8') : null;
+      copyPluginPackage(profileDir, src, name);
+      changed = before !== fs.readFileSync(stampFile, 'utf8');
+      if (changed) log('已落位皮肤管理器: ' + name);
     } catch (err) {
       log('皮肤管理器落位失败: ' + String((err as Error)?.message || err));
       return false;
@@ -276,7 +289,7 @@ function ensureSkinPatchRowsIn(patchFile: string, specs: readonly LiteSkinSpec[]
   const block = lines.join('\n') + '\n';
   const next = end >= 0
     ? text.slice(0, end) + block + text.slice(end)
-    : text.replace(/\s*$/, '\n') + [MANAGED_BEGIN, ...lines, MANAGED_END, ''].join('\n');
+    : text.replace(/^\[\][ \t]*\r?$/m, '').replace(/\s*$/, '\n') + [MANAGED_BEGIN, ...lines, MANAGED_END, ''].join('\n');
   writeFileAtomic(patchFile, next);
   return true;
 }
@@ -346,12 +359,11 @@ export function seedLiteBundledSkins(
   }
   // 皮肤管理器：从 assets/plugins 落位（它不在 COMPANION_PLUGINS，见那里的注释）。
   // 目录 + bundles 登记由下面的 ensureSkinDependencies 一并处理。
-  materializeSkinManager(profileDir, path.join(appRoot, 'assets', 'plugins'), log);
+  let changed = materializeSkinManager(profileDir, path.join(appRoot, 'assets', 'plugins'), log);
   if (!fs.existsSync(assetsSkins)) {
     log('随包皮肤目录不存在，跳过: ' + assetsSkins);
-    return false;
+    return changed;
   }
-  let changed = false;
   for (const spec of LITE_BUNDLED_SKINS) {
     if (materializeSkin(profileDir, spec, assetsSkins, log)) changed = true;
   }

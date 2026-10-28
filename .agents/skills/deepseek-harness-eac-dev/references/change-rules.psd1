@@ -352,11 +352,12 @@
         @{
             Name = 'packaging'
             Domain = 'updates-packaging'
-            Pattern = '^tauri-shell/distro\.mjs$|stage-resources|stage-platform-cache|stage-node-modules|audit-linux-bundle|name-lite-installers|lite-artifact-names|make-portable|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
+            Pattern = '^tauri-shell/distro\.mjs$|stage-resources|stage-platform-(?:cache|prune)|stage-node-modules|audit-linux-bundle|name-lite-installers|lite-artifact-names|make-portable|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(
                 'test/stage-node-modules.test.ts',
+                'test/stage-platform-prune.test.ts',
                 'test/bundle-integrity.test.ts',
                 'test/bundled-files.test.ts',
                 'test/installer-nsh-lengths.test.ts',

@@ -260,3 +260,42 @@ test('播种：full 档一行都不碰', (t) => {
   assert.equal(readFileSync(profilePatch, 'utf8'), profileBefore, 'full 档不该改 profile 层');
   assert.equal(readFileSync(homePatch, 'utf8'), homeBefore, 'full 档不该改 home 层');
 });
+
+for (const userOwned of [false, true]) {
+  test(`skin manager upgrade: ${userOwned ? 'preserve user copy' : 'update managed copy idempotently'}`, (t) => {
+    const { root, profileDir } = makeLayout();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const appRoot = makeAppRoot(root, 'lite');
+    const source = join(appRoot, 'assets', 'plugins', 'dsh-client-ui-skin-deep-whale-manager');
+    const target = join(profileDir, 'node_modules', '@smalltailqwq', 'dsh-client-ui-skin-deep-whale-manager');
+    const makeManager = (dir: string, version: string) => {
+      mkdirSync(join(dir, 'lib'), { recursive: true });
+      writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: '@smalltailqwq/dsh-client-ui-skin-deep-whale-manager', version }));
+      writeFileSync(join(dir, 'lib', 'index.js'), version);
+      writeFileSync(join(dir, 'lib', 'client.js'), version);
+    };
+    makeManager(source, '1.0.0');
+    if (userOwned) makeManager(target, 'user-copy');
+    const seed = (app: string) => liteSkins.seedLiteBundledSkins(profileDir, join(app, 'assets', 'skins'), () => {}, app);
+    seed(appRoot);
+    assert.equal(readFileSync(join(target, 'lib', 'client.js'), 'utf8'), userOwned ? 'user-copy' : '1.0.0');
+    const nextApp = join(root, 'next-app');
+    mkdirSync(join(nextApp, 'assets', 'skins'), { recursive: true });
+    writeFileSync(join(nextApp, 'profile.txt'), 'lite\n');
+    makeManager(join(nextApp, 'assets', 'plugins', 'dsh-client-ui-skin-deep-whale-manager'), '2.0.0');
+    assert.equal(seed(nextApp), !userOwned);
+    assert.equal(readFileSync(join(target, 'lib', 'client.js'), 'utf8'), userOwned ? 'user-copy' : '2.0.0');
+    assert.equal(seed(nextApp), false);
+  });
+}
+
+test('播种：空数组 patch 补行后仍可解析且幂等', (t) => {
+  const { root, profileDir } = makeLayout();
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const appRoot = makeAppRoot(root, 'lite');
+  writeFileSync(join(profileDir, 'cordis.patch.yml'), '# empty profile\r\n[]\r\n');
+  const seed = () => liteSkins.seedLiteBundledSkins(profileDir, join(appRoot, 'assets', 'skins'), () => {}, appRoot);
+  assert.equal(seed(), true);
+  assert.equal(disabledMap(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')).size, SKINS.length);
+  assert.equal(seed(), false);
+});

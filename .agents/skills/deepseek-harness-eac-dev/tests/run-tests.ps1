@@ -194,7 +194,7 @@ Assert-Fixture -Name 'shell-skin-classification' -Condition (
 $tauriPackaging = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
     '-RepoPath', $repoRoot,
     '-FilesJsonBase64',
-    (ConvertTo-FilesJsonBase64 '["tauri-shell/audit-linux-bundle.mjs","tauri-shell/stage-platform-cache.mjs","tauri-shell/stage-node-modules.mjs","tauri-shell/distro.mjs","tauri-shell/tauri.linux.conf.json","tauri-shell/gen/schemas/linux-schema.json"]')
+    (ConvertTo-FilesJsonBase64 '["tauri-shell/audit-linux-bundle.mjs","tauri-shell/stage-platform-cache.mjs","tauri-shell/stage-platform-prune.mjs","tauri-shell/stage-node-modules.mjs","tauri-shell/distro.mjs","tauri-shell/tauri.linux.conf.json","tauri-shell/gen/schemas/linux-schema.json"]')
 )
 Assert-Fixture -Name 'tauri-packaging-root-files' -Condition (
     $tauriPackaging.exitCode -eq 0 -and
@@ -202,6 +202,7 @@ Assert-Fixture -Name 'tauri-packaging-root-files' -Condition (
     $tauriPackaging.data.minimumValidation -eq 'package' -and
     'packaging' -in @($tauriPackaging.data.matchedRules) -and
     'test/stage-node-modules.test.ts' -in @($tauriPackaging.data.suggestedTests) -and
+    'test/stage-platform-prune.test.ts' -in @($tauriPackaging.data.suggestedTests) -and
     @($tauriPackaging.data.unmatchedCodeFiles).Count -eq 0
 ) -Failure ($tauriPackaging.raw)
 

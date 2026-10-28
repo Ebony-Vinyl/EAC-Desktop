@@ -2319,7 +2319,7 @@ function makeSkinManagerRoute(catalogProvider = () => discoverInstalledSkins(), 
 					}
 					await grantExemption(compatibility);
 				}
-				applyTarget(target, catalog);
+				await applyTarget(target, catalog);
 				desktopIcon?.follow(target);
 				json(res, 200, {
 					ok: true,
@@ -2346,7 +2346,28 @@ function apply(ctx) {
 			console.error("[skin-manager] failed to enforce startup mutual exclusion", error);
 		}
 		const desktopIcon = desktopIconControl(profilePatch, patchPaths, catalog);
-		const unregister = ctx.webServer.register(makeSkinManagerRoute(catalog, (target, installed) => useSkin(target, patchPaths, installed), () => discoverSkinDirectories(profilePatch), (compatibility) => grantThroughHost(ctx, compatibility), desktopIcon?.control));
+		const switchSkin = async (target, installed) => {
+			const hmr = ctx.get("hmr");
+			if (hmr === void 0) return useSkin(target, patchPaths, installed);
+			// EAC: acknowledge only after the kernel has unloaded and activated the skins.
+			return hmr.runExclusive(async () => {
+				const originals = patchPaths.map((file) => ({ file, text: existsSync(file) ? readFileSync(file, "utf8") : null }));
+				useSkin(target, patchPaths, installed);
+				try {
+					const required = installed.filter((skin) => skin.id === target).map((skin) => skin.wiringId);
+					const result = await hmr.reconcileProfile(required);
+					if (result.restartReason || result.pending.length) throw new Error("skin-switch-requires-service-restart");
+				} catch (error) {
+					for (const original of originals) {
+						if (original.text === null) rmSync(original.file, { force: true });
+						else atomicWrite(original.file, original.text);
+					}
+					await hmr.reconcileProfile();
+					throw error;
+				}
+			});
+		};
+		const unregister = ctx.webServer.register(makeSkinManagerRoute(catalog, switchSkin, () => discoverSkinDirectories(profilePatch), (compatibility) => grantThroughHost(ctx, compatibility), desktopIcon?.control));
 		return () => {
 			unregister();
 			desktopIcon?.dispose();

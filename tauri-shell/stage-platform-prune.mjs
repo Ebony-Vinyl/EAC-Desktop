@@ -5,6 +5,28 @@
 import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
 
+/** 安装版与便携版共同排除调试映射及 Zod 自测；保留运行代码与运行时检查使用的类型。 */
+export function pruneDevelopmentPayloads(nodeModules) {
+  let removed = 0;
+  const walk = (directory) => {
+    for (const entry of readdirSync(directory, { withFileTypes: true })) {
+      const file = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        const relative = '/' + path.relative(nodeModules, file).split(path.sep).join('/') + '/';
+        if (entry.name === 'tests' && relative.includes('/zod/src/')) {
+          removed += readdirSync(file, { recursive: true, withFileTypes: true }).filter((item) => item.isFile()).length;
+          rmSync(file, { recursive: true });
+        } else walk(file);
+      } else if (entry.isFile() && /\.(?:[cm]?js|css)\.map$/i.test(entry.name)) {
+        rmSync(file);
+        removed++;
+      }
+    }
+  };
+  walk(nodeModules);
+  return removed;
+}
+
 const LINUX_ELF_MACHINES = {
   x64: 62,
   arm64: 183,

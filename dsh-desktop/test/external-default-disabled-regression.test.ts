@@ -36,6 +36,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { parse } from 'yaml';
 
 const PKG = 'example-user-plugin';
 const ENTRY_ID = 'user-plugin';
@@ -136,7 +137,7 @@ const companionSync = await import('../lib/desktop/companion-sync.js') as {
   retireRemovedBuiltinPluginsGated: (dir: string) => void;
 };
 
-function runProductionSync(t: test.TestContext) {
+function runProductionSync(t: test.TestContext, before?: (profileDir: string) => void) {
   const { home, profileDir } = makeHome(t);
   const userData = join(home, 'user-data');
   mkdirSync(userData, { recursive: true });
@@ -169,13 +170,15 @@ function runProductionSync(t: test.TestContext) {
     platform: 'win32',
   });
 
+  before?.(profileDir);
+
   // === 生产入口：与 preBootSync() 相同的调用序列 ===
   profileMod.ensureDesktopProfileInit();
   companionSync.retireRemovedBuiltinPluginsGated(profileMod.desktopProfileDir());
   companionSync.syncCompanionPlugins();
 
   return {
-    logs,
+    logs, profileDir,
     after: readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8'),
   };
 }
@@ -204,4 +207,41 @@ test('同步不改动用户自己写的其他 patch 行', (t) => {
   assert.match(after, /^- id: user-plugin$/m, '顶层行形状不得变化');
   assert.match(after, /^ {2}config:$/m, 'config 块不得被展开或改写');
   assert.match(after, /^ {4}custom: preserve-me$/m, 'config 值必须逐字保留');
+});
+
+for (const disabled of [undefined, true, false]) {
+  test(`wallpaper bundle migration preserves config and disabled=${disabled}`, (t) => {
+    const { profileDir, after } = runProductionSync(t, (dir) => {
+      writeFileSync(join(dir, 'cordis.patch.yml'),
+        "- insert:\n    - id: wallpaper-engine\n      name: 'dsh-plugin-wallpaper-engine'\n      config:\n        opacity: 0.7\n"
+        + (disabled === undefined ? '' : `      disabled: ${disabled}\n`));
+    });
+    const backup = readFileSync(join(profileDir, 'cordis.patch.yml.before-wallpaper-bundle.bak'), 'utf8');
+    assert.match(backup, /- insert:\n    - id: wallpaper-engine/);
+    assert.match(backup, /opacity: 0.7/);
+    const rows = parse(after).filter((row: { id?: string }) => row.id === 'wallpaper-engine');
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0].config, { opacity: 0.7 });
+    assert.equal(rows[0].disabled, disabled ?? false);
+    assert.equal(rows[0].insert, undefined);
+    companionSync.syncCompanionPlugins();
+    assert.equal(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8'), after);
+    assert.equal(readFileSync(join(profileDir, 'cordis.patch.yml.before-wallpaper-bundle.bak'), 'utf8'), backup);
+  });
+}
+
+test('wallpaper remains discoverable and deselected after startup sync', (t) => {
+  const { profileDir, after } = runProductionSync(t);
+  const file = join(profileDir, 'package.json');
+  const pkg = JSON.parse(readFileSync(file, 'utf8'));
+  const name = 'dsh-plugin-wallpaper-engine';
+  assert.equal(pkg.dsh.profile.bundles.includes(name), true);
+  assert.equal(pkg.dependencies[name], 'file:./node_modules/' + name);
+  pkg.dsh.profile.bundles = pkg.dsh.profile.bundles.filter((n: string) => n !== name);
+  writeFileSync(file, JSON.stringify(pkg, null, 2) + '\n');
+  companionSync.syncCompanionPlugins();
+  const restarted = JSON.parse(readFileSync(file, 'utf8'));
+  assert.equal(restarted.dsh.profile.bundles.includes(name), false);
+  assert.equal(restarted.dependencies[name], pkg.dependencies[name]);
+  assert.equal(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8'), after);
 });

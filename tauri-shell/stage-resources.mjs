@@ -20,6 +20,7 @@ import { stageProductionNodeModules } from './stage-node-modules.mjs';
 import {
   assertSupportedStageArch,
   pruneDarwinPayloads,
+  pruneDevelopmentPayloads,
   pruneLinuxPayloads,
   pruneMuslNodeAddonBinaries,
   pruneNonDarwinPrebuilds,
@@ -635,6 +636,8 @@ if (existsSync(vendoredBashFix)) {
 
 const sanitizedClients = sanitizeClientBuildPaths(nmDest);
 console.log(`[stage] 已清理 ${sanitizedClients} 个内核 client bundle 的构建机路径`);
+const developmentFiles = pruneDevelopmentPayloads(nmDest);
+console.log(`[stage] 已裁剪 ${developmentFiles} 个调试映射与依赖自测文件（保留运行代码及类型声明）`);
 
 // 捆绑依赖完整性清单（issue #7）：对**最终载荷**（npm ci + 补丁 + vendored
 // 回填之后）逐包计文件数，落 bundle-manifest.json。启动期 sidecar 的

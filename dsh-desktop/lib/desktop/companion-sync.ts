@@ -440,41 +440,31 @@ export function saveRemovedPluginIds(ids: Set<string>): void {
   updater.saveSettings(c, s);
 }
 
-/** 内置 bundle 插件播种（纯函数，可单测）：确保 profile package.json 的
- *  dsh.profile.bundles 包含 BUNDLED_BUILTIN_PLUGINS。幂等：缺失则追加并写回
- * （保持 JSON 缩进 2 + 尾换行，与 ensureDesktopProfileInit 出厂格式一致），
- * 已有（用户市场安装 / dsh plugin add / 曾经播种过）则不动。返回变化标记与
- * 播种后的 bundles 数组。失败不抛异常：返回 { changed: false, bundles: [] }。 */
+/** 播种内置 bundle；壁纸登记为可发现的本地依赖，之后尊重用户取消选择。 */
 export function seedBundledPlugins(profileDir: string): { changed: boolean; bundles: unknown[] } {
-  let bundled: unknown[] = [];
-  try {
-    const pkgDsh = readJsonFile(path.join(profileDir, 'package.json'))?.dsh as Record<string, unknown> | undefined;
-    const prof = pkgDsh?.profile as Record<string, unknown> | undefined;
-    bundled = Array.isArray(prof?.bundles) ? prof.bundles : [];
-  } catch { bundled = []; }
-  const orig = bundled.slice();
+  const pkgFile = path.join(profileDir, 'package.json');
+  const pkg = readJsonFile(pkgFile);
+  if (!pkg) return { changed: false, bundles: [] };
+  const dsh = (pkg.dsh || (pkg.dsh = {})) as Record<string, unknown>;
+  const prof = (dsh.profile || (dsh.profile = {})) as Record<string, unknown>;
+  const orig = Array.isArray(prof.bundles) ? prof.bundles : [];
+  const bundled = orig.slice();
+  const dependencies = (pkg.dependencies || (pkg.dependencies = {})) as Record<string, unknown>;
   let changed = false;
   for (const bundleName of BUNDLED_BUILTIN_PLUGINS) {
+    // 依赖留在清单里供官方插件页发现；bundle 可由用户关闭，不在下次启动时加回。
+    if (bundleName === 'dsh-plugin-wallpaper-engine' && dependencies[bundleName]) continue;
     if (!bundled.includes(bundleName)) { bundled.push(bundleName); changed = true; }
+    if (bundleName === 'dsh-plugin-wallpaper-engine') {
+      dependencies[bundleName] = 'file:./node_modules/' + bundleName;
+      changed = true;
+    }
   }
   if (changed) {
     try {
-      const pkgFile = path.join(profileDir, 'package.json');
-      const pkg = readJsonFile(pkgFile);
-      if (pkg && typeof pkg === 'object') {
-        const pkgRec = pkg as Record<string, unknown>;
-        const dsh = (pkgRec.dsh || (pkgRec.dsh = {})) as Record<string, unknown>;
-        const prof = (dsh.profile || (dsh.profile = {})) as Record<string, unknown>;
-        prof.bundles = bundled;
-        fs.writeFileSync(pkgFile, JSON.stringify(pkgRec, null, 2) + '\n');
-      } else {
-        changed = false;
-        bundled = orig;
-      }
-    } catch {
-      changed = false;
-      bundled = orig;
-    }
+      prof.bundles = bundled;
+      fs.writeFileSync(pkgFile, JSON.stringify(pkg, null, 2) + '\n');
+    } catch { return { changed: false, bundles: orig }; }
   }
   return { changed, bundles: bundled };
 }
@@ -512,8 +502,8 @@ export function pluginUpdateSources(): { id: string; name: string; assetsDir: st
  * **非应用播种**的 bundles 条目、非自写 patch 行。
  *
  * ISO-005：bundles 条目只有在「不是应用自己播种的」时才是证据 —— 应用播种
- * 清单是 BUNDLED_BUILTIN_PLUGINS（profile.ts，当前为空数组：随包插件走配套
- * 行/包拷贝路径，不经 bundles 播种）。若沿用旧口径，应用自己播种过的条目会
+ * 清单是 BUNDLED_BUILTIN_PLUGINS（profile.ts），其他随包插件走配套
+ * 行/包拷贝路径，不经 bundles 播种。若沿用旧口径，应用自己播种过的条目会
  * 被误判成市场残留并触发「接管」手术（剥 bundles 条目 + 建保护快照）。
  */
 export function marketDuplicateEvidence(o: {
@@ -1369,6 +1359,16 @@ function ensurePluginHostDeps(profileDirP: string): void {
     const declaredBundleIds = collectBundleEntryIds(bundled, path.join(profileDirP, 'node_modules'));
     const rowIds: Record<string, string> = {};
     for (const p of COMPANION_PLUGINS) rowIds[p.id] = p.name;
+    // 壁纸由配套 insert 迁到 bundle 时，保留旧安装的启停与配置。
+    // 只转换本应用生成的单行 insert；包内声明负责提供 name。
+    patch = patch.replace(/^- insert:\r?\n    - id: wallpaper-engine\r?\n((?:      [^\r\n]*\r?\n)*)/gm, (_block, body: string) => {
+      const backup = patchFile + '.before-wallpaper-bundle.bak';
+      if (!fs.existsSync(backup)) fs.copyFileSync(patchFile, backup);
+      const overrides = body.replace(/^      name:[^\r\n]*\r?\n/m, '').replace(/^    /gm, '');
+      changed = true;
+      return '- id: wallpaper-engine\n' + overrides
+        + (/^  disabled:/m.test(overrides) ? '' : '  disabled: false\n');
+    });
     const deduped = removeBundledRowDuplicates(patch, rowIds, bundled, declaredBundleIds);
     if (deduped.removed.length) {
       patch = deduped.patch;
@@ -1382,7 +1382,7 @@ function ensurePluginHostDeps(profileDirP: string): void {
       // （会 duplicate loader entry id，拖垮整个插件树）。issue #16：
       // 补充按 entry id 判断 —— git/fork 插件包名不同但 id 相同同样要跳过，
       // 否则每次启动把崩溃行写回，用户删掉也没用。
-      if (bundled.includes(p.name) || declaredBundleIds.has(p.id)) continue;
+      if (BUNDLED_BUILTIN_PLUGINS.includes(p.name) || bundled.includes(p.name) || declaredBundleIds.has(p.id)) continue;
       let block = `- insert:\n    - id: ${p.id}\n      name: '${p.name}'\n`;
       if (p.config) block += configLinesFor(p.config);
       if (p.disabled) block += `      disabled: true\n`;
