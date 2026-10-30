@@ -268,6 +268,8 @@ window.__ModuleLoader__.load({ id: 'dsh-unified-market', factory: (require) => {
     const [cat, setCat] = useState('all')
     const [showInstalled, setShowInstalled] = useState(false)
     const [sortBy, setSortBy] = useState('default')
+    const [catalogPage, setCatalogPage] = useState(1)
+    useEffect(() => { setCatalogPage(1) }, [query, cat, showInstalled, sortBy])
     const [open, setOpen] = useState(null)
     const [op, setOp] = useState(null)
     // ── 统一市场扩展状态（三源 + 自动更新 + 自更新）──
@@ -555,6 +557,20 @@ window.__ModuleLoader__.load({ id: 'dsh-unified-market', factory: (require) => {
       groups.push({ id: 'sel', label: null, items: sorted })
     }
 
+    // Bound the DOM even when the live catalog contains thousands of plugins.
+    const pageSize = 50
+    const catalogTotal = groups.reduce((sum, group) => sum + group.items.length, 0)
+    const pageCount = Math.max(1, Math.ceil(catalogTotal / pageSize))
+    const currentPage = Math.min(catalogPage, pageCount)
+    const pageStart = (currentPage - 1) * pageSize
+    let groupOffset = 0
+    const pageGroups = groups.map((group) => {
+      const start = Math.max(0, pageStart - groupOffset)
+      const end = Math.max(0, pageStart + pageSize - groupOffset)
+      groupOffset += group.items.length
+      return { ...group, total: group.items.length, items: group.items.slice(start, end) }
+    }).filter((group) => group.items.length > 0)
+
     const binOk = envInfo && (envInfo.dshBin || (envInfo.binProvided && envInfo.binValid))
     const envReady = envInfo && binOk && envInfo.node && envInfo.dshHome
 
@@ -821,8 +837,13 @@ window.__ModuleLoader__.load({ id: 'dsh-unified-market', factory: (require) => {
       renderToolbar(),
       renderProgressWindow(),
       renderUpdatesPanel(),
-      data.phase === 'ready' && srcMode === 'catalog' ? groups.map((g) => h('div', { key: g.id },
-        g.label ? h('div', { className: 'mkts-sec' }, g.label, h('small', null, g.items.length)) : null,
+      data.phase === 'ready' && srcMode === 'catalog' && catalogTotal > 0 ? h('nav', { className: 'mkts-cmdrow', 'aria-label': LOCALE === 'zh' ? '插件目录分页' : 'Catalog pages' },
+        h('button', { className: 'mkts-cmdbtn', disabled: currentPage === 1, onClick: () => setCatalogPage(currentPage - 1) }, LOCALE === 'zh' ? '上一页' : 'Previous page'),
+        h('span', null, (pageStart + 1) + '–' + Math.min(pageStart + pageSize, catalogTotal) + ' / ' + catalogTotal),
+        h('button', { className: 'mkts-cmdbtn', disabled: currentPage === pageCount, onClick: () => setCatalogPage(currentPage + 1) }, LOCALE === 'zh' ? '下一页' : 'Next page'),
+      ) : null,
+      data.phase === 'ready' && srcMode === 'catalog' ? pageGroups.map((g) => h('div', { key: g.id },
+        g.label ? h('div', { className: 'mkts-sec' }, g.label, h('small', null, g.total)) : null,
         g.items.map((p, i) => {
           const inst = isInstalled(p, data.installed)
           const bltin = isBuiltin(p, data.installed)
