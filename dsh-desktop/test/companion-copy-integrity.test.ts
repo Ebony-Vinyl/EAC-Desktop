@@ -72,7 +72,7 @@ test('copyPluginPackage repairs a missing file even when the source stamp remain
   }
 });
 
-for (const dir of ['dsh-boot-animation', 'dsh-wechat', 'ds-harness-remote', 'dsh-external-links']) {
+for (const dir of ['dsh-boot-animation', 'dsh-wechat', 'ds-harness-remote', 'dsh-external-links', 'dsh-our-free-model']) {
   test(`bundled ${dir} imports after copying into an isolated profile`, async (t) => {
     const root = mkdtempSync(join(tmpdir(), 'dsh-plugin-copy-'));
     t.after(() => rmSync(root, { recursive: true, force: true }));
@@ -86,5 +86,12 @@ for (const dir of ['dsh-boot-animation', 'dsh-wechat', 'ds-harness-remote', 'dsh
     assert.equal(typeof mod.apply, 'function');
     const client = pkg.exports['./client'];
     assert.ok(existsSync(join(dest, typeof client === 'string' ? client : client.default)));
+    if (dir === 'dsh-our-free-model') {
+      const pack = await import(pathToFileURL(join(dest, 'vendor/channel-pack/pack.js')).href);
+      assert.equal(typeof pack.apply, 'function');
+      for (const file of ['vendor/channel-pack/qoder-auth-wasm.wasm', 'vendor/channel-pack/LICENSE', 'vendor/channel-pack/NOTICE.md', 'locale/zh.json', 'icon.svg']) {
+        assert.ok(existsSync(join(dest, file)), `OFM 运行资源缺失: ${file}`);
+      }
+    }
   });
 }

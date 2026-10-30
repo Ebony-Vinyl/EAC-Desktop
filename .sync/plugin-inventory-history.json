@@ -279,6 +279,11 @@
       "id": "external-links",
       "path": "dsh-desktop/assets/plugins/dsh-external-links",
       "patched": false
+    },
+    {
+      "id": "our-free-model",
+      "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+      "patched": false
     }
   ]
 }

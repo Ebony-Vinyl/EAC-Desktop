@@ -41,8 +41,10 @@ const TOP_FILES = [
   'package.json', 'dsh-plugin.json', 'skin.json', ...EXTRA_PACKAGE_FILES,
   'EAC-ADAPTATION.md', 'index.js', 'client.js', 'recall-inject.js', 'cordis.patch.yml',
   'DESIGN.md', 'FRAMING.md', 'EDITORIAL.md', 'BREATH.md',
+  'icon.svg',
 ];
-const TOP_DIRS = ['lib', 'docs', 'preview', 'vendor', 'node_modules', 'data', 'assets', 'runtime', 'src', 'client', 'styles', 'packages', 'locale'];
+// OFM 的 host 入口依赖 adapter/kernel.js；必须与 src/vendor 一起落位。
+const TOP_DIRS = ['lib', 'docs', 'preview', 'vendor', 'node_modules', 'data', 'assets', 'runtime', 'src', 'client', 'styles', 'packages', 'locale', 'adapter'];
 
 /** 安全读 JSON（损坏/缺失返回 null）。 */
 export function readJsonFile(file: string): Record<string, unknown> | null {

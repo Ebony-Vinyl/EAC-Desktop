@@ -2925,6 +2925,32 @@
         "refType": "version",
         "provenance": "package.repository 明确声明；本地快照摘要由 plugins.lock.json 记录"
       }
+    },
+    {
+      "id": "C121",
+      "line": "main",
+      "name": "dsh-our-free-model",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "2.5.2",
+      "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+      "pathBaseline": "pr#487@8dd0c805e5d702e21e62a4c6d0239bcd555bce2a",
+      "registryStatus": "注册表默认启用",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "same-version-modified",
+        "note": "免登录/免注册/免 API Key 接入前沿模型；含 Jet Hub 十三账号渠道（账号池、积分领取、本地 OpenAI 网关与局域网转发、数据看板）与 token-saver/RTK 输出过滤。随包副本为 GitHub Release v2.5.2 官方 tgz（sha256 e7d02ad9f7d1d82b3f12cf6ce539468525536354c1a72f6efb9abd864721682c，1323263 B）。纯 JS、零原生依赖，inject 仅 ['llm']。2.5.2 起 vendor 目录由 vendor/jet-hub 更名为 vendor/channel-pack。",
+        "basis": "catalog github-repo 来源登记（Pack catalog/eac.json）+ GitHub Release v2.5.2 签名 tgz",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/Ebony-Vinyl/dsh-our-free-model",
+        "refType": "release",
+        "releaseTag": "v2.5.2",
+        "archiveSha256": "e7d02ad9f7d1d82b3f12cf6ce539468525536354c1a72f6efb9abd864721682c",
+        "archiveBytes": 1323263,
+        "provenance": "私有 ESM 包（private: true），npm 无发布；GitHub Release v2.5.2 提供官方预构建 tgz 与 SHA256SUMS.txt"
+      }
     }
   ]
 }

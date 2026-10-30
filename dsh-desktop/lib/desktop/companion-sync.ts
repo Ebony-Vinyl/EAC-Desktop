@@ -336,6 +336,7 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // 自身守卫），因此可随包。
   { id: 'wallpaper-engine', name: 'dsh-plugin-wallpaper-engine', dir: 'dsh-plugin-wallpaper-engine', disabled: true },
   { id: 'dsh-boot-animation', name: 'dsh-boot-animation', dir: 'dsh-boot-animation' },
+  { id: 'our-free-model', name: 'dsh-our-free-model', dir: 'dsh-our-free-model' },
   { id: 'dsh-wechat-plugin', name: 'dsh-wechat-plugin', dir: 'dsh-wechat', config: { autoStart: true } },
   { id: 'ds-harness-remote', name: 'ds-harness-remote', dir: 'ds-harness-remote', config: {
     enabled: true, role: 'host', serverUrl: 'https://dsh.r2049.cn', codex: { enabled: true, binary: 'codex' },

@@ -1,7 +1,7 @@
 {
   "generatedRegistry": "dsh-desktop/lib/desktop/plugin-sync-registry.ts",
   "manifest": ".sync/plugins.json",
-  "manifestRevision": "3320bfe39b07d31a3b407f27373ede20751b826302401463bebba292aa1321da",
+  "manifestRevision": "8c148032d0c895dbf518b54f466f163a500d13a2d6258d78f0ea635a5bb4464c",
   "plugins": {
     "client-file-changes": {
       "compatibility": {},
@@ -281,6 +281,35 @@
         "name": "@deepseek-ai/dsh-file-changes",
         "sha256": "b3b5e2b897e970933c44cf52d3dd4016887180d4e29b595c4bd8b4280da6afe6",
         "version": "0.1.0"
+      },
+      "sourceCommit": null
+    },
+    "our-free-model": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "index.js"
+        ],
+        "excludedPaths": [
+          "vendor"
+        ],
+        "fileCount": 75,
+        "license": "MIT",
+        "packageName": "dsh-our-free-model",
+        "packageVersion": "2.5.2",
+        "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+        "treeSha256": "665b20549f29a07d46a6e3ec22b2c984de98b5ef71241b5dafb6c2e0cb5ff701"
+      },
+      "manifestEntrySha256": "f5964420a4a436adc926c63fd14787753c8e3804cb817d4af7f2f41adc691b6c",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "2.5.2",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "unknown",
+        "sha256": "665b20549f29a07d46a6e3ec22b2c984de98b5ef71241b5dafb6c2e0cb5ff701",
+        "version": "2.5.2"
       },
       "sourceCommit": null
     },

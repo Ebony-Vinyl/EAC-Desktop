@@ -57,6 +57,7 @@ export const BASE_PLUGIN_DIRS = [
   'dsh-boot-animation',
   'dsh-wechat',
   'ds-harness-remote',
+  'dsh-our-free-model',
 ];
 
 /**
