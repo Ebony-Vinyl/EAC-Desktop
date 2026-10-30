@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -17,6 +17,14 @@ const liteSkins = await import('../lib/desktop/lite-skins.js') as {
 const SKINS = liteSkins.LITE_BUNDLED_SKINS;
 const ACTIVE = SKINS.filter((s) => s.active);
 const ORCA = SKINS.find((s) => s.wiringId === 'ui-skin-orca-link');
+
+test('随包皮肤通过当前内核的真实版本兼容检查', async () => {
+  const { evaluatePluginCompatibility } = await import('@deepseek-ai/dsh-app-boot');
+  for (const skin of SKINS) {
+    const manifest = JSON.parse(readFileSync(new URL(`../assets/skins/${skin.dir}/package.json`, import.meta.url), 'utf8'));
+    assert.equal(evaluatePluginCompatibility(manifest), undefined, `${skin.name} 不应在插件页标为版本不兼容`);
+  }
+});
 
 /** 建一个最小的 <home>/profiles/<name> 布局，返回关键路径。 */
 function makeLayout() {
@@ -299,3 +307,34 @@ test('播种：空数组 patch 补行后仍可解析且幂等', (t) => {
   assert.equal(disabledMap(readFileSync(join(profileDir, 'cordis.patch.yml'), 'utf8')).size, SKINS.length);
   assert.equal(seed(), false);
 });
+
+for (const userChange of [null, 'package.json', 'lib/client.js']) {
+  test(`鲸鱼娘旧兼容声明升级：${userChange ?? '原随包副本'}，保留启停并幂等`, (t) => {
+    const { root, profileDir } = makeLayout();
+    t.after(() => rmSync(root, { recursive: true, force: true }));
+    const appRoot = makeAppRoot(root, 'lite');
+    const skin = SKINS.find(s => s.wiringId === 'ui-skin-deep-whale-day-night')!;
+    const source = new URL(`../assets/skins/${skin.dir}/`, import.meta.url);
+    const assets = join(appRoot, 'assets', 'skins');
+    const target = join(profileDir, 'node_modules', ...skin.name.split('/'));
+    cpSync(source, join(assets, skin.dir), { recursive: true });
+    cpSync(source, target, { recursive: true });
+    const file = join(target, 'package.json');
+    const legacy = JSON.parse(readFileSync(file, 'utf8'));
+    legacy.peerDependencies['@deepseek-ai/dsh-client-ui-theme'] = '>=0.1.0-rc.5 <0.2.0';
+    if (userChange === 'package.json') legacy.description = 'User fork';
+    const before = JSON.stringify(legacy, null, 2) + '\n';
+    writeFileSync(file, before);
+    if (userChange === 'lib/client.js') writeFileSync(join(target, userChange), '// user client\n');
+    const patch = join(profileDir, 'cordis.patch.yml');
+    const choice = SKINS.map(s => `- id: ${s.wiringId}\n  disabled: ${s.wiringId !== skin.wiringId}\n`).join('');
+    writeFileSync(patch, choice);
+    const seed = () => liteSkins.seedLiteBundledSkins(profileDir, assets, () => {}, appRoot);
+    seed();
+    assert.equal(readFileSync(file, 'utf8'), userChange ? before : readFileSync(new URL('package.json', source), 'utf8'));
+    assert.equal(readFileSync(patch, 'utf8'), choice);
+    if (!userChange) assert.equal(readFileSync(file + '.before-theme-021.bak', 'utf8'), before);
+    assert.equal(seed(), false);
+    if (userChange === 'lib/client.js') assert.equal(readFileSync(join(target, userChange), 'utf8'), '// user client\n');
+  });
+}

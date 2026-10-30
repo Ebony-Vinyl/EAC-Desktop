@@ -223,3 +223,13 @@ JSONL 删除使用后端配置的存储 root、原生路径查找与跨进程写
 全新隔离数据目录、Windows x64 Lite staged sidecar + Edge 验证：鉴权 303、UI 200；`/api/our-free-model/summary` 返回 200，`channels.state=ready`；完成首次公告后可从「设置 → Our Free Model」打开模型、渠道及网关等设置，pageerror 为零，profile 中仅一条插件挂载行。停止日志仍有既有旧服务退出确认提示，最终 sidecar 正常退出、Web 端口关闭。证据在忽略目录 `.verify/pr491-ui-startup/` 的 `ofm-full.log`、`ofm-stage.log`、`ofm-runtime.log`、`ofm-settings.png`。
 
 本轮未发送真实推理请求、登录账号或启用局域网转发；以上是装配后隔离运行验收，不能代替虚拟机中的真实安装/升级测试，V5 仍为 **partial**。需使用本次新增提交的 CI 安装包确认入口及实际模型调用后，再决定合并 main。
+
+## 鲸鱼娘版本兼容声明与模型发送排查（2026-10-30）
+
+用户截图中的鲸鱼娘 0.1.12 在官方插件详情页显示版本不兼容。新增回归调用内核真实 `evaluatePluginCompatibility`，复现其主题 peer `>=0.1.0-rc.5 <0.2.0` 拒绝当前 `0.2.1-rc.2`。在皮肤清单中只补入已验收的精确版本 `0.2.1-rc.2`，保留旧范围和内核兼容检查，不授予豁免。NOTICE 记录该元数据适配，皮肤运行代码与资源不改动。
+
+Lite 存量安装仅修复已知旧清单摘要且四个运行文件与随包源相同的原始副本；首次修改前备份 package.json，用户启停配置不变。用户修改过清单或客户端、其他版本及链接安装不覆盖。回归覆盖全部随包皮肤的真实兼容评估、旧副本升级与备份、用户修改保留及幂等。
+
+完整测试：832 项，788 通过、44 跳过、0 失败，约 157 秒；分类器 ready，Windows x64 Lite 资源装配通过（643 包）。隔离 staged sidecar + Edge 中，官方插件详情已无不兼容提示、正确显示一个已停用组件；通过「设置 → 皮肤管理」启用鲸鱼娘后正常加载，pageerror 为零，退出及端口关闭通过。停止阶段仍有既有的旧服务退出确认提示。证据：`.verify/pr491-ui-startup/skin-full.log`、`skin-model-runtime.log`、`skin-compatible-detail.png`。
+
+模型截图使用「设置 → 模型」中的 DeepSeek 官方渠道，配置地址 `https://api.deepseek.com/anthropic`。已用本地模拟 Messages 服务走实际界面的 Key/地址保存、新会话发送及流式显示，成功收到测试标记；请求路径为 `/anthropic/v1/messages`、模型为 `deepseek-flash`。另用随包 Node 对官方接口发送无效测试 Key，正常收到 AUTH 拒绝，证明主机端请求可达；未使用用户 Key，也未产生真实付费推理。以上不能解释用户虚拟机内的 `DeepSeek Messages transport failed`，不把模型故障标记为已修复。需虚拟机侧诊断结果，当前不修改模型配置或传输代码。V5 仍为 **partial**。

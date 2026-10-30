@@ -23,7 +23,7 @@
 //
 // 幂等与用户意志
 // -------------
-// - 包目录已存在（用户从市场装过 / 曾播种过）→ 不覆盖。
+// - 包目录已存在 → 保留；仅修复已知随包鲸鱼娘副本的旧主题 peer 声明。
 // - patch 行已存在（含用户手动改过的 disabled）→ 不覆盖，尊重用户选择。
 // - 只有 installProfile === 'lite' 才播种；full 的皮肤配置完全不受影响。
 
@@ -128,7 +128,27 @@ function materializeSkinManager(profileDir: string, assetsPlugins: string, log: 
 }
 
 /**
- * 把一个皮肤包从 assets/skins 落位到 profile/node_modules。已存在则跳过。
+ * 只修已知随包鲸鱼娘 0.1.12 的旧 peer 声明，不替换用户的其他版本或修改。
+ */
+function repairWhaleThemePeer(dest: string, src: string): boolean {
+  const file = path.join(dest, 'package.json');
+  const old = fs.readFileSync(file, 'utf8');
+  const legacyHash = '0dbd58ddb3cdf25844150b405513e0a66b2a241d82aa8dc174f32ea9a433f660';
+  if (fs.lstatSync(dest).isSymbolicLink()
+    || createHash('sha256').update(old.replace(/\r\n/g, '\n')).digest('hex') !== legacyHash) return false;
+  for (const runtimeFile of ['lib/index.js', 'lib/client.js', 'cordis.patch.yml', 'skin.json']) {
+    if (!fs.readFileSync(path.join(dest, runtimeFile)).equals(fs.readFileSync(path.join(src, runtimeFile)))) return false;
+  }
+  const next = fs.readFileSync(path.join(src, 'package.json'), 'utf8');
+  if (next === old) return false;
+  const backup = file + '.before-theme-021.bak';
+  if (!fs.existsSync(backup)) fs.copyFileSync(file, backup);
+  writeFileAtomic(file, next);
+  return true;
+}
+
+/**
+ * 把一个皮肤包从 assets/skins 落位到 profile/node_modules；旧随包声明定向修复。
  * 返回是否真的复制的。
  */
 function materializeSkin(profileDir: string, spec: LiteSkinSpec, assetsSkins: string, log: (m: string) => void): boolean {
@@ -139,6 +159,16 @@ function materializeSkin(profileDir: string, spec: LiteSkinSpec, assetsSkins: st
   }
   const dest = path.join(profileDir, 'node_modules', ...spec.name.split('/'));
   if (fs.existsSync(path.join(dest, 'package.json'))) {
+    if (spec.wiringId === 'ui-skin-deep-whale-day-night') {
+      try {
+        if (repairWhaleThemePeer(dest, src)) {
+          log('已修复随包鲸鱼娘皮肤的 0.2.1 主题兼容声明（原清单已备份）');
+          return true;
+        }
+      } catch (err) {
+        log('鲸鱼娘兼容声明修复失败: ' + String((err as Error)?.message || err));
+      }
+    }
     // 已存在（用户市场安装 / 曾播种 / 覆盖层更新）→ 尊重现状，不覆盖。
     return false;
   }
