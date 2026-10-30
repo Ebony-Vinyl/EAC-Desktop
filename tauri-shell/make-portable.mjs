@@ -16,13 +16,12 @@
 
 import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, openSync, readSync, closeSync } from 'node:fs';
-import { makeReleaseFiles } from '../dsh-desktop/lib/desktop/update-package.js';
+import { makeReleaseFiles, treeFiles } from '../dsh-desktop/lib/desktop/update-package.js';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  appendEntriesToZip,
   buildUnzipNote,
   buildUnzipScript,
   listZipEntries,
@@ -143,9 +142,18 @@ shrink.shortenSeedPreviewDirs(staging, (m) => console.log('[portable] ' + m));
 shrink.pruneUnusedNestedResources(staging, (m) => console.log('[portable] ' + m));
 shrink.pruneOrphanSdks(staging, (m) => console.log('[portable] ' + m));
 shrink.finalTrim(staging, (m) => console.log('[portable] ' + m));
+shrink.shortenInspectorDescriptionPaths(staging, (m) => console.log('[portable] ' + m));
 shrink.rebuildBundleManifest(staging, (m) => console.log('[portable] ' + m));
 shrink.normalizeSkinWiringIds(staging, (m) => console.log('[portable] ' + m));
 
+// 解压说明与脚本同样属于受校验的安装树，必须先写入再生成清单。
+const stagedEntryLength = (await treeFiles(staging)).reduce((m, file) => Math.max(m, file.path.length), 0);
+writeFileSync(path.join(staging, UNZIP_NOTE_NAME), buildUnzipNote({
+  distro, version, zipName: path.basename(zipPath),
+  zstName: process.argv.includes('--zstd') ? path.basename(zipPath).replace(/\.zip$/, '.tar.zst') : '',
+  maxEntryLength: Math.max(stagedEntryLength, 'eac-release-files.json'.length, UNZIP_NOTE_NAME.length, UNZIP_SCRIPT_NAME.length),
+}));
+writeFileSync(path.join(staging, UNZIP_SCRIPT_NAME), buildUnzipScript({zipName: path.basename(zipPath)}));
 await makeReleaseFiles(staging, version, updateTarget);
 console.log('[portable] 压缩完整文件清单与程序树');
 // 压缩策略（2026-10-23 实测调整）。
@@ -207,10 +215,7 @@ execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedComman
 // 常见目标目录 + 260 的余量，而资源管理器用 ANSI 路径、不支持长路径。
 // 解决方式与为何不改目录结构，见 portable-unzip-hint.mjs 顶部注释。
 //
-// 时机：必须在 zip 写完、SHA256 计算**之前**注入 —— 否则哈希不覆盖新增条目，
-// 用户按 SHA256SUMS 校验会失败。
-// 位置：不写进 staging 树。makeReleaseFiles() 的白名单会拒绝未知顶层项
-// （update-package-unowned-top-level），直接打断便携版更新校验链路。
+// 说明与脚本已在压缩前纳入文件清单；此处检查实际 ZIP 的最长路径。
 const zipEntries = listZipEntries(zipPath);
 const maxEntryLength = zipEntries.reduce((m, n) => Math.max(m, n.length), 0);
 console.log(`[portable] 包内 ${zipEntries.length} 条目，最长路径 ${maxEntryLength} 字符`);
@@ -221,28 +226,9 @@ console.log(`[portable] 包内 ${zipEntries.length} 条目，最长路径 ${maxE
 //   超 150 说明出现新的长路径源头，必须人工评估而不是默默出货。
 if (maxEntryLength > 154) {
   const top = zipEntries.slice().sort((a, b) => b.length - a.length).slice(0, 5);
-  throw new Error(`[portable] 长路径门禁 FAIL：最长条目 ${maxEntryLength} > 150。\n最长的 5 条:\n  ${top.join('\n  ')}`);
+  throw new Error(`[portable] 长路径门禁 FAIL：最长条目 ${maxEntryLength} > 154。\n最长的 5 条:\n  ${top.join('\n  ')}`);
 }
 console.log('[portable] 长路径门禁 PASS（最长 ≤ 154；目标目录 105 字符内右键解压不炸）');
-const zstNamePreview = process.argv.includes('--zstd')
-  ? path.basename(zipPath).replace(/\.zip$/, '.tar.zst')
-  : '';
-appendEntriesToZip({
-  zipPath,
-  entries: [
-    {
-      name: UNZIP_NOTE_NAME,
-      text: buildUnzipNote({
-        distro,
-        version,
-        zipName: path.basename(zipPath),
-        zstName: zstNamePreview,
-        maxEntryLength,
-      }),
-    },
-    { name: UNZIP_SCRIPT_NAME, text: buildUnzipScript({zipName: path.basename(zipPath)}) },
-  ],
-});
 
 console.log('[portable] 计算 SHA256');
 const hash = createHash('sha256');

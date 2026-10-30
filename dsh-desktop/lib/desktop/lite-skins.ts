@@ -4,7 +4,7 @@
 //
 // 背景
 // ----
-// 用户要求精简版开箱带 5 款皮肤并默认激活「虎鲸之链」。皮肤不属于
+// 精简版开箱带 5 款皮肤，默认使用原生界面；皮肤由用户显式启用。皮肤不属于
 // COMPANION_PLUGINS（那是「插件」，走 patch insert 行 + 目录拷贝）；
 // 皮肤是**公约皮肤包**，由皮肤管理器从 profile 的 node_modules 里发现，
 // 加载与否由 `cordis.patch.yml` 的自管段（dsh-skin managed）决定。
@@ -18,24 +18,22 @@
 // 的故障模式（见 companion-sync 里 retireRemovedBuiltinPluginsGated 的注释）。
 // 所以必须把三者一起写：包目录 + dependencies + bundles。
 //
-// 为什么不写 bundles
-// -----------------
-// 皮肤包自带 cordis.patch.yml（insert 行），随包复制时**不**进 bundles ——
-// bundles 是「包级 manifest 入口」，皮肤走 patch insert 另一条路。实测精简版
-// 的 bundles 只应有 @deepseek-ai/dsh-base 与 @deepseek-ai/dsh-web-app；把皮肤
-// 塞进 bundles 会重复注册（bundle 声明 + patch insert 同 id），触发
-// "duplicate loader entry id"。因此本模块只写 dependencies（让内核的依赖解析
-// 认得这些包）与 patch 行，不碰 bundles。
+// 皮肤包自带 insert patch，由 bundles 加载；profile 只写 disabled 编辑行，
+// 不重复插入同一插件。
 //
 // 幂等与用户意志
 // -------------
-// - 包目录已存在（用户从市场装过 / 曾播种过）→ 不覆盖。
+// - 包目录已存在 → 保留；仅修复已知随包鲸鱼娘副本的旧主题 peer 声明。
 // - patch 行已存在（含用户手动改过的 disabled）→ 不覆盖，尊重用户选择。
 // - 只有 installProfile === 'lite' 才播种；full 的皮肤配置完全不受影响。
 
 import fs = require('node:fs');
 import path = require('node:path');
+import { createHash } from 'node:crypto';
 import { PROFILE_MARKER_FILE } from './install-profile';
+import { registeredPatchEntryIds } from '../bundle-identity';
+import { writeFileAtomic } from '../atomic-json';
+import { COPY_STAMP, copyPluginPackage } from '../plugin-copy';
 
 /** 精简版随包的 5 款皮肤。dir 是 assets/skins 下的目录名。 */
 export interface LiteSkinSpec {
@@ -45,7 +43,7 @@ export interface LiteSkinSpec {
   dir: string;
   /** patch 行 id（皮肤包 cordis.patch.yml 的 insert id）。 */
   wiringId: string;
-  /** 是否默认激活（只有一款为 true）。 */
+  /** 是否默认激活（出厂全部关闭）。 */
   active: boolean;
 }
 
@@ -60,7 +58,7 @@ export const LITE_BUNDLED_SKINS: readonly LiteSkinSpec[] = [
     name: '@smalltailqwq/dsh-client-ui-skin-orca-link',
     dir: '@smalltailqwq_dsh-client-ui-skin-orca-link',
     wiringId: 'ui-skin-orca-link',
-    active: true,
+    active: false,
   },
   {
     name: 'dsh-client-liang-intensity-skin',
@@ -87,7 +85,7 @@ const MANAGED_BEGIN = '# --- dsh-skin managed (auto-generated; do not edit) ---'
 const MANAGED_END = '# --- end dsh-skin managed ---';
 
 /**
- * 落位皮肤管理器（assets/plugins → profile/node_modules）。已存在则跳过。
+ * 落位皮肤管理器；更新本应用播种的副本，保留用户安装或修改的版本。
  *
  * 为什么不登记 COMPANION_PLUGINS 而在 bundles 里：见 companion-sync.ts 对应
  * 注释 —— 两条路径只能选一条，否则内核加载双实例报
@@ -104,12 +102,23 @@ function materializeSkinManager(profileDir: string, assetsPlugins: string, log: 
   if (!fs.existsSync(path.join(src, 'package.json'))) return false;
   const dest = path.join(profileDir, 'node_modules', ...name.split('/'));
   let changed = false;
-  if (!fs.existsSync(path.join(dest, 'package.json'))) {
+  const legacyFiles: Record<string, string> = {
+    'lib/index.js': 'e92e0fc882b6b456dadf259dc37d4ae411e4bb753a3e9be159b7a312c4e5aed0',
+    'lib/client.js': '0e24436b06c491d41a6cadf9607832a7873281ed2a1b30403a7115ca1356ed84',
+  };
+  const legacyCopy = Object.entries(legacyFiles).every(([file, hash]) => {
     try {
-      fs.mkdirSync(path.dirname(dest), { recursive: true });
-      fs.cpSync(src, dest, { recursive: true });
-      log('已落位皮肤管理器: ' + name);
-      changed = true;
+      const text = fs.readFileSync(path.join(dest, file), 'utf8').replace(/\r\n/g, '\n');
+      return createHash('sha256').update(text).digest('hex') === hash;
+    } catch { return false; }
+  });
+  if (!fs.existsSync(path.join(dest, 'package.json')) || fs.existsSync(path.join(dest, COPY_STAMP)) || legacyCopy) {
+    try {
+      const stampFile = path.join(dest, COPY_STAMP);
+      const before = fs.existsSync(stampFile) ? fs.readFileSync(stampFile, 'utf8') : null;
+      copyPluginPackage(profileDir, src, name);
+      changed = before !== fs.readFileSync(stampFile, 'utf8');
+      if (changed) log('已落位皮肤管理器: ' + name);
     } catch (err) {
       log('皮肤管理器落位失败: ' + String((err as Error)?.message || err));
       return false;
@@ -119,7 +128,27 @@ function materializeSkinManager(profileDir: string, assetsPlugins: string, log: 
 }
 
 /**
- * 把一个皮肤包从 assets/skins 落位到 profile/node_modules。已存在则跳过。
+ * 只修已知随包鲸鱼娘 0.1.12 的旧 peer 声明，不替换用户的其他版本或修改。
+ */
+function repairWhaleThemePeer(dest: string, src: string): boolean {
+  const file = path.join(dest, 'package.json');
+  const old = fs.readFileSync(file, 'utf8');
+  const legacyHash = '0dbd58ddb3cdf25844150b405513e0a66b2a241d82aa8dc174f32ea9a433f660';
+  if (fs.lstatSync(dest).isSymbolicLink()
+    || createHash('sha256').update(old.replace(/\r\n/g, '\n')).digest('hex') !== legacyHash) return false;
+  for (const runtimeFile of ['lib/index.js', 'lib/client.js', 'cordis.patch.yml', 'skin.json']) {
+    if (!fs.readFileSync(path.join(dest, runtimeFile)).equals(fs.readFileSync(path.join(src, runtimeFile)))) return false;
+  }
+  const next = fs.readFileSync(path.join(src, 'package.json'), 'utf8');
+  if (next === old) return false;
+  const backup = file + '.before-theme-021.bak';
+  if (!fs.existsSync(backup)) fs.copyFileSync(file, backup);
+  writeFileAtomic(file, next);
+  return true;
+}
+
+/**
+ * 把一个皮肤包从 assets/skins 落位到 profile/node_modules；旧随包声明定向修复。
  * 返回是否真的复制的。
  */
 function materializeSkin(profileDir: string, spec: LiteSkinSpec, assetsSkins: string, log: (m: string) => void): boolean {
@@ -130,6 +159,16 @@ function materializeSkin(profileDir: string, spec: LiteSkinSpec, assetsSkins: st
   }
   const dest = path.join(profileDir, 'node_modules', ...spec.name.split('/'));
   if (fs.existsSync(path.join(dest, 'package.json'))) {
+    if (spec.wiringId === 'ui-skin-deep-whale-day-night') {
+      try {
+        if (repairWhaleThemePeer(dest, src)) {
+          log('已修复随包鲸鱼娘皮肤的 0.2.1 主题兼容声明（原清单已备份）');
+          return true;
+        }
+      } catch (err) {
+        log('鲸鱼娘兼容声明修复失败: ' + String((err as Error)?.message || err));
+      }
+    }
     // 已存在（用户市场安装 / 曾播种 / 覆盖层更新）→ 尊重现状，不覆盖。
     return false;
   }
@@ -265,161 +304,24 @@ function ensureSkinDependencies(profileDir: string, specs: readonly LiteSkinSpec
   }
 }
 
-/**
- * 确保某个 cordis.patch.yml 里有这些皮肤的 insert 行与 disabled 行。
- *
- * 追加到文件尾部一个自管段；若已存在自管段，缺失项补进该段（保持
- * 皮肤管理器的格式约定，让它后续接管时不打架）。已有该 id 的 disabled
- * 行则一律不动 —— 那是用户/管理器的选择。
- *
- * **为什么要能指定文件（这条踩了很久）**：内核 compose 的层序是
- *
- *     bundle 层 → profile 层(cordis.patch.yml) → home 层($DSH_HOME/cordis.patch.yml) → overlay
- *
- * 见 @deepseek-ai/dsh/profile-boot 里 composeProfile 的注释：
- * 「the home-level user layer ($DSH_HOME/cordis.patch.yml — machine-local
- * preferences that apply to every profile, so it **outranks** the per-profile
- * layer)」。皮肤管理器把这套「互斥」写在 **home 层**：装过皮肤后 home 层会留下
- * `- id: ui-skin-<x> / disabled: true` 的残留。
- *
- * 实测（2026-10-23）：只在 profile 层写 `disabled: false`，home 层的旧
- * `disabled: true` 依然压过它 —— `--dump-config` 里那一行最终是
- * `disabled: true`，插件不挂载，不进客户端 roster，body 上没有 data-dsh-*。
- * 表现就是「播种全成功、日志全绿、界面无皮肤」。full 变体恰好 home 层是
- * `disabled: false`（历史操作留下的），所以它正常，误导过排查。
- *
- * 因此两处都要写：profile 层负责登记 insert，home 层负责不被旧值覆盖。
- */
-function ensureSkinPatchRowsIn(patchFile: string, specs: readonly LiteSkinSpec[], log: (m: string) => void): boolean {
-  let text = '';
-  try {
-    text = fs.existsSync(patchFile) ? fs.readFileSync(patchFile, 'utf8') : '';
-  } catch {
-    return false;
-  }
-
-  const hasInsert = (id: string) =>
-    new RegExp(`^\\s*-\\s*id:\\s*${id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'm').test(text);
-  // 「已有 disabled 行」= 该 id 的下一行是 disabled。只认后一行，避免误判 insert 行。
-  //
-  // 同一 id 可能有多行（段外用户手写 + 段内本模块写）。按 patch 层语义**后写者胜**，
-  // 所以这里取**最后一条**，不取第一条。取第一条会踩到这个坑：段外的
-  // `disabled: true` 在文件前面时被判为「已有且为 true」，于是既不补新行、也不
-  // 进纠正逻辑，默认激活款被静默关掉 —— 与本次主 bug 同源。
-  const disabledValueOf = (id: string): boolean | null => {
-    const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`^- id:\\s*${esc}\\s*\\n\\s+disabled:\\s*(true|false)`, 'gm');
-    let last: string | null = null;
-    for (const m of text.matchAll(re)) last = m[1] ?? null;
-    return last === null ? null : last === 'true';
-  };
-  const hasDisabledRow = (id: string) => disabledValueOf(id) !== null;
-
-  // 自管段内允许纠正值：段内是「本模块上一次写的」，若与当前配置不符（例如
-  // 默认激活项从 A 改成 B，或早期版本写错），应当修正；段外是用户/皮肤管理器
-  // 的显式选择，一律不动。这修掉过一个实测问题：默认激活项曾被写成
-  // disabled: true（残留值），导致播种「成功」但界面无皮肤生效。
-  const managedRange = (() => {
-    const b = text.indexOf(MANAGED_BEGIN);
-    const e = text.indexOf(MANAGED_END);
-    return b >= 0 && e > b ? { begin: b, end: e } : null;
-  })();
-  const inManaged = (id: string): boolean => {
-    if (!managedRange) return false;
-    const esc = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const re = new RegExp(`^- id:\\s*${esc}\\s*$`, 'm');
-    const seg = text.slice(managedRange.begin, managedRange.end);
-    return re.test(seg);
-  };
-
-  // 默认激活款若在**段外**被写成 disabled: true，段内的 false 压不住它
-  // （patch 层后写者胜，段外那行在段内之前或之后都可能出现）。这种情况必须纠正，
-  // 否则「默认激活」在边界下静默失效 —— 与本次主 bug 同一类。
-  // 只针对 active 款：非激活款保持用户的显式禁用是正确的，不能越权打开。
-  const blockedOutside = specs.filter(
-    (s) => s.active && !inManaged(s.wiringId) && disabledValueOf(s.wiringId) === true,
-  );
-
-  // **每款皮肤都必须有 insert 行** —— 这是客户端半被下发的唯一入口。
-  //
-  // 实测（2026-10-23，这块连续判断错了三次）：
-  //   · 只写 disabled 行、不写 insert → 浏览器聚合请求 /plugins/??... 里根本没有
-  //     该皮肤（`/api/dsh/skins` 能列出它，因为管理器是扫目录的），body 上没有
-  //     data-dsh-<skin> 属性，界面不换肤；
-  //   · 包内自带 cordis.patch.yml 的那份 insert **不会**因为包进了 bundles 就自动
-  //     生效 —— bundles 只控制 host 侧加载，客户端 roster 由 patch 的 insert 提供。
-  //
-  // 所以 insert 一律补。同 id 重复的风险由 hasInsert 拦住（已存在就不写第二条），
-  // 而「重复路由」那个 bug 的实际原因是同一个包被 COMPANION_PLUGINS 和包内 patch
-  // 各注册一次（见 companion-sync.ts 里皮肤管理器的说明），与本处无关。
-  const missingInserts = specs.filter((s) => !hasInsert(s.wiringId));
-  const missingDisabled = specs.filter((s) => !hasDisabledRow(s.wiringId));
-  const wrongDisabled = specs.filter((s) => {
-    const v = disabledValueOf(s.wiringId);
-    return v !== null && v !== !s.active && inManaged(s.wiringId);
-  });
-  if (
-    missingInserts.length === 0
-    && missingDisabled.length === 0
-    && wrongDisabled.length === 0
-    && blockedOutside.length === 0
-  ) return false;
-
+/** 补齐新皮肤的默认关闭行，已有启停及管理器选择原样保留。 */
+function ensureSkinPatchRowsIn(patchFile: string, specs: readonly LiteSkinSpec[]): boolean {
+  const text = fs.existsSync(patchFile) ? fs.readFileSync(patchFile, 'utf8') : '';
+  const existing = registeredPatchEntryIds(text);
   const lines: string[] = [];
-  if (!text.includes(MANAGED_BEGIN)) {
-    lines.push('', MANAGED_BEGIN);
+  for (const spec of specs) {
+    // 包内 patch 提供 insert。这里只补默认启停行，尊重已有 YAML 选择。
+    if (existing.has(spec.wiringId)) continue;
+    lines.push(`- id: ${spec.wiringId}`, `  disabled: ${!spec.active}`);
   }
-  for (const s of missingInserts) {
-    lines.push('- insert:', `    - id: ${s.wiringId}`, `      name: '${s.name}'`);
-  }
-  for (const s of missingDisabled) {
-    lines.push(`- id: ${s.wiringId}`, `  disabled: ${s.active ? 'false' : 'true'}`);
-  }
-  if (!text.includes(MANAGED_END)) lines.push(MANAGED_END);
-
-  // 三个纠正来源任一命中有意义，就不能在这里返回：早退条件必须与第 299 行的
-  // 早退条件严格对称（那边含 blockedOutside，这边原来漏了）。漏掉的表现是
-  // 「只有段外阻挠行」时函数静默返回 false —— 判定命中了却不执行，没有日志、
-  // 没有改动，和没命中完全无法区分。
-  if (lines.length === 0 && wrongDisabled.length === 0 && blockedOutside.length === 0) return false;
-  // 就地纠正自管段内写错的值（在 managedRange 内替换，不碰段外）。
-  let next = text;
-  for (const s of wrongDisabled) {
-    const esc = s.wiringId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const seg = next.slice(managedRange!.begin, managedRange!.end);
-    const fixed = seg.replace(
-      new RegExp(`^(- id:\\s*${esc}\\s*\\n\\s+disabled:\\s*)(true|false)`, 'm'),
-      `$1${s.active ? 'false' : 'true'}`,
-    );
-    next = next.slice(0, managedRange!.begin) + fixed + next.slice(managedRange!.end);
-    log('已纠正随包皮肤的默认激活状态: ' + s.wiringId + ' → disabled=' + (!s.active));
-  }
-  // 默认激活款另有「段外阻挠行」的场景：用户（或早期版本的皮肤管理器）在自管段
-  // **之外**手写过 `- id: ui-skin-orca-link / disabled: true`。上面只改段内，
-  // 段外那行不动，而同 id 后出现的行会覆盖先出现的行 —— 结果默认激活款仍被关着，
-  // 「播种成功但界面无皮肤」原样复现（逐行解析的 patch 层语义是后写者胜）。
-  //
-  // 只对 active 款做这件事：非激活款保持用户的显式禁用是正确行为，不能越权打开。
-  // 改法是把段外的 true 改成 false，段内那份本来就是 false，两处一致即无歧义。
-  for (const s of blockedOutside) {
-    const esc = s.wiringId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const before = next;
-    next = next.replace(
-      new RegExp(`^(- id:\\s*${esc}\\s*\\n\\s+disabled:\\s*)true`, 'gm'),
-      '$1false',
-    );
-    if (next !== before) {
-      log('已在自管段外纠正默认激活款: ' + s.wiringId + ' → disabled=false（段外旧值会覆盖段内）');
-    }
-  }
-  if (lines.length > 0) next = next.replace(/\s*$/, '\n') + lines.join('\n') + '\n';
-  if (next === text) return false;
-  try {
-    fs.writeFileSync(patchFile, next);
-    return true;
-  } catch {
-    return false;
-  }
+  if (!lines.length) return false;
+  const end = text.indexOf(MANAGED_END);
+  const block = lines.join('\n') + '\n';
+  const next = end >= 0
+    ? text.slice(0, end) + block + text.slice(end)
+    : text.replace(/^\[\][ \t]*\r?$/m, '').replace(/\s*$/, '\n') + [MANAGED_BEGIN, ...lines, MANAGED_END, ''].join('\n');
+  writeFileAtomic(patchFile, next);
+  return true;
 }
 
 /**
@@ -449,22 +351,9 @@ export function isLiteProfile(appRoot: string): boolean {
   }
 }
 
-/**
- * 在 profile 层与 home 层两处都补齐皮肤行。
- *
- * 两层都要写的原因见 {@link ensureSkinPatchRowsIn} 的头注释：home 层优先级更高，
- * 只写 profile 层会被 home 层的旧 `disabled: true` 静默压掉。
- */
-function ensureSkinPatchRows(profileDir: string, specs: readonly LiteSkinSpec[], log: (m: string) => void = () => {}): boolean {
-  let changed = false;
-  if (ensureSkinPatchRowsIn(path.join(profileDir, 'cordis.patch.yml'), specs, log)) changed = true;
-  // home 层 = profile 目录的祖父（<home>/profiles/<name> → <home>）。不存在就跳过：
-  // 不主动创建 home 层文件，避免在没有该文件的环境里凭空多出一份配置。
-  const homePatch = path.join(path.dirname(path.dirname(profileDir)), 'cordis.patch.yml');
-  if (fs.existsSync(homePatch) && ensureSkinPatchRowsIn(homePatch, specs, (m) => log('[home] ' + m))) {
-    changed = true;
-  }
-  return changed;
+/** 默认只播种 profile 层；home 层属于用户及皮肤管理器，绝不重写。 */
+function ensureSkinPatchRows(profileDir: string, specs: readonly LiteSkinSpec[]): boolean {
+  return ensureSkinPatchRowsIn(path.join(profileDir, 'cordis.patch.yml'), specs);
 }
 
 /**
@@ -500,12 +389,11 @@ export function seedLiteBundledSkins(
   }
   // 皮肤管理器：从 assets/plugins 落位（它不在 COMPANION_PLUGINS，见那里的注释）。
   // 目录 + bundles 登记由下面的 ensureSkinDependencies 一并处理。
-  materializeSkinManager(profileDir, path.join(appRoot, 'assets', 'plugins'), log);
+  let changed = materializeSkinManager(profileDir, path.join(appRoot, 'assets', 'plugins'), log);
   if (!fs.existsSync(assetsSkins)) {
     log('随包皮肤目录不存在，跳过: ' + assetsSkins);
-    return false;
+    return changed;
   }
-  let changed = false;
   for (const spec of LITE_BUNDLED_SKINS) {
     if (materializeSkin(profileDir, spec, assetsSkins, log)) changed = true;
   }
@@ -515,8 +403,8 @@ export function seedLiteBundledSkins(
     log('已登记随包皮肤到 profile dependencies/bundles: ' + LITE_BUNDLED_SKINS.map((s) => s.name).join(', '));
     changed = true;
   }
-  if (ensureSkinPatchRows(profileDir, LITE_BUNDLED_SKINS, log)) {
-    log('已补齐随包皮肤的 patch 行（默认激活: ' + LITE_BUNDLED_SKINS.filter((s) => s.active).map((s) => s.wiringId).join(', ') + '）');
+  if (ensureSkinPatchRows(profileDir, LITE_BUNDLED_SKINS)) {
+    log('已补齐随包皮肤的默认关闭行（原生界面，用户选择优先）');
     changed = true;
   }
   return changed;

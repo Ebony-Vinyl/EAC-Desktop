@@ -54,6 +54,10 @@ export const BASE_PLUGIN_DIRS = [
   // 阶段 3：服务端 RPC / bridge 面已接回
   'dsh-plugin-shield',
   'dsh-client-file-changes',
+  'dsh-boot-animation',
+  'dsh-wechat',
+  'ds-harness-remote',
+  'dsh-our-free-model',
 ];
 
 /**

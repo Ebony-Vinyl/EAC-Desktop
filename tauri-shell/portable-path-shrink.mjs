@@ -45,6 +45,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 const DEAD_SUFFIX = /\.(js\.map|cjs\.map|mjs\.map|map|d\.ts|d\.mts|d\.cts)$/i;
 const DEAD_DIR_PARTS = /(^|[\\/])node_modules[\\/].+[\\/]build[\\/](esnext|esm)([\\/]|$)/i;
@@ -640,6 +641,53 @@ export function finalTrim(staging, log = () => {}) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// Inspector 的 Issues Markdown 是运行资源，只缩短便携树内的目录并同步 URL、摘要。
+export function shortenInspectorDescriptionPaths(staging, log = () => {}) {
+  const devtools = path.join(staging, 'dsh-desktop', 'node_modules', '@deepseek-ai',
+    'dsh-experimental-inspector', 'lib', 'devtools');
+  const prefix = 'models/issues_manager/descriptions/';
+  const source = path.join(devtools, prefix);
+  if (!fs.existsSync(source)) return { moved: 0 };
+  const destination = path.join(devtools, 'i');
+  if (fs.existsSync(destination)) throw new Error('inspector-shorten: 目标目录已存在');
+
+  const manifestFile = path.join(devtools, 'resource-manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  // 保留上游按 document.baseURI / worker location 选择根地址的逻辑。
+  const reference = /new URL\(`descriptions\/(\$\{\w+\})`, new URL\("models\/issues_manager\/MarkdownIssueDescription\.js",/g;
+  const changes = [];
+  let references = 0;
+  for (const entry of manifest.files) {
+    if (!entry.path.startsWith('chunks/') || !entry.path.endsWith('.js')) continue;
+    const file = path.join(devtools, entry.path);
+    const text = fs.readFileSync(file, 'utf8');
+    const rewritten = text.replace(reference, (_match, variable) => {
+      references++;
+      return 'new URL(`../../i/' + variable + '`, new URL("models/issues_manager/MarkdownIssueDescription.js",';
+    });
+    if (rewritten !== text) changes.push({ file, entry, text: rewritten });
+  }
+  if (references !== 1) throw new Error(`inspector-shorten: 预期 1 处资源 URL，实际 ${references}`);
+
+  let moved = 0;
+  for (const entry of manifest.files) {
+    if (entry.path.startsWith(prefix)) {
+      entry.path = 'i/' + entry.path.slice(prefix.length);
+      moved++;
+    }
+  }
+  if (!moved) throw new Error('inspector-shorten: 资源清单缺少 Issues Markdown');
+  fs.renameSync(source, destination);
+  for (const change of changes) {
+    fs.writeFileSync(change.file, change.text);
+    change.entry.bytes = Buffer.byteLength(change.text);
+    change.entry.sha256 = createHash('sha256').update(change.text).digest('hex');
+  }
+  fs.writeFileSync(manifestFile, JSON.stringify(manifest, null, 2) + '\n');
+  log(`inspector-shorten: ${moved} 个资源移至 i/，同步资源 URL 与清单摘要`);
+  return { moved };
+}
+
 // 变换 J（必须最后跑）：bundle-manifest.json 文件数重算
 // ═══════════════════════════════════════════════════════════════════
 // 背景（2026-10-24 产物级事故）：dsh-desktop/bundle-manifest.json 固化每个包

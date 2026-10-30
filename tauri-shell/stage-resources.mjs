@@ -20,6 +20,7 @@ import { stageProductionNodeModules } from './stage-node-modules.mjs';
 import {
   assertSupportedStageArch,
   pruneDarwinPayloads,
+  pruneDevelopmentPayloads,
   pruneLinuxPayloads,
   pruneMuslNodeAddonBinaries,
   pruneNonDarwinPrebuilds,
@@ -168,7 +169,7 @@ const ROOT_FILES = [
   'preset-sync.js', 'compact-preset-migrate.js', 'router-persona-preset-migrate.js',
 ];
 const LIB_DESKTOP = [
-  'proc.js', 'platform.js', 'runtime-paths.js', 'environment.js', 'profile.js',
+  'proc.js', 'platform.js', 'runtime-paths.js', 'environment.js', 'profile.js', 'full-composition.js',
   'runtime-patches.js', 'boot-server.js', 'package-manager.js', 'plugin-remove.js',
   // Task 3.3 插件治理三件套 + 其 lib/desktop 依赖
   'guard-box.js', 'companion-sync.js', 'plugin-ops.js',
@@ -188,7 +189,7 @@ const LIB_DESKTOP = [
 ];
 const SCRIPTS = [
   'eac-cli.js',
-  'patch-session-manage.js', 'patch-deps.js',
+  'patch-session-manage.js', 'patch-session-manage-021.js', 'patch-deps.js',
   // plugin-ops 消费：核心插件集合判定 + patch 行读写
   'onboarding.js', 'plugin-manager-patch.js',
   // P1 自愈链路（形态 1）：sidecar 退场后，L1 壳用随包 node 跑这个脚本做
@@ -623,8 +624,8 @@ execSync('node scripts/patch-deps.js', { cwd: path.join(staged, 'dsh-desktop'), 
 console.log('[stage] 重放既有会话管理补丁（patch-session-manage）');
 execSync('node scripts/patch-session-manage.js', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 
-// 上游修复的 vendored 覆盖（bash 输出折叠，PR #181）——npm ci 会还原成
-// registry 版本，把仓库内的修复副本盖回去。
+// 受控 bash 覆盖基于官方 0.2.1-rc.2，仅保留 optional-escalation 兼容差异。
+// npm ci 会恢复 registry 文件，装配时回填已重放补丁的项目副本。
 // （dsh-subprocess-local 的 pwsh 超时 vendored 修复已废弃：0.1.1-rc.2 上游以
 //  Promise.race(done, delay(graceMs)) 原生实现同类兜底，随 registry 版本走。）
 const vendoredBashFix = path.join(dd, 'node_modules', '@deepseek-ai', 'dsh-tool-bash', 'lib', 'index.js');
@@ -635,6 +636,8 @@ if (existsSync(vendoredBashFix)) {
 
 const sanitizedClients = sanitizeClientBuildPaths(nmDest);
 console.log(`[stage] 已清理 ${sanitizedClients} 个内核 client bundle 的构建机路径`);
+const developmentFiles = pruneDevelopmentPayloads(nmDest);
+console.log(`[stage] 已裁剪 ${developmentFiles} 个调试映射与依赖自测文件（保留运行代码及类型声明）`);
 
 // 捆绑依赖完整性清单（issue #7）：对**最终载荷**（npm ci + 补丁 + vendored
 // 回填之后）逐包计文件数，落 bundle-manifest.json。启动期 sidecar 的

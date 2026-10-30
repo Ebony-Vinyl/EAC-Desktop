@@ -29,7 +29,7 @@ function createStageFixture(): string {
     'plugin-copy.js', 'bundle-identity.js']) {
     writeFileSync(join(desktop, 'lib', file), 'module.exports = {};\n');
   }
-  for (const file of ['proc.js', 'platform.js', 'runtime-paths.js', 'package-manager.js', 'plugin-remove.js', 'profile.js', 'runtime-patches.js', 'boot-server.js',
+  for (const file of ['proc.js', 'platform.js', 'runtime-paths.js', 'package-manager.js', 'plugin-remove.js', 'profile.js', 'full-composition.js', 'runtime-patches.js', 'boot-server.js',
     // v6 Task 3.3：插件治理三件套 + lib/desktop 依赖
     'guard-box.js', 'companion-sync.js', 'plugin-ops.js', 'install-profile.js', 'plugin-sync-registry.js',
     // v6 Task 3.3 阶段 3：files.* 白名单根
@@ -75,8 +75,18 @@ test('staged runtime verifier accepts the minimal runtime closure', () => {
   try {
     const result = verifyStagedRuntime(root);
     assert.equal(result.bundle.ok, true);
-    // v6 Task 3.3：治理闭包（32）+ 阶段 3 的 file-roots（33）。
-    assert.equal(result.requiredFiles, 43);
+    // 包含 profile 顶层依赖 full-composition.js。
+    assert.equal(result.requiredFiles, 44);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('staged runtime verifier rejects a missing profile composition dependency', () => {
+  const root = createStageFixture();
+  try {
+    rmSync(join(root, 'dsh-desktop/lib/desktop/full-composition.js'));
+    assert.throws(() => verifyStagedRuntime(root), /required staged file is missing: .*full-composition\.js/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

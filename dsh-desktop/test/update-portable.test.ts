@@ -53,7 +53,8 @@ const {preparePortable,exchangePortable,recoverPortable,readPortableJournal}=req
 const {inspectPortableArchive,extractPortableArchive}=require('../lib/desktop/update-archive.js');
 const TARGET='windows-x86_64-portable';
 const BASE_FILES=['dsh-eac-shell.exe','.dsh-portable','sidecar/server.js','sidecar/bridge.js','dpx/src/index.js','ui-skin-manager/resolved/system.default/snapshot.json'];
-async function temporary(t:any){const root=await fs.mkdtemp(path.join(os.tmpdir(),'eac-portable-'));t.after(async()=>{const resolved=path.resolve(root);assert.equal(path.dirname(resolved),path.resolve(os.tmpdir()));assert.ok(path.basename(resolved).startsWith('eac-portable-'));await fs.rm(resolved,{recursive:true,force:true});});return root;}
+// Windows runners can expose TEMP through an 8.3 alias; use the updater's canonical paths.
+async function temporary(t:any){const parent=await fs.realpath(os.tmpdir());const root=await fs.mkdtemp(path.join(parent,'eac-portable-'));t.after(async()=>{const resolved=path.resolve(root);assert.equal(path.dirname(resolved),parent);assert.ok(path.basename(resolved).startsWith('eac-portable-'));await fs.rm(resolved,{recursive:true,force:true});});return root;}
 async function tree(root:string,version:string,dll=true){
   await fs.mkdir(root);for(const relative of BASE_FILES){const file=path.join(root,...relative.split('/'));await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,version+':'+relative);}
   await fs.mkdir(path.join(root,'dsh-desktop'));await fs.writeFile(path.join(root,'dsh-desktop/package.json'),JSON.stringify({version}));
@@ -218,7 +219,7 @@ test('health failure cannot roll back files while the new process shutdown remai
 test('packager names both PE architectures and ships the complete file inventory and marker',{skip:process.platform!=='win32'},async t=>{
  const root=await temporary(t);const shell=path.join(root,'tauri-shell');const desktop=path.join(root,'dsh-desktop');await fs.mkdir(shell);await fs.mkdir(path.join(desktop,'lib/desktop'),{recursive:true});
  await fs.writeFile(path.join(desktop,'package.json'),JSON.stringify({version:'6.0.1'}));
- await fs.copyFile(path.resolve('../tauri-shell/make-portable.mjs'),path.join(shell,'make-portable.mjs'));
+ for(const name of ['make-portable.mjs','portable-unzip-hint.mjs','portable-path-shrink.mjs'])await fs.copyFile(path.resolve('../tauri-shell/'+name),path.join(shell,name));
  for(const name of ['update-package.js','update-backup.js'])await fs.copyFile(require.resolve('../lib/desktop/'+name),path.join(desktop,'lib/desktop',name));
  const output=path.join(root,'输出 目录');
  async function run(args:string[]){const child=spawn(process.execPath,[path.join(shell,'make-portable.mjs'),...args],{stdio:['ignore','pipe','pipe'],windowsHide:true});let log='';child.stdout.on('data',data=>log+=data);child.stderr.on('data',data=>log+=data);const status=await new Promise<number|null>(resolve=>child.once('exit',resolve));return {status,log};}
@@ -226,9 +227,11 @@ test('packager names both PE architectures and ships the complete file inventory
   const triple=arch+'-pc-windows-msvc';const release=path.join(shell,'target',triple,'release');await fs.mkdir(path.dirname(release),{recursive:true});await tree(release,'6.0.1');
   const pe=Buffer.alloc(134);pe.write('MZ');pe.writeUInt32LE(128,60);pe.writeUInt32LE(0x4550,128);pe.writeUInt16LE(machine,132);await fs.writeFile(path.join(release,'dsh-eac-shell.exe'),pe);
   const built=await run(['--target',triple,'--out',output]);assert.equal(built.status,0,built.log);
-  const archive=path.join(output,'EAC-Lite-6.0.1-windows-'+arch+'-portable.zip');const manifest=await inspectPortableArchive(archive,'6.0.1','windows-'+arch+'-portable');
+  const archive=path.join(output,'v6.0.1-lite-'+(arch==='x86_64'?'x64':'arm64')+'.zip');const manifest=await inspectPortableArchive(archive,'6.0.1','windows-'+arch+'-portable');
   assert.ok(manifest.files.some((file:any)=>file.path==='eac-installation.json'));assert.ok(manifest.files.some((file:any)=>file.path==='.dsh-portable'));
-  const before=await fs.readFile(archive);const repeated=await run(['--target',triple,'--out',output]);assert.notEqual(repeated.status,0);assert.deepEqual(await fs.readFile(archive),before);
+  for(const name of ['解压说明.txt','解压到短路径.ps1'])assert.ok(manifest.files.some((file:any)=>file.path===name),'unzip helpers must be included in the verified inventory');
+  const before=await fs.readFile(archive);const sum=crypto.createHash('sha256').update(before).digest('hex').toUpperCase();assert.ok((await fs.readFile(path.join(output,'SHA256SUMS.txt'),'utf8')).includes(sum+'  '+path.basename(archive)));
+  const repeated=await run(['--target',triple,'--out',output]);assert.notEqual(repeated.status,0);assert.deepEqual(await fs.readFile(archive),before);
  }
  assert.equal((await fs.readFile(path.join(output,'SHA256SUMS.txt'),'utf8')).trim().split('\n').length,2);
  assert.equal((await fs.readdir(output)).filter(name=>name.startsWith('.staging-portable-')).length,0);

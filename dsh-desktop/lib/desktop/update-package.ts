@@ -3,7 +3,7 @@ import fsp = require('node:fs/promises');
 import path = require('node:path');
 import crypto = require('node:crypto');
 import {plainPath, writeDurableJson} from './update-backup';
-export const PORTABLE_ITEMS = ['dsh-eac-shell.exe', 'sidecar', 'dsh-desktop', 'ui-skin-manager', 'dpx', '.dsh-portable', 'WebView2Loader.dll', 'eac-installation.json', 'eac-release-files.json'] as const;
+export const PORTABLE_ITEMS = ['dsh-eac-shell.exe', 'sidecar', 'dsh-desktop', 'ui-skin-manager', 'dpx', '.dsh-portable', 'WebView2Loader.dll', 'eac-installation.json', 'eac-release-files.json', '解压说明.txt', '解压到短路径.ps1'] as const;
 export interface ReleaseFile {path: string; size: number; sha256: string;}
 export interface ReleaseFiles {schemaVersion: 1; product: 'eac-desktop'; version: string; target: string; files: ReleaseFile[];}
 export function safeRelative(value: string): string {

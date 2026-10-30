@@ -33,3 +33,5 @@ CC BY-NC-SA 4.0 attribution chain
 
 完整法律条款见 LICENSE。第三方名称、商标和标志仍归各自权利人所有，本项目不暗示任何官方认可或隶属关系。
 See LICENSE for the controlling legal terms. Third-party names, trademarks, and logos remain the property of their respective owners; this project does not imply endorsement or affiliation.
+
+EAC 适配（2026-10-30）：package.json 的主题 peer 范围补充已验收的 DSH 0.2.1-rc.2；皮肤运行代码与美术资源未修改。原 CC BY-NC-SA 4.0 许可及署名链保持有效。

@@ -17,6 +17,11 @@ window.__ModuleLoader__.load({
     ]
 
     const STYLE_TEXT = [
+      // 0.2.1 uses an account menu below the footer actions. The whale skin's
+      // fixed footer basis clips it; let both rows determine the footer height.
+      'body[data-dsh-maid-atelier] [data-maid-sidebar-footer] {',
+      '  flex-basis: auto !important;',
+      '}',
       `[${SCROLL_ATTR}="true"] {`,
       '  min-height: 0 !important;',
       '  overflow-y: auto !important;',

@@ -344,7 +344,7 @@ export function fileDropSave(dataUrl: string, name: string): { ok: boolean; erro
 export function pluginManagerSetEnabled(id: string, enabled: boolean): PluginMutationResult {
   // M3/#416 L1：内置（builtin）分级 = onboarding CORE_PLUGIN_IDS（同一生成
   // 注册表来源），默认启用且不可停用 —— 管理页的行同样锁定为不可切换。
-  if (onboardingLogic.CORE_PLUGIN_IDS.has(id)) {
+  if (id !== 'wallpaper-engine' && onboardingLogic.CORE_PLUGIN_IDS.has(id)) {
     return { ok: false, error: '核心插件不可停用: ' + String(id) };
   }
   const target = bundleTarget(id);

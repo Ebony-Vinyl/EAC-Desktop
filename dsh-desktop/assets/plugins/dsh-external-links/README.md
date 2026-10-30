@@ -47,7 +47,7 @@ node tests/smoke.mjs
 
 ## 维护
 
-EAC 原研（`assets/SOURCES.json#C116`），不参与内置插件自动更新。
+EAC 原研（`assets/SOURCES.json#C119`），不参与内置插件自动更新。
 随包口径见 `tauri-shell/distro.mjs` 的 `BASE_PLUGIN_DIRS` 与
 `dsh-desktop/lib/desktop/companion-sync.ts` 的 `COMPANION_PLUGINS`（两处必须一致，
 `dsh-desktop/test/minimal-core-boundary.test.ts` 会断言）。

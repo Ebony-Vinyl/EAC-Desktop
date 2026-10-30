@@ -36,8 +36,11 @@ function requireOrder(names: string[]): void {
   }
 }
 
-test('安装包装配仅由workflow_call调用，本地测试保留独立入口', () => {
-  assert.deepEqual(Object.keys(workflow.on), ['workflow_call']);
+test('安装包装配允许 beta 推送、手动与复用调用，本地测试保留独立入口', () => {
+  assert.deepEqual(Object.keys(workflow.on).sort(), ['push', 'workflow_call', 'workflow_dispatch']);
+  assert.deepEqual(workflow.on.push, { branches: ['beta'] });
+  assert.equal(workflow.on.workflow_call, null);
+  assert.equal(workflow.on.workflow_dispatch, null);
   const manifest = JSON.parse(readFileSync(join(repositoryRoot, 'dsh-desktop', 'package.json'), 'utf8'));
   assert.equal(manifest.scripts.pretest, 'npm run build');
   assert.match(manifest.scripts.test, /^node scripts\/test-runner\.js test\/\*\.test\.ts /);
@@ -61,12 +64,14 @@ test('装配必须先完成固定资源准备，校验闭包后才能构建安�
   assert.equal(step('Install dependencies').run, 'npm run ci:install');
   assert.equal(step('Fetch bundled Node and npm runtimes').run, 'npm run fetch-runtime');
   assert.equal(step('Fetch Cargo dependencies').run, 'cargo fetch --locked');
+  assert.equal(step('Run automated tests').run, 'npm test');
+  assert.equal(step('Run automated tests').if, undefined);
   assert.equal(step('Assemble staged runtime').run, 'node tauri-shell/stage-resources.mjs --target=${{ matrix.target }} --skip-npm');
   assert.equal(step('Verify staged closure and bundle integrity').run, 'node dsh-desktop/scripts/verify-staged-runtime.mjs');
   requireOrder([
     'Verify dsh-dpx submodule pin', 'Prepare vendored kernel', 'Install dependencies',
     'Fetch bundled Node and npm runtimes', 'Fetch Cargo dependencies',
-    'Assemble staged runtime', 'Verify staged closure and bundle integrity', 'Build Tauri installers',
+    'Run automated tests', 'Assemble staged runtime', 'Verify staged closure and bundle integrity', 'Build Tauri installers',
   ]);
 });
 

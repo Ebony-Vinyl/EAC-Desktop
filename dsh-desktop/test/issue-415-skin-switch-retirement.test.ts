@@ -109,8 +109,8 @@ test('offline ledgers no longer carry skin-switch (history keeps a retired basel
   const builtinCount = distribution.plugins.filter((p) => p.distributionClass === 'builtin').length;
   assert.equal(policies.pluginDistribution.expectedCounts.builtin, builtinCount,
     'policies.expectedCounts.builtin 必须与 plugin-distribution 的 builtin 数一致');
-  assert.equal(builtinCount, 10,
-    '10 个内置插件 = dsh-desktop/assets/plugins 实物（皮肤平台 14 包已外迁、plugin-manager/terminal/file-drop-eac 已退役；balance/plugin-wizard 实物不存在，ISO-004 改判 recommended/external）');
+  assert.equal(builtinCount, 17,
+    '原 10 个内置插件加上开机动画、微信渠道、远程访问、外链修复、OFM 和两个视觉核心；skin-switch 保持退役');
   // lock 的 manifestRevision 与被编辑后的 .sync/plugins.json 逐字节对应
   //（与 scripts/plugin-sync.mjs buildLock 的 sha256File 口径一致）。
   const lock = json<{ manifestRevision: string }>('.sync', 'plugins.lock.json');
@@ -156,9 +156,8 @@ test('staging drops the retired plugin but preserves the ADR 0010 manager fallba
   // ISO-003：eac-core-bridge 的端点生产者缺失（DSH_EAC_BRIDGE_URL/TOKEN 零写入方）
   // → 退役出装配清单（资产目录保留，等进程隔离接回）。
   assert.equal(stagedDirs.includes('dsh-eac-core-bridge'), false, 'ISO-003：Core Bridge 不得再随包装配');
-  // 10 个基础配套（2026-10-25 加入外链/登录授权页修复 dsh-external-links）
-  // + 2 个视觉核心（壁纸引擎 / 皮肤管理器，2026-10-22 用户要求提升）
-  assert.equal(stagedDirs.length, 12, '装配清单应为 12 个随包插件（10 基础 + 2 视觉核心）');
+  // 14 个基础配套（含开机动画、微信、远程访问、外链修复和 OFM）+ 2 个视觉核心。
+  assert.equal(stagedDirs.length, 16, '装配清单应为 16 个随包插件（14 基础 + 2 视觉核心）');
   assert.equal(stagedDirs.includes('dsh-external-links'), true, '外链/登录授权页修复应随包');
   assert.equal(stagedDirs.includes('dsh-plugin-wallpaper-engine'), true, '壁纸引擎应随包');
   assert.equal(stagedDirs.includes('dsh-client-ui-skin-deep-whale-manager'), true, '皮肤管理器应随包');

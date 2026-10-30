@@ -70,7 +70,7 @@ test('装配清单只包含当前运行闭包与构建期职责', () => {
       'preset-sync.js', 'compact-preset-migrate.js', 'router-persona-preset-migrate.js',
     ],
     LIB_DESKTOP: [
-      'proc.js', 'platform.js', 'runtime-paths.js', 'environment.js', 'profile.js',
+      'proc.js', 'platform.js', 'runtime-paths.js', 'environment.js', 'profile.js', 'full-composition.js',
       'runtime-patches.js', 'boot-server.js',
       'client-update.js', 'update-sources.js', 'update-signature.js', 'update-platform.js', 'update-linux.js', 'update-linux-root.js', 'update-linux-helper.js', 'update-appimage.js', 'update-appimage-helper.js',
       // Task 3.3 三件套 + lib/desktop 依赖
@@ -78,7 +78,7 @@ test('装配清单只包含当前运行闭包与构建期职责', () => {
       'install-profile.js', 'plugin-sync-registry.js',
     ],
     LIB_VNEXT: ['atomic-json.js', 'plugin-copy.js'],
-    SCRIPTS: ['patch-session-manage.js', 'patch-deps.js', 'onboarding.js', 'plugin-manager-patch.js'],
+    SCRIPTS: ['patch-session-manage.js', 'patch-session-manage-021.js', 'patch-deps.js', 'onboarding.js', 'plugin-manager-patch.js'],
   };
   assert.ok(lists.ROOT_FILES.includes('client-update-defaults.json'), '发布信任根必须随包装配');
   for (const [listName, required] of Object.entries(mustHave)) {

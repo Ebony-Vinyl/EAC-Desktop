@@ -250,7 +250,8 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
     // L1 内置：默认启用且不可停用/移除（IPC 侧 pluginManagerSetEnabled 对
     // 同一 id 集合直接拒绝，这里同步锁定开关，避免出现按不动的控件）。
     const builtin = distributionClass === 'builtin';
-    const toggleable = group !== 'core' && !isCore && !builtin && !(hasConfig && !disabled);
+    const optionalWallpaper = id === 'wallpaper-engine';
+    const toggleable = optionalWallpaper || (group !== 'core' && !isCore && !builtin && !(hasConfig && !disabled));
     rows.push({
       id,
       name: name || id,
@@ -264,8 +265,8 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
       group,
       distributionClass,
       tierLabel: TIER_LABELS[distributionClass],
-      defaultEnabled: distributionClass !== 'external',
-      enableChoice: distributionClass === 'recommended',
+      defaultEnabled: !optionalWallpaper && distributionClass !== 'external',
+      enableChoice: optionalWallpaper || distributionClass === 'recommended',
       pack: distributionClass === 'recommended' ? recommendedPack : null,
     });
     const identity = ctx.bundleIdentities?.[name];
@@ -281,7 +282,7 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
           const override = userById.get(entry.id) || insertById.get(entry.id);
           return !(override?.hasDisabled ? override.disabled : entry.disabled);
         });
-        row.toggleable = !isRemoved && !isCore && !builtin;
+        row.toggleable = !isRemoved && (optionalWallpaper || (!isCore && !builtin));
         row.removable = !isRemoved && !isCore && !builtin;
       }
     }

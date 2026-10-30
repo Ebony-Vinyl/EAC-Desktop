@@ -28,6 +28,6 @@
     "note": "EAC 原研插件（私有维护，不参与内置插件自动更新）。EAC 经 companion-sync 注册表加载（走 std adapter）；facets 为最小占位，尚未参与 std 协商",
     "maintenance": "eac-private",
     "autoUpdate": false,
-    "ledger": "assets/SOURCES.json#C116"
+    "ledger": "assets/SOURCES.json#C119"
   }
 }

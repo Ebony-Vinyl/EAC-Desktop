@@ -1982,7 +1982,7 @@ async function loadPacksIndex() {
 
 export { classifyPlugin, runProbe, whitelistSource, loadCatalog, parseSimplePatch, checkUpdates, parseSite, registryToCatalog, normalizeRepoUrl, readInstalledProvenance, matchInstalledPackage, resolveProfile, githubList, npmSearch, readZhIntro, selfUpdateCheck, autoUpdateState, setAutoUpdate, desktopProfile, resolveLinkedUpstream, fetchUpstreamVersion, findUpstreamByName, npmLatestInfo, linkedUpdateTarget, loadEacRecommendations, mergeRecommendedCatalog } // test hooks; cordis only reads name/inject/apply
 
-export function apply(ctx) {
+export function* apply(ctx) {
   const webServer = ctx.get('webServer')
   if (webServer === undefined) {
     console.error('[dsh-market] webServer service unavailable at apply; route not registered')
@@ -1991,6 +1991,7 @@ export function apply(ctx) {
   // Allow install ops to hot-mount into this composition; wipe stale hot-mount
   // inputs so a crash can never collide with the bundle layer on next boot.
   hotCtx = ctx
+  setQuitting(false)
   // EAC 修复：热挂载缓存目录跟随桌面专属 profile（DSH_DESKTOP_PROFILE），
   // 与本文件其余安装/读写路径的解析保持一致；独立安装仍为 web。
   cleanHotDir(desktopProfile())
@@ -2526,8 +2527,8 @@ export function apply(ctx) {
       }
     }
   // 统一市场主路径 + 底座兼容路径共用同一 handler。
-  webServer.register({ kind: 'exact', path: '/api/dsh-unified-market', handler: routeHandler })
-  webServer.register({ kind: 'exact', path: '/api/dsh-market', handler: routeHandler })
+  yield webServer.register({ kind: 'exact', path: '/api/dsh-unified-market', handler: routeHandler })
+  yield webServer.register({ kind: 'exact', path: '/api/dsh-market', handler: routeHandler })
 
   // 后台自动更新检测（EAC 特化：只针对桌面壳真实生效的 profile）：
   // 启动 20 秒后首检，之后每 6 小时；autoUpdate=auto 时自动逐项升级。
@@ -2536,10 +2537,11 @@ export function apply(ctx) {
   void consumePendingUpdates(autoProfile)
   const firstDelay = setTimeout(() => { autoCheckTick(autoProfile, ctx) }, AUTO_CHECK_DELAY)
   autoCheckTimer = setInterval(() => { autoCheckTick(autoProfile, ctx) }, AUTO_CHECK_INTERVAL)
-  ctx.on('dispose', () => {
+  yield () => {
     clearTimeout(firstDelay)
     if (autoCheckTimer) clearInterval(autoCheckTimer)
     autoCheckTimer = null
+    if (hotCtx === ctx) hotCtx = null
     setQuitting(true)
-  })
+  }
 }

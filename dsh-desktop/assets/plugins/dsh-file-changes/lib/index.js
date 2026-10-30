@@ -569,17 +569,15 @@ async function handleSessionCwdRoute(req, res) {
 const name = "dsh-file-changes";
 const inject = ["sessionProjections", "webServer"];
 
-function apply(ctx) {
+function* apply(ctx) {
   ctx.sessionProjections.register(fileChangesProjectionDefinition);
-  const disposers = [
-    ctx.webServer.register({ kind: "exact", path: LIST_ROUTE, handler: fenced(ctx, handleListRoute) }),
-    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/ports", handler: fenced(ctx, handlePortsRoute) }),
-    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/check", handler: fenced(ctx, handleCheckRoute) }),
-    ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/session-cwd", handler: fenced(ctx, handleSessionCwdRoute) }),
-    // 注意：prefix 不能带尾部斜杠（webserver 按 prefix + "/" 匹配）。
-    ctx.webServer.register({ kind: "prefix", path: STATIC_PREFIX.replace(/\/+$/, ""), handler: fenced(ctx, handleStaticRoute) })
-  ];
-  return () => { for (const d of disposers) d(); };
+  // Yield each route so Cordis also rolls back a partially failed activation.
+  yield ctx.webServer.register({ kind: "exact", path: LIST_ROUTE, handler: fenced(ctx, handleListRoute) });
+  yield ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/ports", handler: fenced(ctx, handlePortsRoute) });
+  yield ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/check", handler: fenced(ctx, handleCheckRoute) });
+  yield ctx.webServer.register({ kind: "exact", path: "/api/dsh-files/session-cwd", handler: fenced(ctx, handleSessionCwdRoute) });
+  // 注意：prefix 不能带尾部斜杠（webserver 按 prefix + "/" 匹配）。
+  yield ctx.webServer.register({ kind: "prefix", path: STATIC_PREFIX.replace(/\/+$/, ""), handler: fenced(ctx, handleStaticRoute) });
 }
 
 export { apply, inject, name };

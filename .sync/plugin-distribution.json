@@ -495,6 +495,46 @@
         "target": "bundled",
         "state": "migrated"
       }
+    },
+    {
+      "id": "wallpaper-engine",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
+    },
+    {
+      "id": "ui-skin-deep-whale-manager",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
+    },
+    {
+      "id": "external-links",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
+    },
+    {
+      "id": "our-free-model",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
     }
   ]
 }

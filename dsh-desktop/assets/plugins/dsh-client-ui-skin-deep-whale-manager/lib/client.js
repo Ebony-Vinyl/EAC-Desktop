@@ -2126,7 +2126,8 @@ window.__ModuleLoader__.load({
 			});
 			const result = await response.json();
 			if (!response.ok || result.ok !== true) throw new Error(result.error ?? `HTTP ${response.status}`);
-			window.setTimeout(() => window.location.reload(), 1200);
+			// EAC: the host response now waits for kernel reconciliation.
+			window.location.reload();
 		}
 		//#endregion
 		//#region src/client/bundle-intro.tsx

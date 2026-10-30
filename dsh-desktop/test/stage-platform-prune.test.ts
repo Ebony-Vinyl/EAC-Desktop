@@ -9,6 +9,7 @@ import {
   isLinuxElfForArch,
   isMachO,
   pruneDarwinPayloads,
+  pruneDevelopmentPayloads,
   pruneLinuxPayloads,
   pruneMuslNodeAddonBinaries,
   pruneNonLinuxPrebuilds,
@@ -17,6 +18,23 @@ import {
 
 const MACHO64 = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x00, 0x00]);
 const ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x00]);
+
+test('安装载荷裁剪嵌套 Zod 自测和 source maps，保留运行时类型、源文件和其他包资源', (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prune-development-'));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const removed = ['pkg/lib/index.js.map', 'pkg/node_modules/zod/src/v4/core/tests/check.test.ts'];
+  const retained = ['pkg/lib/index.js', 'pkg/lib/index.d.ts', 'pkg/lib/typert.host.js',
+    'pkg/node_modules/zod/src/v4/core/check.ts', 'pkg/node_modules/zod/v4/core/check.js',
+    'other/src/tests/runtime.js', 'pkg/assets/key.map'];
+  for (const file of [...removed, ...retained]) {
+    fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
+    fs.writeFileSync(path.join(root, file), 'fixture');
+  }
+  assert.equal(pruneDevelopmentPayloads(root), removed.length);
+  for (const file of removed) assert.equal(fs.existsSync(path.join(root, file)), false, file);
+  for (const file of retained) assert.equal(fs.existsSync(path.join(root, file)), true, file);
+  assert.equal(pruneDevelopmentPayloads(root), 0);
+});
 
 function elf64(machine: number): Buffer {
   const data = Buffer.alloc(20);

@@ -1,7 +1,7 @@
 {
   "generatedRegistry": "dsh-desktop/lib/desktop/plugin-sync-registry.ts",
   "manifest": ".sync/plugins.json",
-  "manifestRevision": "7d8d5f63ef8edb979bbce1b4072fb2c1e3e8fa18b2fcaac1e08a7fd403ac2ad7",
+  "manifestRevision": "8c148032d0c895dbf518b54f466f163a500d13a2d6258d78f0ea635a5bb4464c",
   "plugins": {
     "client-file-changes": {
       "compatibility": {},
@@ -43,7 +43,7 @@
         "packageName": "dsh-compact",
         "packageVersion": "1.0.0",
         "path": "dsh-desktop/assets/plugins/dsh-compact",
-        "treeSha256": "3784c09eb98338b95053cb68ff7b6410c7ae760f1ab15fe2b8df47b5cbed2a86"
+        "treeSha256": "049a5a19a15bc25d14b81d624cdd69acbb22c9354281c362db6013a28fc249a5"
       },
       "manifestEntrySha256": "2cf65bbbf0a3240bd02fc40d42dc564446219a88f6d972da681a64370bd666c5",
       "patchFiles": [],
@@ -53,8 +53,95 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "3784c09eb98338b95053cb68ff7b6410c7ae760f1ab15fe2b8df47b5cbed2a86",
+        "sha256": "049a5a19a15bc25d14b81d624cdd69acbb22c9354281c362db6013a28fc249a5",
         "version": "1.0.0"
+      },
+      "sourceCommit": null
+    },
+    "ds-harness-remote": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "index.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 13,
+        "license": "MIT",
+        "packageName": "ds-harness-remote",
+        "packageVersion": "0.5.2",
+        "path": "dsh-desktop/assets/plugins/ds-harness-remote",
+        "treeSha256": "152c5ef0153233d4256503759d1dc8accecafffd189aaf007289cd77c8d58160"
+      },
+      "manifestEntrySha256": "2b581a46499f2497f687709c2b27f0791f22537255302884c76519ddb36d848d",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "0.5.2",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "github",
+        "name": "liguobao/ds-harness-remote",
+        "repository": "https://github.com/liguobao/ds-harness-remote",
+        "sha256": "152c5ef0153233d4256503759d1dc8accecafffd189aaf007289cd77c8d58160",
+        "version": "0.5.2"
+      },
+      "sourceCommit": null
+    },
+    "dsh-boot-animation": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/index.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 25,
+        "license": "BSD-3-Clause",
+        "packageName": "dsh-boot-animation",
+        "packageVersion": "0.4.2",
+        "path": "dsh-desktop/assets/plugins/dsh-boot-animation",
+        "treeSha256": "89da88a52b88db7837ca7c6ca1cd9fbb2ccf49d2e4231731d882c8e39d1b6f22"
+      },
+      "manifestEntrySha256": "6aff4943fd174a2af442a33c9033216233b421a7b6d479e057a543d1af37e153",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "0.4.2",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "github",
+        "name": "NativeDog1/dsh-boot-animation",
+        "repository": "https://github.com/NativeDog1/dsh-boot-animation",
+        "sha256": "89da88a52b88db7837ca7c6ca1cd9fbb2ccf49d2e4231731d882c8e39d1b6f22",
+        "version": "0.4.2"
+      },
+      "sourceCommit": null
+    },
+    "dsh-wechat-plugin": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/host.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 27,
+        "license": "MIT",
+        "packageName": "dsh-wechat-plugin",
+        "packageVersion": "0.36.6",
+        "path": "dsh-desktop/assets/plugins/dsh-wechat",
+        "treeSha256": "7e86cbba3f11c592a79b6135ce22f169903f952aeadac9a28af71976fd0aee83"
+      },
+      "manifestEntrySha256": "27ee6f4c58ebd21dda0665b32688bc6bdd3f9e584b1b3d8a4f3c9ae69737f8f8",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "0.36.6",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "github",
+        "name": "xcisxc29/dsh-wechat",
+        "repository": "https://github.com/xcisxc29/dsh-wechat",
+        "sha256": "7e86cbba3f11c592a79b6135ce22f169903f952aeadac9a28af71976fd0aee83",
+        "version": "0.36.6"
       },
       "sourceCommit": null
     },
@@ -140,6 +227,35 @@
       },
       "sourceCommit": null
     },
+    "external-links": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/index.js",
+          "lib/client.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 6,
+        "license": "MIT",
+        "packageName": "dsh-external-links",
+        "packageVersion": "1.0.0",
+        "path": "dsh-desktop/assets/plugins/dsh-external-links",
+        "treeSha256": "b4d5bb4a7f2fc3783bcca9b4964c7dff04ca8e3857feb6d14dab2a72987c99b7"
+      },
+      "manifestEntrySha256": "c226ece9cac544ce4d0bdfe29a5bcf6a68c4aeb0a4674774e1cda51d2300b6bf",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "1.0.0",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "internal",
+        "name": "dsh-external-links",
+        "sha256": "b4d5bb4a7f2fc3783bcca9b4964c7dff04ca8e3857feb6d14dab2a72987c99b7",
+        "version": "1.0.0"
+      },
+      "sourceCommit": null
+    },
     "file-changes": {
       "compatibility": {},
       "local": {
@@ -152,7 +268,7 @@
         "packageName": "@deepseek-ai/dsh-file-changes",
         "packageVersion": "0.1.0",
         "path": "dsh-desktop/assets/plugins/dsh-file-changes",
-        "treeSha256": "70e805ccf0712d3bdfc3669e14fff1965d05d3ef0fc2b5fe02f6d089e28483bb"
+        "treeSha256": "b3b5e2b897e970933c44cf52d3dd4016887180d4e29b595c4bd8b4280da6afe6"
       },
       "manifestEntrySha256": "44ac80cfe38428ccfd15ef965a1e9732d132f373f8afa472e0c932fe82da7007",
       "patchFiles": [],
@@ -163,8 +279,37 @@
       "source": {
         "kind": "internal",
         "name": "@deepseek-ai/dsh-file-changes",
-        "sha256": "70e805ccf0712d3bdfc3669e14fff1965d05d3ef0fc2b5fe02f6d089e28483bb",
+        "sha256": "b3b5e2b897e970933c44cf52d3dd4016887180d4e29b595c4bd8b4280da6afe6",
         "version": "0.1.0"
+      },
+      "sourceCommit": null
+    },
+    "our-free-model": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "index.js"
+        ],
+        "excludedPaths": [
+          "vendor"
+        ],
+        "fileCount": 75,
+        "license": "MIT",
+        "packageName": "dsh-our-free-model",
+        "packageVersion": "2.5.2",
+        "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+        "treeSha256": "665b20549f29a07d46a6e3ec22b2c984de98b5ef71241b5dafb6c2e0cb5ff701"
+      },
+      "manifestEntrySha256": "f5964420a4a436adc926c63fd14787753c8e3804cb817d4af7f2f41adc691b6c",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "2.5.2",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "unknown",
+        "sha256": "665b20549f29a07d46a6e3ec22b2c984de98b5ef71241b5dafb6c2e0cb5ff701",
+        "version": "2.5.2"
       },
       "sourceCommit": null
     },
@@ -207,7 +352,7 @@
         "packageName": "dsh-settings-scroll-fix",
         "packageVersion": "2.0.3",
         "path": "dsh-desktop/assets/plugins/dsh-settings-scroll-fix",
-        "treeSha256": "97cc3329d582761d5fad5321521f6b46f5c418636f8c73f79e04396668b7bdab"
+        "treeSha256": "8d730914b80deb4f1b3aa4cfa0d5fb54a3a72c979413531bef0564aee8bd0734"
       },
       "manifestEntrySha256": "797e2f723ee7e0f36ffc4d8c4032ee601a1c80a1104c391678e95db50066a90e",
       "patchFiles": [],
@@ -218,8 +363,37 @@
       "source": {
         "kind": "internal",
         "name": "dsh-settings-scroll-fix",
-        "sha256": "97cc3329d582761d5fad5321521f6b46f5c418636f8c73f79e04396668b7bdab",
+        "sha256": "8d730914b80deb4f1b3aa4cfa0d5fb54a3a72c979413531bef0564aee8bd0734",
         "version": "2.0.3"
+      },
+      "sourceCommit": null
+    },
+    "ui-skin-deep-whale-manager": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/index.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 11,
+        "license": "MIT",
+        "packageName": "@smalltailqwq/dsh-client-ui-skin-deep-whale-manager",
+        "packageVersion": "0.1.6",
+        "path": "dsh-desktop/assets/plugins/dsh-client-ui-skin-deep-whale-manager",
+        "treeSha256": "b191206d4dc1689364b2e48bc2bec41399ac2d3beae354faab124227edbd84a2"
+      },
+      "manifestEntrySha256": "9d3f5bd857e9bc7382618065b4b3b4ffd5263791c37b660d1cfc9299dd5ea54c",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "0.1.6",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "github",
+        "name": "Small-tailqwq/dsh-deep-whale",
+        "repository": "https://github.com/Small-tailqwq/dsh-deep-whale",
+        "sha256": "b191206d4dc1689364b2e48bc2bec41399ac2d3beae354faab124227edbd84a2",
+        "version": "0.1.6"
       },
       "sourceCommit": null
     },
@@ -235,7 +409,7 @@
         "packageName": "dsh-unified-market",
         "packageVersion": "0.4.0",
         "path": "dsh-desktop/assets/plugins/dsh-unified-market",
-        "treeSha256": "9c2b14d8fcbd9495f1acd82c25968f5c699b587f81d394217fc41c9a4d8adae7"
+        "treeSha256": "72f3d884c9422f5cb17ee809e8b9dc5e5a07669fd03c1eef1e260148717181da"
       },
       "manifestEntrySha256": "ae25457e39ddf76a4eb2c86feaaf021915433a007fa0ca034347d735f611c04d",
       "patchFiles": [],
@@ -247,7 +421,7 @@
         "kind": "npm",
         "name": "dsh-unified-market",
         "repository": "git+https://github.com/jing-hy/dsh-unified-market.git",
-        "sha256": "9c2b14d8fcbd9495f1acd82c25968f5c699b587f81d394217fc41c9a4d8adae7",
+        "sha256": "72f3d884c9422f5cb17ee809e8b9dc5e5a07669fd03c1eef1e260148717181da",
         "version": "0.4.0"
       },
       "sourceCommit": null
@@ -277,6 +451,35 @@
         "name": "dsh-viewport-lock",
         "sha256": "61811f5a6f6b828eff9fd5303d6bc8f4454650b25e31b90bee807dd47ebbb3f3",
         "version": "1.0.1"
+      },
+      "sourceCommit": null
+    },
+    "wallpaper-engine": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/index.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 60,
+        "license": "MIT",
+        "packageName": "dsh-plugin-wallpaper-engine",
+        "packageVersion": "0.6.7",
+        "path": "dsh-desktop/assets/plugins/dsh-plugin-wallpaper-engine",
+        "treeSha256": "0c4d1cefa2a7a5856875f1d25bef58840ff1a7480f9b9a11732522c91fcb7cd8"
+      },
+      "manifestEntrySha256": "a65c9a53696d3384336ae39ab8cd6bf61a1fe1b64492efb19d5cc106e1cdf0de",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "0.6.7",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "github",
+        "name": "elysia395/dsh-wallpaper-engine",
+        "repository": "https://github.com/elysia395/dsh-wallpaper-engine",
+        "sha256": "0c4d1cefa2a7a5856875f1d25bef58840ff1a7480f9b9a11732522c91fcb7cd8",
+        "version": "0.6.7"
       },
       "sourceCommit": null
     }

@@ -15,5 +15,6 @@
     # browser half fetches directly (GET /wallpaper-engine/{inventory,media,preview}).
     - id: wallpaper-engine
       name: 'dsh-plugin-wallpaper-engine'
+      disabled: true
       # webServer is optional so this bundle also loads in the headless/TUI
       # profile without failing; the host half guards its absence with ctx.get.

@@ -264,6 +264,26 @@
       "id": "ds-harness-remote",
       "path": "dsh-desktop/assets/plugins/ds-harness-remote",
       "patched": false
+    },
+    {
+      "id": "wallpaper-engine",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-wallpaper-engine",
+      "patched": false
+    },
+    {
+      "id": "ui-skin-deep-whale-manager",
+      "path": "dsh-desktop/assets/plugins/dsh-client-ui-skin-deep-whale-manager",
+      "patched": false
+    },
+    {
+      "id": "external-links",
+      "path": "dsh-desktop/assets/plugins/dsh-external-links",
+      "patched": false
+    },
+    {
+      "id": "our-free-model",
+      "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+      "patched": false
     }
   ]
 }
