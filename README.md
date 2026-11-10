@@ -4,7 +4,7 @@
 
 **_EAC = Embracing All Creation（揽尽万象）_**
 
-[中文](README.md) | [English](README.en.md)
+[中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
 [![Stars](https://img.shields.io/github/stars/DSH-EAC/EAC-Desktop?style=for-the-badge&label=Star&color=4b6fff)](https://github.com/DSH-EAC/EAC-Desktop)
 [![MIT License](https://img.shields.io/badge/license-MIT-2ea44f?style=for-the-badge)](LICENSE)
