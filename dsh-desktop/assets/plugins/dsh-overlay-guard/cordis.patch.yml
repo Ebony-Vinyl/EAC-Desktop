@@ -1,0 +1,3 @@
+- insert:
+    - id: dsh-overlay-guard
+      name: 'dsh-overlay-guard'
