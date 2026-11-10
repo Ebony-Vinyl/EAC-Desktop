@@ -189,7 +189,7 @@ const LIB_DESKTOP = [
 ];
 const SCRIPTS = [
   'eac-cli.js',
-  'patch-session-manage.js', 'patch-session-manage-021.js', 'patch-deps.js',
+  'patch-session-manage.js', 'patch-session-manage-021.js', 'patch-session-manage-022.js', 'patch-deps.js',
   // plugin-ops 消费：核心插件集合判定 + patch 行读写
   'onboarding.js', 'plugin-manager-patch.js',
   // P1 自愈链路（形态 1）：sidecar 退场后，L1 壳用随包 node 跑这个脚本做
@@ -615,7 +615,7 @@ if (targetPlatform !== process.platform) {
 healNodePtyPlugin(nmDest, targetPlatform, process.arch);
 writeStagedPlatformStamp(platformStamp, targetPlatform, process.arch);
 
-// dsh-desktop 锚点补丁（patch-deps：可选升级字段 / picker 退出码 / 设置左栏滚动）——
+// dsh-desktop 锚点补丁（patch-deps：可选升级字段 / picker 退出码 / 设置弹窗宽度与拖拽 / submenu）——
 // npm ci 从 registry 全新安装会还原成未打补丁的内核文件，必须在 staged 树上重放。
 // 脚本幂等：npm ci 的 postinstall（patch-deps.js 已随 SCRIPTS 入 staged）若已应用则直接跳过。
 console.log('[stage] 重放 dsh-desktop 锚点补丁（patch-deps）');
@@ -624,7 +624,7 @@ execSync('node scripts/patch-deps.js', { cwd: path.join(staged, 'dsh-desktop'), 
 console.log('[stage] 重放既有会话管理补丁（patch-session-manage）');
 execSync('node scripts/patch-session-manage.js', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 
-// 受控 bash 覆盖基于官方 0.2.1-rc.2，仅保留 optional-escalation 兼容差异。
+// 受控 bash 覆盖基于官方 0.2.2-rc.1，仅保留 optional-escalation 兼容差异。
 // npm ci 会恢复 registry 文件，装配时回填已重放补丁的项目副本。
 // （dsh-subprocess-local 的 pwsh 超时 vendored 修复已废弃：0.1.1-rc.2 上游以
 //  Promise.race(done, delay(graceMs)) 原生实现同类兜底，随 registry 版本走。）
