@@ -1,6 +1,6 @@
 # beta 内核升级：0.2.1-rc.2 → 0.2.2-rc.1
 
-日期：2026-11-10。依赖接线、补丁适配、全量测试与装配已在本机验证；安装版 GUI 与打包产物验收见文末的验证分级。逐文件改动与适配方案见 [KERNEL-UPGRADE-022-ADAPTATION.md](KERNEL-UPGRADE-022-ADAPTATION.md)。
+日期：2026-11-10。依赖接线、补丁适配、全量测试与装配已在本机验证；安装版 GUI 与打包产物验收见文末的验证分级。逐文件改动与适配方案见 [KERNEL-UPGRADE-022-ADAPTATION.md](KERNEL-UPGRADE-022-ADAPTATION.md)，剩余验证项见 [KERNEL-UPGRADE-022-VERIFICATION-CHECKLIST.md](KERNEL-UPGRADE-022-VERIFICATION-CHECKLIST.md)。
 
 ## 版本与来源
 
