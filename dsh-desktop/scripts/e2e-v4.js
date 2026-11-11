@@ -6,8 +6,8 @@
 // 覆盖：
 //   A. 新用户（fresh）：空 DSH_HOME / 空 APPDATA 冷启动 —— profile 初始化、
 //      配套插件同步（含 v4 新插件）、首次向导（CDP 驱动提交核心+推荐）、
-//      dafeiyu 向导未勾选 → 禁用行、运行时补丁（会话删除）、apiproxy 设置
-//      命名空间全量暴露（rc.7+ 无白名单，ClawBot 设置可达）、
+//      dafeiyu 向导未勾选 → 禁用行、运行时补丁（会话删除）、设置命名空间
+//      全量暴露（dsh-api-settings-controller 无白名单，ClawBot 设置可达）、
 //      Web UI 就绪、CDP 驱动页面（dshDesktop 桥存在、插件市场 API 可达）。
 //   B. 老用户（upgrade）：复制本机 ~/.dsh 既有数据后启动（升级路径）。
 //   C. 退出清理：走真实 UI 退出路径（chrome:menu quit IPC）→ 断言主进程退出、
@@ -287,9 +287,9 @@ const rootBase = process.env.DSH_E2E_ROOT || os.tmpdir();
 
   // 6) 运行时补丁断言：会话删除补丁在构建时已烘焙进内置闭包（运行时幂等
   // 重放为 no-op、无日志），因此接受「日志行」或「闭包文件已带补丁标记」任一。
-  // ClawBot 设置命名空间不再需要补丁：上游 dsh-host-apiproxy rc.7 已移除
-  // WEB_SETTINGS_NAMESPACES 白名单（settings.describe 全量暴露）——断言闭包
-  // 里确实已无该白名单，openclaw-bridge 设置页天然可读写。
+  // ClawBot 设置命名空间不需要补丁：settings 面由 dsh-api-settings-controller
+  // 承载（settings.describe 全量暴露，闭包内无 WEB_SETTINGS_NAMESPACES 白名单）
+  // ——断言闭包里的 settings 控制器确实全量暴露，openclaw-bridge 设置页天然可读写。
   const log1 = readLog();
   const junctionNm = path.join(home, 'profiles', 'node_modules');
   const hasBakedSessionPatch = (() => {
@@ -300,14 +300,14 @@ const rootBase = process.env.DSH_E2E_ROOT || os.tmpdir();
   })();
   check('会话删除补丁生效（烘焙或运行时应用）', /对话删除补丁/.test(log1) || hasBakedSessionPatch,
     `log=${/对话删除补丁/.test(log1)} baked=${hasBakedSessionPatch}`);
-  const apiproxyIdx = (() => {
+  const settingsHost = (() => {
     try {
-      return fs.readFileSync(path.join(junctionNm, '@deepseek-ai', 'dsh-host-apiproxy', 'lib', 'index.js'), 'utf8');
+      return fs.readFileSync(path.join(junctionNm, '@deepseek-ai', 'dsh-api-settings-controller', 'lib', 'index.js'), 'utf8');
     } catch { return false; }
   })();
-  check('apiproxy 设置命名空间全量暴露（rc.7+ 无白名单，ClawBot 设置可达）',
-    !!apiproxyIdx && apiproxyIdx.includes('settings.describe') && !apiproxyIdx.includes('WEB_SETTINGS_NAMESPACES'),
-    `describe=${!!apiproxyIdx && apiproxyIdx.includes('settings.describe')} whitelist=${!!apiproxyIdx && apiproxyIdx.includes('WEB_SETTINGS_NAMESPACES')}`);
+  check('设置命名空间全量暴露（dsh-api-settings-controller 无白名单，ClawBot 设置可达）',
+    !!settingsHost && settingsHost.includes('settings.describe') && !settingsHost.includes('WEB_SETTINGS_NAMESPACES'),
+    `describe=${!!settingsHost && settingsHost.includes('settings.describe')} whitelist=${!!settingsHost && settingsHost.includes('WEB_SETTINGS_NAMESPACES')}`);
 
   // 7) 页面侧断言（CDP，真实渲染进程）
   try {
