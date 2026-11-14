@@ -77,11 +77,6 @@
       "patched": false
     },
     {
-      "id": "dsh-phone",
-      "path": "dsh-desktop/assets/plugins/dsh-phone",
-      "patched": false
-    },
-    {
       "id": "dsh-raw-html",
       "path": "dsh-desktop/assets/plugins/dsh-raw-html",
       "patched": true

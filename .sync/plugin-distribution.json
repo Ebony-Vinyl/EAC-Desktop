@@ -179,16 +179,6 @@
       }
     },
     {
-      "id": "dsh-phone",
-      "distributionClass": "external",
-      "delivery": "market",
-      "migration": {
-        "current": "none",
-        "target": "market",
-        "state": "source-pending"
-      }
-    },
-    {
       "id": "dsh-raw-html",
       "distributionClass": "recommended",
       "delivery": "pack",

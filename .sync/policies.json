@@ -13,7 +13,7 @@
     "expectedCounts": {
       "builtin": 17,
       "recommended": 15,
-      "external": 20
+      "external": 19
     }
   },
   "inventoryRoots": [
