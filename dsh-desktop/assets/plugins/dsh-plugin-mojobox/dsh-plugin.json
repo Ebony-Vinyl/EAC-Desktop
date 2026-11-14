@@ -1,0 +1,33 @@
+{
+  "$schema": "https://raw.githubusercontent.com/Yan-Zero/dsh-std/614dfa1ac168db79fcf4577cf0ebb34e2e3b944b/packages/manifest/schema/dsh-plugin-0.15.schema.json",
+  "manifestVersion": "0.15",
+  "id": "io.lanyun077.dsh-plugin-mojobox",
+  "name": "dsh-plugin-mojobox",
+  "version": "0.0.1-p3.0",
+  "facets": {
+    "host": {
+      "entry": "lib/index.js",
+      "apiVersion": "v1alpha1"
+    }
+  },
+  "requires": {
+    "contracts": []
+  },
+  "permissions": [],
+  "contributes": {
+    "commands": []
+  },
+  "subscriptions": [],
+  "license": "MIT",
+  "source": {
+    "repository": "https://github.com/lanyun077/Mojobox-Installer"
+  },
+  "overrides": [],
+  "x-eac": {
+    "role": "identity-metadata",
+    "note": "Mojobox 整合包管理插件：随包内置（lanyun077/Mojobox-Installer vendor，EAC 历史 5d6edc0 中已适配 engines.dsh >=0.1.5-rc.1 的完整树重新 esbuild 打包）。EAC 经 companion-sync 注册表加载（非 std adapter），bundles 由 cordis.patch.yml 注册 mojobox-manager 行",
+    "maintenance": "upstream-vendored",
+    "autoUpdate": false,
+    "ledger": "assets/SOURCES.json#C122"
+  }
+}
