@@ -1,6 +1,6 @@
 # dsh-compact — 压缩增强 bundle patch。
 #
-# 与 dsh-settings-scroll-fix / dsh-unified-market 同格式：`- insert:` 新增
+# 与 dsh-unified-market 同格式：`- insert:` 新增
 # 行，而非顶层 id-target 覆盖。顶层覆盖只在「目标行已存在」时生效 —— 以
 # bundle 方式单独装载（`dsh plugin add dsh-compact`）时目标行尚不存在，
 # 会报 `patch: entry "compact" not found` 并整包跳过（0.2.0-rc.2 实机复现）。

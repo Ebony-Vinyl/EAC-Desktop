@@ -318,10 +318,6 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   // 插件保护中心 UI：快照列表/一键回滚/健康检查/事故报告，经桌面壳
   // IPC（guard:action）驱动 plugin-guard.js 引擎。
   { id: 'plugin-shield', name: 'dsh-plugin-shield', dir: 'dsh-plugin-shield' },
-  // 设置面板滚轮修复：不绑定 CSS Modules 哈希类名，按设置页语义与真实
-  // overflow 尺寸识别导航/内容滚动区；MutationObserver 跟随动态内容，卸载时
-  // 完整清理样式、标记与监听器。纯客户端实现（host 半边 no-op）。
-  { id: 'settings-scroll-fix', name: 'dsh-settings-scroll-fix', dir: 'dsh-settings-scroll-fix' },
   // 外链路由 + 登录授权页自动打开：主窗 WebView 里 `window.open` / `<a
   // target=_blank>` 被 wry 静默吞掉（主窗没有 new_window_req_handler），
   // 账号菜单「意见反馈」、账号设置页「打开」因此点了没反应；登录流程在官方

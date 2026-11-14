@@ -426,16 +426,6 @@
       }
     },
     {
-      "id": "settings-scroll-fix",
-      "distributionClass": "builtin",
-      "delivery": "bundled",
-      "migration": {
-        "current": "bundled",
-        "target": "bundled",
-        "state": "migrated"
-      }
-    },
-    {
       "id": "side-session",
       "distributionClass": "external",
       "delivery": "market",

@@ -251,42 +251,6 @@
       "owner": "desktop-plugins"
     },
     {
-      "id": "settings-scroll-fix",
-      "kind": "plugin",
-      "path": "dsh-desktop/assets/plugins/dsh-settings-scroll-fix",
-      "packageName": "dsh-settings-scroll-fix",
-      "class": "internal",
-      "source": {
-        "kind": "internal",
-        "name": "dsh-settings-scroll-fix",
-        "reason": "maintained in this repository; no external source is declared"
-      },
-      "request": {
-        "mode": "exact",
-        "version": "2.0.3"
-      },
-      "sync": {
-        "mode": "manual",
-        "patches": [],
-        "preservePaths": []
-      },
-      "runtimeUpdate": {
-        "allowed": false,
-        "defaultAction": "prompt"
-      },
-      "validation": {
-        "entrypoints": [
-          "lib/index.js"
-        ],
-        "commands": []
-      },
-      "license": {
-        "expected": "MIT",
-        "reviewOnChange": true
-      },
-      "owner": "desktop-plugins"
-    },
-    {
       "id": "unified-market",
       "kind": "plugin",
       "path": "dsh-desktop/assets/plugins/dsh-unified-market",

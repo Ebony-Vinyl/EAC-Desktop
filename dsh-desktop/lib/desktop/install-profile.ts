@@ -19,7 +19,7 @@ export const PROFILE_MARKER_FILE = 'profile.txt';
  * 收敛后（装配面 BUILTIN_PLUGIN_DIRS 与 COMPANION_PLUGINS 1:1）这些插件
  * 全部是 ADR 0008 的 builtin（= onboarding CORE_PLUGIN_IDS），既被核心组锁定
  * 停用路径（plugin-ops 拒绝停用），本身又正是精简版要保留的项：
- *   viewport-lock 视口钳制 / settings-scroll-fix 设置滚动修复 /
+ *   viewport-lock 视口钳制 /
  *   compact 请求压缩 / plugin-shield 保护中心 / unified-market 市场管理 /
  *   file-changes + client-file-changes 文件视图 / easy-setup 快速配置 /
  *   eac-locale-compat 界面底座 /

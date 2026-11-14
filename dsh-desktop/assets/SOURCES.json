@@ -872,23 +872,6 @@
       }
     },
     {
-      "id": "C036",
-      "line": "main",
-      "name": "dsh-settings-scroll-fix",
-      "type": "plugin",
-      "origin": "eac-original",
-      "version": "2.0.3",
-      "path": "dsh-desktop/assets/plugins/dsh-settings-scroll-fix",
-      "registryStatus": "注册表默认启用",
-      "audit": {
-        "verdict": "catalog-miss",
-        "compare": "no-upstream",
-        "note": "无可靠上游，不能判定修改",
-        "basis": "无独立上游证明",
-        "conflict": null
-      }
-    },
-    {
       "id": "C119",
       "line": "main",
       "name": "dsh-external-links",

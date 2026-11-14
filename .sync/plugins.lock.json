@@ -1,7 +1,7 @@
 {
   "generatedRegistry": "dsh-desktop/lib/desktop/plugin-sync-registry.ts",
   "manifest": ".sync/plugins.json",
-  "manifestRevision": "8c148032d0c895dbf518b54f466f163a500d13a2d6258d78f0ea635a5bb4464c",
+  "manifestRevision": "5527af96c136eaba4683157da7979346f8485d03a14c0c9d173e8cc96220e0a4",
   "plugins": {
     "client-file-changes": {
       "compatibility": {},
@@ -43,7 +43,7 @@
         "packageName": "dsh-compact",
         "packageVersion": "1.0.0",
         "path": "dsh-desktop/assets/plugins/dsh-compact",
-        "treeSha256": "049a5a19a15bc25d14b81d624cdd69acbb22c9354281c362db6013a28fc249a5"
+        "treeSha256": "9e0443baa96238c2ee458676c89b9f307e0692790bad8c2b65aa67f8fc5c3d43"
       },
       "manifestEntrySha256": "2cf65bbbf0a3240bd02fc40d42dc564446219a88f6d972da681a64370bd666c5",
       "patchFiles": [],
@@ -53,7 +53,7 @@
       "runtimeUpdate": "disabled",
       "source": {
         "kind": "unknown",
-        "sha256": "049a5a19a15bc25d14b81d624cdd69acbb22c9354281c362db6013a28fc249a5",
+        "sha256": "9e0443baa96238c2ee458676c89b9f307e0692790bad8c2b65aa67f8fc5c3d43",
         "version": "1.0.0"
       },
       "sourceCommit": null
@@ -337,34 +337,6 @@
         "kind": "unknown",
         "sha256": "56f400dce96118f57b5943c7ea63039a501a834e1ae95606ffeec4f20cc30b20",
         "version": "0.1.2"
-      },
-      "sourceCommit": null
-    },
-    "settings-scroll-fix": {
-      "compatibility": {},
-      "local": {
-        "entrypoints": [
-          "lib/index.js"
-        ],
-        "excludedPaths": [],
-        "fileCount": 12,
-        "license": "MIT",
-        "packageName": "dsh-settings-scroll-fix",
-        "packageVersion": "2.0.3",
-        "path": "dsh-desktop/assets/plugins/dsh-settings-scroll-fix",
-        "treeSha256": "8d730914b80deb4f1b3aa4cfa0d5fb54a3a72c979413531bef0564aee8bd0734"
-      },
-      "manifestEntrySha256": "797e2f723ee7e0f36ffc4d8c4032ee601a1c80a1104c391678e95db50066a90e",
-      "patchFiles": [],
-      "patchSet": "none",
-      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-      "requested": "2.0.3",
-      "runtimeUpdate": "disabled",
-      "source": {
-        "kind": "internal",
-        "name": "dsh-settings-scroll-fix",
-        "sha256": "8d730914b80deb4f1b3aa4cfa0d5fb54a3a72c979413531bef0564aee8bd0734",
-        "version": "2.0.3"
       },
       "sourceCommit": null
     },
