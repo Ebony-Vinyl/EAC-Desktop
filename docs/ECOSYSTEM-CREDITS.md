@@ -41,7 +41,6 @@ Historical attribution only; this list does not describe what ships with v6. Thi
 | @deepseek-ai/dsh-openclaw-bridge（提供者：deepseek-ai）      | 微信 ClawBot / OpenClaw 桥接                                                       |
 | dsh-pet（提供者：PC2005-cloud）                              | 页面悬浮桌宠                                                                         |
 | dsh-pet-settings                                       | 桌宠设置分区                                                                         |
-| dsh-phone（EAC 配套）                                      | 手机连接：LAN 扫码配对 + 完整 Web UI 反向代理                                                 |
 | dsh-plugin-guard（提供者：lxzy-7）                           | 插件安装前快照、回滚与启动守护                                                                |
 | dsh-plugin-healthcheck（提供者：chenw2759-wq）               | 插件静态体检与风险检查                                                                    |
 | @deepseek-ai/dsh-plugin-manager（提供者：deepseek-ai）       | 插件管理：列出/启停内置插件                                                                 |

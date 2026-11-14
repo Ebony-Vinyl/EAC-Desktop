@@ -708,24 +708,6 @@
       }
     },
     {
-      "id": "C028",
-      "line": "main",
-      "name": "dsh-phone",
-      "type": "plugin",
-      "origin": "eac-original",
-      "version": "0.1.0",
-      "path": "dsh-desktop/assets/plugins/dsh-phone",
-      "pathBaseline": "main@e01d2e2a27b43e76aa3558d9729d5db3f05346ae",
-      "registryStatus": "注册表默认启用",
-      "audit": {
-        "verdict": "catalog-miss",
-        "compare": "no-upstream",
-        "note": "无可靠上游，不能判定修改",
-        "basis": "无独立上游证明",
-        "conflict": null
-      }
-    },
-    {
       "id": "C030",
       "line": "main",
       "name": "dsh-plugin-shield",
