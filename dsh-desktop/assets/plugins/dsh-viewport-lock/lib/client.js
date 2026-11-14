@@ -46,6 +46,13 @@ window.__ModuleLoader__.load({
       //    消息视图只裁掉进入透明 sticky 输入区范围的像素，背景保持可见。
       'html [data-phase="active"] [data-conversation-scroll]{scroll-padding-bottom:var(--dsh-composer-safe-height,0px)}',
       'html [data-dsh-composer-clip]{clip-path:inset(0 0 var(--dsh-composer-clip-bottom,0px) 0)}',
+      // Fixed popovers use viewport coordinates. A transform containing block
+      // on the sticky seat makes even hidden popovers enlarge the scroll range.
+      'html [data-composer-seat]{will-change:auto!important}',
+      // Native caret reveal honors ancestor scroll-padding. The focused editor
+      // already sits inside the reserved sticky area; counting it twice scrolls
+      // the conversation on every keystroke. Keep the reserve for navigation.
+      'html [data-conversation-scroll]:has([data-composer-seat] [data-composer-input]:focus,[data-composer-seat] textarea:focus){scroll-padding-bottom:0px!important}',
       // 4) 打印还原：overflow 钳制只服务屏幕 app 外壳，打印需要文档流。
       '@media print{html, body{overflow:visible!important;height:auto!important}}',
     ].join('');
