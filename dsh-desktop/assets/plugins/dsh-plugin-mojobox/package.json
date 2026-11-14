@@ -1,0 +1,53 @@
+{
+  "name": "dsh-plugin-mojobox",
+  "version": "0.0.1-p3.0",
+  "private": true,
+  "description": "Mojobox 官方客户端整合包管理插件（EAC 随包）",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lanyun077/Mojobox-Installer.git"
+  },
+  "homepage": "https://github.com/lanyun077/Mojobox-Installer#readme",
+  "bugs": {
+    "url": "https://github.com/lanyun077/Mojobox-Installer/issues"
+  },
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "engines": {
+    "node": ">=24.9.0",
+    "dsh": ">=0.1.5-rc.1"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-api-remotes",
+        "@deepseek-ai/dsh-client-ui-settings-models"
+      ],
+      "external": [
+        "react"
+      ]
+    }
+  },
+  "files": [
+    "lib",
+    "cordis.patch.yml",
+    "README.md",
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "dependencies": {
+    "ajv": "8.20.0",
+    "semver": "7.8.6",
+    "tar": "7.5.22",
+    "yauzl": "3.4.0"
+  }
+}

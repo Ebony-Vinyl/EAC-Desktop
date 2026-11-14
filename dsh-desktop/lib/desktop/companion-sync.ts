@@ -341,6 +341,10 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   { id: 'ds-harness-remote', name: 'ds-harness-remote', dir: 'ds-harness-remote', config: {
     enabled: true, role: 'host', serverUrl: 'https://dsh.r2049.cn', codex: { enabled: true, binary: 'codex' },
   } },
+  // Mojobox 整合包管理插件：随包内置，host 半在设置的「Mojobox」入口提供整合包
+  // 导入/更新/单组件管理；esbuild 自包含 lib/index.js（内联 ajv/semver/tar/yauzl），
+  // client 半在 package.json dsh.client 声明（platform web）。默认启用。
+  { id: 'mojobox-manager', name: 'dsh-plugin-mojobox', dir: 'dsh-plugin-mojobox' },
   // 皮肤管理器（@smalltailqwq/dsh-client-ui-skin-deep-whale-manager）**不登记在
   // COMPANION_PLUGINS**，原因（实测 2026-10-23，踩了三次）：
   //

@@ -58,6 +58,8 @@ export const BASE_PLUGIN_DIRS = [
   'dsh-wechat',
   'ds-harness-remote',
   'dsh-our-free-model',
+  // 阶段 4：Mojobox 整合包管理（随包）
+  'dsh-plugin-mojobox',
 ];
 
 /**
