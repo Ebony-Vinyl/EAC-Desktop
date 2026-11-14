@@ -189,21 +189,6 @@
       "reason": "hard-blocked"
     },
     {
-      "id": "dev.eac.dsh-settings-scroll-fix",
-      "name": "dsh-settings-scroll-fix",
-      "version": "2.0.2",
-      "description": "修复设置页滚动与布局约束",
-      "source": "https://github.com/DSH-EAC/DSH-Desktop-EAC/tree/dc22280beb9d0a6338d1e02d99f5e5346f72f4f0/dsh-desktop/assets/plugins/dsh-settings-scroll-fix",
-      "ref": "https://gitee.com/flowing-shadows-like-scenes/deep-seek-harness-unity-mirror/raw/645a925822d291dd62eee688a0062d818de06a17/artifacts/sha256/e160298f49cc9064212fcedb6eea808a436bbaf585f38872dbcc20fb06b23204/dsh-settings-scroll-fix-2.0.2.tgz",
-      "sha256": "e160298f49cc9064212fcedb6eea808a436bbaf585f38872dbcc20fb06b23204",
-      "license": "MIT",
-      "category": "EAC 差异插件",
-      "installable": true,
-      "verification": "unverified",
-      "reason": "上游提供固定版本制品；运行兼容性由官方管理器核验",
-      "releaseId": "release-aeeb9a1fd5e6052b0be47a6e35251f4ffb6b35ff99383356184f276d1b8bc4cd"
-    },
-    {
       "id": "dev.eac.dsh-terminal",
       "name": "@deepseek-ai/dsh-terminal",
       "version": "0.1.0",

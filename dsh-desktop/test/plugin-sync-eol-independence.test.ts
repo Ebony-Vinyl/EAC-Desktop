@@ -7,7 +7,7 @@
 // 同一份内容算出两个不同的 digest —— 表现为「CI 红灯而本地全绿」。
 //
 // 实测（修复前）：只把 4 个文件 CRLF→LF，`plugin-sync validate` 立即从通过变失败，
-// 正是 CI 报的 compact / settings-scroll-fix / unified-market 三个插件。
+// 正是 CI 报的 compact / unified-market 两个插件。
 //
 // 本测试锁定：文本文件的哈希与换行风格无关，二进制的哈希不受归一化影响。
 import test from 'node:test';

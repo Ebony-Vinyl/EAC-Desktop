@@ -204,11 +204,6 @@
       "patched": true
     },
     {
-      "id": "settings-scroll-fix",
-      "path": "dsh-desktop/assets/plugins/dsh-settings-scroll-fix",
-      "patched": false
-    },
-    {
       "id": "side-session",
       "path": "dsh-desktop/assets/plugins/dsh-side-session",
       "patched": true

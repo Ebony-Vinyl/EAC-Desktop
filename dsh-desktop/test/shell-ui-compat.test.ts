@@ -224,49 +224,6 @@ test('Windows host sidebar caption actions stay clickable above shell chrome', b
   assert.notEqual(await page.locator('#new-session').evaluate((el: Element) => getComputedStyle(el).zIndex), '2147483001', 'ordinary expanded-sidebar buttons must not rise over settings dialogs');
 });
 
-test('settings scroll repair leaves shortcut headers fixed and content scrollable', browserOptions, async t => {
-  const assets = loadAssets();
-  const page = await pageFor(t);
-  const source = readFileSync(join(assetsRoot, 'dsh-desktop/node_modules/@deepseek-ai/dsh-client-ui-shortcuts/lib/client.js'), 'utf8');
-  const css = JSON.parse(source.match(/const css = ("(?:[^"\\]|\\.)*");/)![1]);
-  const shortcutClass = (name: string) => {
-    const match = css.match(new RegExp('\\.([\\w-]+_' + name + ')\\{'));
-    assert.ok(match, `actual shortcuts CSS must contain ${name}`);
-    return match[1];
-  };
-  await page.setContent(`<style>${assets.base}</style><style>${css}</style>
-    <section role="dialog" data-dsh-settings-root style="display:flex;flex-direction:column;width:480px;height:600px">
-      <header id="shortcut-header" class="${shortcutClass('header')}">
-        <h2 class="${shortcutClass('title')}">Keyboard shortcuts</h2>
-        <button id="shortcut-close" class="${shortcutClass('close')}" aria-label="Close shortcuts">×</button>
-      </header>
-      <div id="shortcut-list" class="${shortcutClass('list')}">
-        <div style="height:1400px">General settings keyboard shortcuts</div>
-      </div>
-      <footer id="shortcut-footer" class="${shortcutClass('footer')}">Restore defaults</footer>
-    </section>`);
-  await page.evaluate(() => {
-    (window as any).__ModuleLoader__ = { load(definition: any) {
-      (window as any).__auditScrollFix = definition.factory();
-    } };
-  });
-  await page.addScriptTag({ content: readFileSync(join(sourceRoot, 'dsh-desktop/assets/plugins/dsh-settings-scroll-fix/lib/client.js'), 'utf8') });
-  await page.evaluate(() => { (window as any).__auditDisposeScrollFix = (window as any).__auditScrollFix.apply(); });
-  await page.waitForFunction(() => document.querySelector('#shortcut-list')?.hasAttribute('data-dssf-scrollable'));
-  const header = page.locator('#shortcut-header');
-  assert.ok(await header.evaluate((el: HTMLElement) => el.scrollHeight > el.clientHeight), 'actual kernel close button overflows the 46px header');
-  assert.equal(await header.getAttribute('data-dssf-scrollable'), null, 'caption overflow must not introduce a header scrollbar');
-  assert.equal(await page.locator('#shortcut-close').getAttribute('data-dssf-scrollable'), null);
-  assert.equal(await page.locator('#shortcut-footer').getAttribute('data-dssf-scrollable'), null);
-  assert.equal(await page.locator('#shortcut-list').evaluate((el: HTMLElement) => {
-    el.scrollTop = 100;
-    return el.scrollTop;
-  }), 100, 'real content must remain scrollable');
-  await page.evaluate(() => (window as any).__auditDisposeScrollFix());
-  assert.equal(await page.locator('[data-dssf-scrollable]').count(), 0, 'unload removes scroll marks');
-});
-
-
 test('caption labels follow active native locale without losing maximize state', browserOptions, async t => {
   const page = await pageFor(t); const assets = loadAssets();
   await page.setContent('<div id="root">host content</div>'); await installBridge(page, assets.slots);

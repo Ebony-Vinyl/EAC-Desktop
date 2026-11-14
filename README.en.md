@@ -137,7 +137,7 @@ Companion plugins use Harness host/client contracts. The [staging script](tauri-
 | Discovery | `dsh-unified-market` | Aggregated catalogs and installation management |
 | Protection | `dsh-plugin-shield` | Snapshots, health checks and rollback controls |
 | Localization | `dsh-eac-locale-compat` | English UI compatibility for companion and community plugins |
-| UI stability | `dsh-viewport-lock`, `dsh-settings-scroll-fix` | Viewport constraints and settings-panel wheel/overflow fixes |
+| UI stability | `dsh-viewport-lock` | Viewport constraints and settings-panel layout fixes |
 | Boot animation | `dsh-boot-animation` | Full-frame intro animation on launch / pinned-session entry (clips embedded) |
 | WeChat channel | `dsh-wechat-plugin` | Drive local sessions from WeChat; no OpenClaw or public IP needed |
 | Remote access | `ds-harness-remote` | End-to-end encrypted, P2P-first remote access from PC / Android / Web |

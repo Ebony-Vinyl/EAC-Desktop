@@ -137,7 +137,7 @@ Rust と Node は **stdio の JSON-RPC** で通信し、プロトコルの出力
 | 発見 | `dsh-unified-market` | 集約されたカタログとインストールの管理 |
 | 保護 | `dsh-plugin-shield` | スナップショット、ヘルスチェック、ロールバックの操作 |
 | ローカライズ | `dsh-eac-locale-compat` | コンパニオンとコミュニティのプラグインの英語 UI の互換性 |
-| UI の安定性 | `dsh-viewport-lock`、`dsh-settings-scroll-fix` | ビューポートの制約と、設定パネルのホイール／オーバーフローの修正 |
+| UI の安定性 | `dsh-viewport-lock` | ビューポートの制約と設定パネルのレイアウト修正 |
 | 起動アニメーション | `dsh-boot-animation` | 起動時やピン留めしたセッションに入るときの、全画面のイントロアニメーション（クリップを埋め込み） |
 | WeChat チャンネル | `dsh-wechat-plugin` | WeChat からローカルのセッションを操作します。OpenClaw やグローバル IP は不要です |
 | リモートアクセス | `ds-harness-remote` | PC / Android / Web からの、エンドツーエンドで暗号化された、P2P を優先するリモートアクセス |
