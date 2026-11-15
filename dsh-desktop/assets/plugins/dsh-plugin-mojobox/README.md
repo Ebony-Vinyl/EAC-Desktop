@@ -28,8 +28,12 @@ Mojobox 官方客户端整合包管理插件（EAC 随包版）。
 ```bash
 npm install        # 取得 esbuild 与运行时依赖（仅构建机）
 npx esbuild src/index.ts --bundle --platform=node --format=esm \
-  --target=es2023 --packages=bundle --outfile=lib/index.js
+  --target=es2023 --packages=bundle --outfile=lib/index.js \
+  --banner:js='import { createRequire as __bannerCreateRequire } from "node:module"; const require = __bannerCreateRequire(import.meta.url);'
 ```
+
+> `--banner:js` 不是可选项：内联进来的 CJS 依赖会在运行期调用 `require()`，
+> 缺了它这个 ESM 包一 import 就抛 `Dynamic require of "fs" is not supported`。
 
 > 当前随包树不收纳 `src/`（构建痕迹）；如需从源码重建/审阅，检出上游或 EAC
 > 历史提交中的完整树。

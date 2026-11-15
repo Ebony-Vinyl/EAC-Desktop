@@ -1,3 +1,5 @@
+import { createRequire as __bannerCreateRequire } from 'node:module';
+const require = __bannerCreateRequire(import.meta.url);
 /* built by esbuild: inlined ajv semver tar yauzl */
 var __create = Object.create;
 var __defProp = Object.defineProperty;
