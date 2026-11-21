@@ -1,10 +1,10 @@
 blank_issues_enabled: false
 contact_links:
     - name: 💬 提问与求助
-      url: https://github.com/DSH-EAC/DSH-Desktop-EAC/discussions
+      url: https://github.com/Ebony-Vinyl/EAC-Desktop/discussions
       about: 请在讨论区提问与求助。
     - name: 🔒 Report a Security Vulnerability
-      url: https://github.com/DSH-EAC/DSH-Desktop-EAC/security/advisories/new
+      url: https://github.com/Ebony-Vinyl/EAC-Desktop/security/advisories/new
       about: 请通过此链接进行私密的安全报告。
     - name: 💬 Questions & Help
       url: https://github.com/OWNER/REPO/discussions

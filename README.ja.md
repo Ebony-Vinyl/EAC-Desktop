@@ -6,7 +6,7 @@
 
 [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-[![Stars](https://img.shields.io/github/stars/DSH-EAC/EAC-Desktop?style=for-the-badge&label=Star&color=4b6fff)](https://github.com/DSH-EAC/EAC-Desktop)
+[![Stars](https://img.shields.io/github/stars/Ebony-Vinyl/EAC-Desktop?style=for-the-badge&label=Star&color=4b6fff)](https://github.com/Ebony-Vinyl/EAC-Desktop)
 [![MIT License](https://img.shields.io/badge/license-MIT-2ea44f?style=for-the-badge)](LICENSE)
 
 [![QQ](https://img.shields.io/badge/QQ-1083832019-blue?logo=qq)](https://qm.qq.com/q/vqXxQQ3rmo)
@@ -15,7 +15,7 @@
 [![Trendshift daily](https://trendshift.io/api/badge/trendshift/repositories/158075/daily?language=JavaScript)](https://trendshift.io/repositories/158075)
 [![Trendshift weekly](https://trendshift.io/api/badge/trendshift/repositories/158075/weekly?language=JavaScript)](https://trendshift.io/repositories/158075)
 
-[ダウンロード](https://github.com/DSH-EAC/EAC-Desktop/releases) · [クイックスタート](#クイックスタート) · [アーキテクチャ](#アーキテクチャ) · [コミュニティ](#コミュニティとサポート)
+[ダウンロード](https://github.com/Ebony-Vinyl/EAC-Desktop/releases) · [クイックスタート](#クイックスタート) · [アーキテクチャ](#アーキテクチャ) · [コミュニティ](#コミュニティとサポート)
 
 </div>
 
@@ -61,17 +61,17 @@ Windows の最新の安定版リリース：**v6.0.0**。その他のプラッ�
 
 | プラットフォーム | バージョン | ダウンロード | 更新日時（UTC+8） |
 | --- | --- | --- | --- |
-| Windows x64 | v6.0.0 | [Full Setup](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-full-v6.0.0-Setup-x64.exe) | 2026-10-05 02:23 |
-| Windows x64 | v6.0.0 | [Full Portable](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-full-v6.0.0-x64-portable.zip) | 2026-10-05 02:23 |
-| Windows x64 | v6.0.0 | [Lite Setup](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-lite-v6.0.0-Setup-x64.exe) | 2026-10-05 00:49 |
-| Windows x64 | v6.0.0 | [Lite Portable](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-lite-v6.0.0-x64-portable.zip) | 2026-10-05 00:49 |
-| Linux x64 | v5.3.6 | [AppImage](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.AppImage) | 2026-09-03 19:30 |
-| Linux x64 | v5.3.6 | [deb](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.deb) | 2026-09-03 19:30 |
-| Linux x64 | v4.4.0-linux | [rpm](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0.x86_64.rpm) | 2026-08-19 19:13 |
-| macOS arm64 | v5.1.0 | [dmg](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.dmg) | 2026-08-27 15:12 |
-| macOS arm64 | v5.1.0 | [app.zip](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.app.zip) | 2026-08-27 15:12 |
+| Windows x64 | v6.0.0 | [Full Setup](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-full-v6.0.0-Setup-x64.exe) | 2026-10-05 02:23 |
+| Windows x64 | v6.0.0 | [Full Portable](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-full-v6.0.0-x64-portable.zip) | 2026-10-05 02:23 |
+| Windows x64 | v6.0.0 | [Lite Setup](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-lite-v6.0.0-Setup-x64.exe) | 2026-10-05 00:49 |
+| Windows x64 | v6.0.0 | [Lite Portable](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-lite-v6.0.0-x64-portable.zip) | 2026-10-05 00:49 |
+| Linux x64 | v5.3.6 | [AppImage](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.AppImage) | 2026-09-03 19:30 |
+| Linux x64 | v5.3.6 | [deb](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.deb) | 2026-09-03 19:30 |
+| Linux x64 | v4.4.0-linux | [rpm](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v4.4.0-linux/Deepseek-Harness-EAC-4.4.0.x86_64.rpm) | 2026-08-19 19:13 |
+| macOS arm64 | v5.1.0 | [dmg](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.dmg) | 2026-08-27 15:12 |
+| macOS arm64 | v5.1.0 | [app.zip](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.app.zip) | 2026-08-27 15:12 |
 
-[リリースノート](https://github.com/DSH-EAC/EAC-Desktop/releases/tag/v6.0.0) · [SHA256SUMS.txt](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v6.0.0/SHA256SUMS.txt)
+[リリースノート](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/tag/v6.0.0) · [SHA256SUMS.txt](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v6.0.0/SHA256SUMS.txt)
 
 更新日時は GitHub のアセットの更新のタイムスタンプです。プラットフォームごとのパッケージは異なるリリースの世代に属していることがあるので、インストールする前にそれぞれのリリースノートを確認してください。Windows では WebView2 を使います。クラウドのモデルにはネットワークへのアクセスとプロバイダーの認証情報が必要です。
 
@@ -259,9 +259,9 @@ node scripts/plugin-sync.mjs validate
 ## ドキュメントとコミュニティ
 
 - [アーキテクチャの決定](docs/adr)：層の分け方、分離、スキン、プラグインの配布。
-- [Issues](https://github.com/DSH-EAC/EAC-Desktop/issues)：再現できるバグ、機能の提案、フィードバック。
-- [コントリビュート](https://github.com/DSH-EAC/EAC-Desktop/pulls)：コード、拡張機能の互換性、プラットフォームの対応、ドキュメント。
-- [コントリビューター](https://github.com/DSH-EAC/EAC-Desktop/graphs/contributors)：EAC を作っている人たち。
+- [Issues](https://github.com/Ebony-Vinyl/EAC-Desktop/issues)：再現できるバグ、機能の提案、フィードバック。
+- [コントリビュート](https://github.com/Ebony-Vinyl/EAC-Desktop/pulls)：コード、拡張機能の互換性、プラットフォームの対応、ドキュメント。
+- [コントリビューター](https://github.com/Ebony-Vinyl/EAC-Desktop/graphs/contributors)：EAC を作っている人たち。
 - [エコシステムのクレジット](docs/ECOSYSTEM-CREDITS.md)：プラグインの作者、スキンの入手元、ライセンスの記録。
 
 環境と実行時の挙動を追跡できるよう、バグ報告には、アプリケーションのバージョン、オペレーティングシステム、パッケージの形式、再現の手順、機密を伏せたログを含めてください。
@@ -272,7 +272,7 @@ node scripts/plugin-sync.mjs validate
 
 | QQ | Discord | Issue トラッカー |
 | :---: | :---: | :---: |
-| [1083832019](https://qm.qq.com/q/vqXxQQ3rmo) | [DSH-EAC](https://discord.com/invite/kY48Ah8h) | [GitHub Issues](https://github.com/DSH-EAC/EAC-Desktop/issues) |
+| [1083832019](https://qm.qq.com/q/vqXxQQ3rmo) | [DSH-EAC](https://discord.com/invite/kY48Ah8h) | [GitHub Issues](https://github.com/Ebony-Vinyl/EAC-Desktop/issues) |
 
 <table><tr><td align="center"><img src="docs/qq-group-qrcode.jpg" alt="QQ グループの QR コード" width="260" /></td><td align="center"><img src="docs/wechat-group-qrcode.jpg" alt="WeChat グループの QR コード" width="260" /></td></tr><tr><td align="center">QQ · 1083832019</td><td align="center">WeChat グループ</td></tr></table>
 
@@ -307,7 +307,7 @@ EAC にコード、プラットフォームの対応、プラグイン、ドキ�
 
 </div>
 
-macOS への移植をしてくださった [@Nuomi9](https://github.com/Nuomi9) に特に感謝します（[PR #234](https://github.com/DSH-EAC/EAC-Desktop/pull/234)）。プラグインとスキンの作者は[エコシステムのクレジット](docs/ECOSYSTEM-CREDITS.md)に記録しています。
+macOS への移植をしてくださった [@Nuomi9](https://github.com/Nuomi9) に特に感謝します（[PR #234](https://github.com/Ebony-Vinyl/EAC-Desktop/pull/234)）。プラグインとスキンの作者は[エコシステムのクレジット](docs/ECOSYSTEM-CREDITS.md)に記録しています。
 
 ## ライセンスと謝辞
 
@@ -321,10 +321,10 @@ EAC は [MIT License](LICENSE) を使っています。[DeepSeek Harness](https:
 
 ## Star の推移
 
-<a href="https://www.star-history.com/#DSH-EAC/EAC-Desktop&amp;Date">
+<a href="https://www.star-history.com/#Ebony-Vinyl/EAC-Desktop&amp;Date">
 <picture>
-<source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=DSH-EAC/EAC-Desktop&amp;type=Date&amp;theme=dark" />
-<source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=DSH-EAC/EAC-Desktop&amp;type=Date" />
-<img alt="Star History" src="https://api.star-history.com/svg?repos=DSH-EAC/EAC-Desktop&amp;type=Date" width="960" />
+<source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Ebony-Vinyl/EAC-Desktop&amp;type=Date&amp;theme=dark" />
+<source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Ebony-Vinyl/EAC-Desktop&amp;type=Date" />
+<img alt="Star History" src="https://api.star-history.com/svg?repos=Ebony-Vinyl/EAC-Desktop&amp;type=Date" width="960" />
 </picture>
 </a>
