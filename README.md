@@ -6,7 +6,7 @@
 
 [中文](README.md) | [English](README.en.md) | [日本語](README.ja.md)
 
-[![Stars](https://img.shields.io/github/stars/DSH-EAC/EAC-Desktop?style=for-the-badge&label=Star&color=4b6fff)](https://github.com/DSH-EAC/EAC-Desktop)
+[![Stars](https://img.shields.io/github/stars/Ebony-Vinyl/EAC-Desktop?style=for-the-badge&label=Star&color=4b6fff)](https://github.com/Ebony-Vinyl/EAC-Desktop)
 [![MIT License](https://img.shields.io/badge/license-MIT-2ea44f?style=for-the-badge)](LICENSE)
 
 [![QQ](https://img.shields.io/badge/QQ-521373108-blue?logo=qq)](https://qm.qq.com/q/fWtvVCPk08)
@@ -15,7 +15,7 @@
 [![Trendshift daily](https://trendshift.io/api/badge/trendshift/repositories/158075/daily?language=JavaScript)](https://trendshift.io/repositories/158075)
 [![Trendshift weekly](https://trendshift.io/api/badge/trendshift/repositories/158075/weekly?language=JavaScript)](https://trendshift.io/repositories/158075)
 
-[下载](https://github.com/DSH-EAC/EAC-Desktop/releases) · [快速开始](#快速开始) · [架构设计](#架构设计) · [社区支持](#社区与支持)
+[下载](https://github.com/Ebony-Vinyl/EAC-Desktop/releases) · [快速开始](#快速开始) · [架构设计](#架构设计) · [社区支持](#社区与支持)
 
 </div>
 
@@ -60,11 +60,11 @@ Windows 最新稳定版：**v6.0.0**。其余平台按包格式列出最近发�
 
 | 平台 | 版本 | 直接下载 | 更新时间（北京时间） |
 | --- | --- | --- | --- |
-| Windows x64 | v6.0.0 | [Full Setup](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-full-v6.0.0-Setup-x64.exe) | 2026-10-05 |
-| Windows x64 | v6.0.0 | [Lite Setup](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-lite-v6.0.0-Setup-x64.exe) | 2026-10-05 |
-| Linux x64 | v5.3.6 | [AppImage](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.AppImage) | 2026-09-03 |
-| Linux x64 | v5.3.6 | [deb](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.deb) | 2026-09-03 |
-| macOS arm64 | v5.1.0 | [dmg](https://github.com/DSH-EAC/EAC-Desktop/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.dmg) | 2026-08-27 |
+| Windows x64 | v6.0.0 | [Full Setup](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-full-v6.0.0-Setup-x64.exe) | 2026-10-05 |
+| Windows x64 | v6.0.0 | [Lite Setup](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v6.0.0/Deepseek-Harness-EAC-lite-v6.0.0-Setup-x64.exe) | 2026-10-05 |
+| Linux x64 | v5.3.6 | [AppImage](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.AppImage) | 2026-09-03 |
+| Linux x64 | v5.3.6 | [deb](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v5.3.6/Deepseek.Harness.EAC_5.3.6_amd64.deb) | 2026-09-03 |
+| macOS arm64 | v5.1.0 | [dmg](https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v5.1.0/Deepseek.Harness.EAC_5.1.0_macos-arm64.dmg) | 2026-08-27 |
 
 <details>
 <summary>校验下载文件</summary>
@@ -181,8 +181,8 @@ docs/adr/          架构决策与模块边界
 使用 Git、Node.js 24、pnpm 11.7.0 与 Rust stable。Windows 需要对应 Rust 目标的 C++ 构建工具；Linux 需要 Tauri / WebKitGTK 依赖。
 
 ```sh
-git clone --recurse-submodules https://github.com/says693/Deepseek-Harness-EAC.git
-cd Deepseek-Harness-EAC
+git clone --recurse-submodules https://github.com/Ebony-Vinyl/EAC-Desktop.git
+cd EAC-Desktop
 git submodule update --init --recursive
 node tauri-shell/check-dpx-pin.mjs
 npm install --global pnpm@11.7.0
@@ -244,9 +244,9 @@ node scripts/plugin-sync.mjs validate
 ## 文档与社区
 
 - [架构决策](docs/adr)：分层、隔离、皮肤与插件分发设计。
-- [问题反馈](https://github.com/DSH-EAC/EAC-Desktop/issues)：缺陷复现、功能建议与使用反馈。
-- [参与贡献](https://github.com/DSH-EAC/EAC-Desktop/pulls)：代码、插件兼容、平台支持与文档改进。
-- [贡献者](https://github.com/DSH-EAC/EAC-Desktop/graphs/contributors)：共同构建 EAC 的开发者。
+- [问题反馈](https://github.com/Ebony-Vinyl/EAC-Desktop/issues)：缺陷复现、功能建议与使用反馈。
+- [参与贡献](https://github.com/Ebony-Vinyl/EAC-Desktop/pulls)：代码、插件兼容、平台支持与文档改进。
+- [贡献者](https://github.com/Ebony-Vinyl/EAC-Desktop/graphs/contributors)：共同构建 EAC 的开发者。
 - [生态致谢](docs/ECOSYSTEM-CREDITS.md)：插件作者、皮肤来源与许可记录。
 
 反馈问题时请附应用版本、操作系统、包类型、复现步骤和经过脱敏的日志，便于定位环境与运行链路。
@@ -257,7 +257,7 @@ node scripts/plugin-sync.mjs validate
 
 | QQ | Discord | 问题反馈 |
 | :---: | :---: | :---: |
-| [521373108](https://qm.qq.com/q/fWtvVCPk08) | [DSH-EAC](https://discord.com/invite/kY48Ah8h) | [GitHub Issues](https://github.com/DSH-EAC/EAC-Desktop/issues) |
+| [521373108](https://qm.qq.com/q/fWtvVCPk08) | [DSH-EAC](https://discord.com/invite/kY48Ah8h) | [GitHub Issues](https://github.com/Ebony-Vinyl/EAC-Desktop/issues) |
 
 <table><tr><td align="center"><img src="docs/qq-group-qrcode.jpg" alt="QQ group QR code" width="260" /></td></tr><tr><td align="center">QQ · 521373108</td></tr></table>
 
@@ -291,7 +291,7 @@ node scripts/plugin-sync.mjs validate
 
 </div>
 
-特别感谢 [@Nuomi9](https://github.com/Nuomi9) 对 macOS 桌面移植的贡献（[PR #234](https://github.com/DSH-EAC/EAC-Desktop/pull/234)）。插件作者与皮肤来源详见 [生态致谢名单](docs/ECOSYSTEM-CREDITS.md)。
+特别感谢 [@Nuomi9](https://github.com/Nuomi9) 对 macOS 桌面移植的贡献（[PR #234](https://github.com/Ebony-Vinyl/EAC-Desktop/pull/234)）。插件作者与皮肤来源详见 [生态致谢名单](docs/ECOSYSTEM-CREDITS.md)。
 
 ## 许可与致谢
 
@@ -304,11 +304,11 @@ EAC 使用 [MIT License](LICENSE)。感谢 [DeepSeek Harness](https://github.com
 
 ## Star 趋势
 
-<a href="https://www.star-history.com/#DSH-EAC/EAC-Desktop&amp;Date">
+<a href="https://www.star-history.com/#Ebony-Vinyl/EAC-Desktop&amp;Date">
 <picture>
-<source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=DSH-EAC/EAC-Desktop&amp;type=Date&amp;theme=dark" />
-<source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=DSH-EAC/EAC-Desktop&amp;type=Date" />
-<img alt="Star History" src="https://api.star-history.com/svg?repos=DSH-EAC/EAC-Desktop&amp;type=Date" width="960" />
+<source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Ebony-Vinyl/EAC-Desktop&amp;type=Date&amp;theme=dark" />
+<source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Ebony-Vinyl/EAC-Desktop&amp;type=Date" />
+<img alt="Star History" src="https://api.star-history.com/svg?repos=Ebony-Vinyl/EAC-Desktop&amp;type=Date" width="960" />
 </picture>
 </a>
 
