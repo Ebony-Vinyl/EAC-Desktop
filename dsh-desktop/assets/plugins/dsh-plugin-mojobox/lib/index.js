@@ -1,6 +1,4 @@
-import { createRequire as __bannerCreateRequire } from 'node:module';
-const require = __bannerCreateRequire(import.meta.url);
-/* built by esbuild: inlined ajv semver tar yauzl */
+import { createRequire as __bannerCreateRequire } from "node:module"; const require = __bannerCreateRequire(import.meta.url);
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -10656,6 +10654,10 @@ function exactVersion(value) {
   const parsed = import_semver.default.parse(value);
   return !!parsed && parsed.version + (parsed.build.length ? `+${parsed.build.join(".")}` : "") === value;
 }
+function hostVersionWarning(hostVersion, range) {
+  if (!range) return "\u672A\u58F0\u660E\u5185\u6838\u517C\u5BB9\u8303\u56F4\uFF0C\u5C06\u9010\u9879\u4EA4\u7531\u5B98\u7248\u6838\u9A8C";
+  if (!import_semver.default.satisfies(hostVersion, range, { includePrerelease: true })) return `\u58F0\u660E\u5185\u6838\u8303\u56F4 ${range}\uFF0C\u5F53\u524D\u4E3A ${hostVersion}\uFF1B\u7248\u672C\u5DEE\u5F02\u4E0D\u4EE3\u8868\u5DF2\u786E\u8BA4\u4E0D\u517C\u5BB9\uFF0C\u5C06\u9010\u9879\u4EA4\u7531\u5B98\u7248\u6838\u9A8C`;
+}
 async function readFeaturePack(bytes) {
   if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error("Archive exceeds 2 MiB limit");
   const zip = await new Promise((resolve2, reject) => import_yauzl.default.fromBuffer(bytes, { lazyEntries: true, autoClose: false, strictFileNames: true }, (error, zip2) => error ? reject(error) : resolve2(zip2)));
@@ -10745,7 +10747,7 @@ function failureReason(result) {
   const detail = `${result.error?.diagnostic ?? result.error?.message ?? ""}
 ${result.packageResult?.output ?? ""}`;
   if (result.pendingBuilds?.length || /ERR_PNPM_IGNORED_BUILDS/.test(detail)) return "\u5B98\u7248\u9700\u8981\u6279\u51C6\u6B64\u63D2\u4EF6\u7684\u6784\u5EFA\u811A\u672C\u3002\u8BF7\u5148\u5BA1\u6838\u5E76\u5728\u5B98\u7248\u5B8C\u6210\u5BA1\u6279\uFF0C\u518D\u91CD\u8BD5\u5931\u8D25\u9879\uFF1B\u5B89\u88C5\u5668\u4E0D\u4F1A\u81EA\u52A8\u653E\u884C";
-  if (code === "incompatible-version") return "\u63D2\u4EF6\u58F0\u660E\u7684\u5185\u6838\u7248\u672C\u4E0D\u517C\u5BB9\uFF0C\u8BF7\u7B49\u5F85\u63D2\u4EF6\u9002\u914D\uFF1B\u672A\u6DFB\u52A0\u7248\u672C\u8C41\u514D";
+  if (code === "incompatible-version") return "\u5B98\u7248\u5BBF\u4E3B\u62D2\u7EDD\u4E86\u63D2\u4EF6\u7684\u7248\u672C\u517C\u5BB9\u58F0\u660E\uFF1B\u8BF7\u67E5\u770B\u5177\u4F53\u8981\u6C42\u6216\u8054\u7CFB\u63D2\u4EF6\u4F5C\u8005\u3002\u5B89\u88C5\u5668\u672A\u4FEE\u6539\u58F0\u660E\uFF0C\u672A\u6DFB\u52A0\u7248\u672C\u8C41\u514D";
   if (/\b(?:EPERM|EBUSY)\b/.test(detail)) return "\u6587\u4EF6\u88AB\u5360\u7528\u6216\u6743\u9650\u4E0D\u8DB3\uFF0C\u8BF7\u68C0\u67E5\u5360\u7528\uFF0F\u6743\u9650\uFF0C\u6838\u5BF9\u4EFB\u52A1\u72B6\u6001\u540E\u91CD\u8BD5\u5931\u8D25\u9879";
   return `${code}\uFF1B\u8BF7\u5C55\u5F00\u8BCA\u65AD\u8BB0\u5F55\u67E5\u770B\u8BE6\u7EC6\u9519\u8BEF\uFF0C\u6838\u5BF9\u540E\u53EF\u91CD\u8BD5\u5931\u8D25\u9879`;
 }
@@ -10828,7 +10830,7 @@ var PackManager = class {
       finishedAt: task.finishedAt,
       items: task.items.map((item) => ({ ...item, reason: redact(item.reason), result: item.result ? safeResult(item.result) : void 0 }))
     }));
-    return { path: await this.store.saveLog({ createdAt: (/* @__PURE__ */ new Date()).toISOString(), installerVersion: "0.0.1-p3.0", hostVersion: this.hostVersion, busy: this.busy, componentOperation: this.componentOperation, context: Object.fromEntries(Object.entries(context).map(([key, value]) => [key, redact(value)])), records: tasks, bundles: status.bundles, runtime: status.runtime }) };
+    return { path: await this.store.saveLog({ createdAt: (/* @__PURE__ */ new Date()).toISOString(), installerVersion: "0.0.1-p3.1", hostVersion: this.hostVersion, busy: this.busy, componentOperation: this.componentOperation, context: Object.fromEntries(Object.entries(context).map(([key, value]) => [key, redact(value)])), records: tasks, bundles: status.bundles, runtime: status.runtime }) };
   }
   dispose() {
     this.disposed = true;
@@ -10982,8 +10984,8 @@ var PackManager = class {
     try {
       const pack = await load();
       const bundles = await this.manager.listBundles();
-      const range = pack.manifest.requires?.dsh;
-      const blocked = !range ? "\u6574\u5305\u672A\u58F0\u660E\u5185\u6838\u517C\u5BB9\u8303\u56F4\uFF0C\u65E0\u6CD5\u5B89\u88C5" : !import_semver2.default.satisfies(this.hostVersion, range, { includePrerelease: true }) ? `\u6574\u5305\u8981\u6C42\u5185\u6838 ${range}\uFF0C\u5F53\u524D\u4E3A ${this.hostVersion}` : this.conflictReason(pack, bundles);
+      const warning = hostVersionWarning(this.hostVersion, pack.manifest.requires?.dsh);
+      const blocked = this.conflictReason(pack, bundles);
       const items = new Array(pack.manifest.plugins.length);
       let next = 0;
       const inspectNext = async () => {
@@ -10999,6 +11001,7 @@ var PackManager = class {
             if (["install", "update"].includes(item.action) && this.artifacts) {
               const target = await this.artifacts.describe(item.ref, item.target);
               this.targets.set(item.ref, target);
+              item.warning = target.warning;
               item.requirements = target.requirements?.filter((requirement) => pack.manifest.plugins.some((plugin2) => plugin2.ref === requirement.ref));
             }
             item.sharedTargets = this.records.filter((record) => !record.removedAt && record.pack.manifest.id !== pack.manifest.id).flatMap((record) => record.pack.manifest.plugins.filter((other) => other.ref === item.ref && other.version !== item.target).map((other) => ({ id: record.pack.manifest.id, name: record.pack.manifest.name, version: other.version })));
@@ -11015,6 +11018,7 @@ var PackManager = class {
         pack,
         hostVersion: this.hostVersion,
         blocked,
+        warning,
         items,
         selected: items.filter((item) => ["install", "update"].includes(item.action) && (!selectedRefs || selectedRefs.includes(item.ref))).map((item) => item.ref)
       };
@@ -14288,8 +14292,22 @@ function trustedUrl(value) {
   if (url.username || url.password || url.hash || url.protocol !== "https:" && !(url.protocol === "http:" && ["127.0.0.1", "[::1]", "localhost"].includes(url.hostname))) throw new Error("Artifact source requires HTTPS (HTTP is limited to loopback testing)");
   return url;
 }
-async function download(url, limit) {
-  const response = await fetch(trustedUrl(url), { redirect: "error", signal: AbortSignal.timeout(6e4) });
+async function download(url, limit, timeoutMs = 6e4) {
+  let target = trustedUrl(url);
+  const release = target.origin === "https://github.com" && /^\/lanyun077\/EAC-mojobox\/releases\/download\/[^/]+\/[^/]+\.dshpack$/.test(target.pathname) && !target.search;
+  const signal = AbortSignal.timeout(timeoutMs);
+  let response;
+  for (let hop = 0; hop <= 3; hop++) {
+    response = await fetch(target, { redirect: release ? "manual" : "error", signal });
+    if (!release || ![301, 302, 303, 307, 308].includes(response.status)) break;
+    await response.body?.cancel();
+    const location = response.headers.get("location");
+    if (!location) throw new Error("Missing release redirect location");
+    const next = trustedUrl(new URL(location, target).href);
+    if (next.origin !== "https://release-assets.githubusercontent.com" || hop === 3) throw new Error("Untrusted or excessive release redirect");
+    target = next;
+  }
+  if (!response) throw new Error("Artifact request did not return a response");
   if (!response.ok) throw new Error(`Artifact request failed: HTTP ${response.status}`);
   const encoding = response.headers.get("content-encoding")?.trim().toLowerCase();
   if ((!encoding || encoding === "identity") && Number(response.headers.get("content-length")) > limit) {
@@ -14366,12 +14384,12 @@ var RegistryArtifacts = class {
     const value = JSON.parse((await download(new URL(`${encodeURIComponent(name2)}/${encodeURIComponent(version)}`, registry).href, 2 * 1024 * 1024)).toString("utf8"));
     if (value.name !== name2 || value.version !== version || !value.dsh?.bundle || typeof value.dsh.bundle !== "object" || Array.isArray(value.dsh.bundle)) throw new Error("Registry identity, exact version or bundle declaration mismatch");
     const range = value.engines?.dsh;
-    if (range !== void 0 && (typeof range !== "string" || !import_semver3.default.validRange(range) || !import_semver3.default.satisfies(this.hostVersion, range, { includePrerelease: true }))) throw new Error("Target plugin does not support the current host");
+    if (range !== void 0 && (typeof range !== "string" || !import_semver3.default.validRange(range))) throw new Error("Invalid plugin engines.dsh range");
     const hashes = typeof value.dist?.integrity === "string" ? value.dist.integrity.split(/\s+/) : [];
     const strong = hashes.find((hash) => /^sha512-[A-Za-z0-9+/]{86}==$/.test(hash));
     if (!strong || typeof value.dist.tarball !== "string") throw new Error("Registry artifact requires SHA-512 integrity and a tarball URL");
     const requirements = requirementsOf(value);
-    return { name: name2, version, registry, url: trustedUrl(value.dist.tarball).href, sha512: Buffer.from(strong.slice(7), "base64").toString("hex"), requirements };
+    return { name: name2, version, registry, url: trustedUrl(value.dist.tarball).href, sha512: Buffer.from(strong.slice(7), "base64").toString("hex"), requirements, warning: hostVersionWarning(this.hostVersion, range) };
   }
   async prepare(target) {
     const file = this.file(target.sha512);
@@ -14399,12 +14417,23 @@ var import_semver4 = __toESM(require_semver2(), 1);
 import { randomUUID as randomUUID2, createHash as createHash3 } from "node:crypto";
 import { mkdir as mkdir3, readFile as readFile3, rename as rename2, writeFile as writeFile3 } from "node:fs/promises";
 import { dirname as dirname2 } from "node:path";
-var CATALOG_URL = "https://lanyun077.github.io/EAC-mojobox/generated/catalog.json";
+var CATALOG_URL = "https://mojobox.cn/generated/catalog.json";
 var SITE_ROOT = new URL("../", CATALOG_URL);
-function archiveUrl(value) {
+var LEGACY_ROOT = new URL("https://lanyun077.github.io/EAC-mojobox/");
+function sourceUrl(value) {
+  if (typeof value !== "string") return;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:" && !url.username && !url.password) return url.href;
+  } catch {
+  }
+}
+function archiveUrl(value, id, version) {
   if (typeof value !== "string") throw new Error("Catalog archive URL is missing");
   const url = new URL(value, SITE_ROOT);
-  if (url.origin !== SITE_ROOT.origin || !url.pathname.startsWith(`${SITE_ROOT.pathname}generated/downloads/`) || url.username || url.password || url.search || url.hash || /%2f|%5c/i.test(url.pathname)) throw new Error("Catalog archive URL is outside the official download directory");
+  const release = `https://github.com/lanyun077/EAC-mojobox/releases/download/${encodeURIComponent(`pack-${id}-v${version}`)}/${encodeURIComponent(`${id}-${version}.dshpack`)}`;
+  const local = [SITE_ROOT, LEGACY_ROOT].some((root) => url.origin === root.origin && url.pathname.startsWith(`${root.pathname}generated/downloads/`));
+  if (!local && url.href !== release || url.username || url.password || url.search || url.hash || /%2f|%5c/i.test(url.pathname)) throw new Error("Catalog archive URL is outside the official download directory or pack release");
   return url.href;
 }
 function parseCatalog(value) {
@@ -14422,7 +14451,8 @@ function parseCatalog(value) {
       return { ref: plugin.ref, version: plugin.version, enabled: plugin.enabled };
     });
     if (!components.length) throw new Error("Catalog function pack has no components");
-    return { id: m2.id, version: m2.version, name: m2.name, description: m2.description, author: item.author, requires: range, components, archiveUrl: archiveUrl(item.archiveUrl), archiveSize: item.archiveSize, archiveDigest: item.archiveDigest };
+    const category = ["function", "appearance", "workflow"].includes(m2.category) ? m2.category : void 0;
+    return { id: m2.id, version: m2.version, name: m2.name, description: m2.description, author: item.author, category, source: sourceUrl(item.source), requires: range, components, archiveUrl: archiveUrl(item.archiveUrl, m2.id, m2.version), archiveSize: item.archiveSize, archiveDigest: item.archiveDigest };
   });
 }
 var Catalog = class {
@@ -14438,6 +14468,9 @@ var Catalog = class {
   stale = true;
   error;
   refreshing;
+  metadataLoading = false;
+  metadataError;
+  presentation = /* @__PURE__ */ new Map();
   async initialize() {
     try {
       const cache = JSON.parse(await readFile3(this.file, "utf8"));
@@ -14451,11 +14484,11 @@ var Catalog = class {
     }
   }
   view(hostVersion, records) {
-    return { checkedAt: this.cache?.checkedAt, stale: this.stale, error: this.error, entries: this.entries.map((entry) => {
+    return { checkedAt: this.cache?.checkedAt, stale: this.stale, error: this.error, metadataLoading: this.metadataLoading, metadataError: this.metadataError, entries: this.entries.map((entry) => {
       const record = records.find((record2) => record2.pack.manifest.id === entry.id);
       const installedVersion = record?.removedAt ? void 0 : record?.pack.manifest.version;
-      const blocked = !entry.requires ? "\u6574\u5305\u672A\u58F0\u660E\u5185\u6838\u517C\u5BB9\u8303\u56F4\uFF0C\u65E0\u6CD5\u5B89\u88C5" : !import_semver4.default.satisfies(hostVersion, entry.requires, { includePrerelease: true }) ? `\u6574\u5305\u8981\u6C42\u5185\u6838 ${entry.requires}\uFF0C\u5F53\u524D\u4E3A ${hostVersion}` : record?.pack.manifest.version === entry.version && `sha256:${record.pack.sha256}` !== entry.archiveDigest ? "\u540C\u7248\u672C\u5F52\u6863\u6458\u8981\u4E0E\u672C\u5730\u8BB0\u5F55\u4E0D\u540C\uFF0C\u5DF2\u505C\u6B62\u8FDC\u7AEF\u5B89\u88C5" : void 0;
-      return { ...entry, installedVersion, blocked, newer: !this.stale && !blocked && !!import_semver4.default.valid(installedVersion) && import_semver4.default.gt(entry.version, installedVersion) };
+      const blocked = record?.pack.manifest.version === entry.version && `sha256:${record.pack.sha256}` !== entry.archiveDigest ? "\u540C\u7248\u672C\u5F52\u6863\u6458\u8981\u4E0E\u672C\u5730\u8BB0\u5F55\u4E0D\u540C\uFF0C\u5DF2\u505C\u6B62\u8FDC\u7AEF\u5B89\u88C5" : void 0;
+      return { ...entry, ...this.presentation.get(`${entry.id}@${entry.version}`), installedVersion, blocked, warning: hostVersionWarning(hostVersion, entry.requires), newer: !this.stale && !blocked && !!import_semver4.default.valid(installedVersion) && import_semver4.default.gt(entry.version, installedVersion) };
     }) };
   }
   refresh() {
@@ -14484,10 +14517,47 @@ var Catalog = class {
       this.entries = entries;
       this.stale = false;
       this.error = void 0;
+      void this.fetchPresentation(cache);
     } catch (error) {
       this.stale = true;
       this.error = redact(String(error));
     }
+  }
+  async fetchPresentation(cache) {
+    this.metadataLoading = true;
+    this.metadataError = void 0;
+    const results = await Promise.allSettled(["contributors", "rankings"].map(async (name2) => {
+      const bytes = await this.transport(new URL(`generated/${name2}.json`, SITE_ROOT).href, 2 * 1024 * 1024, 12e3);
+      if (bytes.length > 2 * 1024 * 1024) throw new Error("Display metadata exceeds size limit");
+      const data = JSON.parse(bytes.toString("utf8"));
+      if (data?.format !== `mojobox-${name2}-v1` || !Array.isArray(data.items) || data.items.length > 1e4) throw new Error(`Invalid ${name2} metadata`);
+      if (name2 === "contributors" && data.repository !== "lanyun077/EAC-mojobox") throw new Error("Invalid contributor repository");
+      if (name2 === "rankings" && data.data_as_of !== null && !Number.isFinite(Date.parse(data.data_as_of))) throw new Error("Invalid statistics timestamp");
+      return data;
+    }));
+    if (this.cache !== cache) return;
+    const contributors = results[0].status === "fulfilled" ? results[0].value : null;
+    const rankings = results[1].status === "fulfilled" ? results[1].value : null;
+    this.presentation.clear();
+    for (const entry of this.entries) {
+      const matches = (item) => item?.kind === "pack" && item.resource_id === entry.id && item.version === entry.version;
+      const submission = contributors?.items.find(matches)?.first_submission;
+      const stats = rankings?.items.find(matches);
+      const metadata = {};
+      if (Number.isSafeInteger(submission?.github_user_id) && submission.github_user_id > 0 && typeof submission.github_login === "string" && /^[a-z0-9][a-z0-9-]{0,38}$/i.test(submission.github_login)) {
+        metadata.submitter = { login: submission.github_login, userId: submission.github_user_id };
+      }
+      const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : null;
+      if (stats) {
+        metadata.downloadsAll = count(stats.downloads_all);
+        metadata.downloads7d = count(stats.downloads_7d);
+        metadata.statisticsAt = rankings.data_as_of ?? void 0;
+        metadata.statisticsStale = rankings.stale === true || !metadata.statisticsAt || Date.now() - Date.parse(metadata.statisticsAt) > 2 * 864e5;
+      }
+      this.presentation.set(`${entry.id}@${entry.version}`, metadata);
+    }
+    this.metadataError = results.some((result) => result.status === "rejected") ? "\u90E8\u5206\u6295\u7A3F\u6216\u4E0B\u8F7D\u7EDF\u8BA1\u6682\u4E0D\u53EF\u7528" : void 0;
+    this.metadataLoading = false;
   }
   async archive(id, version, hostVersion, records) {
     if (this.stale || this.refreshing) throw new Error("Refresh the official catalog before installing");

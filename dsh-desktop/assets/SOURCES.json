@@ -2940,22 +2940,22 @@
       "name": "dsh-plugin-mojobox",
       "type": "plugin",
       "origin": "upstream",
-      "version": "0.0.1-p3.0",
+      "version": "0.0.1-p3.1",
       "path": "dsh-desktop/assets/plugins/dsh-plugin-mojobox",
       "registryStatus": "注册表默认启用",
       "shipsAsBuiltin": true,
       "audit": {
         "verdict": "vendored-snapshot",
         "compare": "vendored-snapshot",
-        "note": "Mojobox 整合包管理插件：随包内置（distro.mjs BASE_PLUGIN_DIRS + companion-sync COMPANION_PLUGINS 登记 mojobox-manager）。真上游 lanyun077/Mojobox-Installer main 为源码态且 engines.dsh 精确锁 0.2.2-rc.1 与 EAC 0.2.1 冲突，故取 EAC 历史 5d6edc0 中已适配兼容版（engines.dsh >=0.1.5-rc.1）；为满足随包自包含、规避应用树缺失 tar/yauzl 导致的 failed to import，host 入口 lib/index.js 用 esbuild（packages:bundle）重打包，将 ajv/semver/tar/yauzl 内联。保留客户端 lib/client.js（loader 包装、require('react') external）。不提交 node_modules。",
-        "basis": "EAC git history 5d6edc0 完整 mojobox 树（含已构建 lib/）+ 自包含重打包",
+        "note": "从真上游固定提交 26d775a 重建 0.0.1-p3.1：正式目录、GitHub Release 下载、功能包与外观包分类、投稿者和下载统计、0.2.1 权限 Hook。上游已移除无依据的 engines.dsh 门槛。esbuild 0.28.2 内联宿主运行依赖并注入 createRequire，保留上游客户端 loader 包装；不携带 node_modules。原有 distro.mjs 与 companion-sync 接线不变。",
+        "basis": "lanyun077/Mojobox-Installer@26d775a3a45cebeb4841e33073f20c71c9576881 的源码和锁文件 + esbuild 0.28.2 自包含重建",
         "conflict": null
       },
       "upstream": {
         "repository": "https://github.com/lanyun077/Mojobox-Installer",
         "refType": "revision",
-        "refCommit": "5d6edc0",
-        "provenance": "真上游无 release/tag、为源码态且 engines.dsh 与其官方版本冲突；改由 EAC 历史已适配完整树 vendor"
+        "refCommit": "26d775a3a45cebeb4841e33073f20c71c9576881",
+        "provenance": "固定上游 main 源码提交重建；包版本与最新预览发行 v0.0.1-p3.1 相同，另含发行后功能及兼容修复，不冒称 Release 附件原始字节。"
       }
     }
   ]

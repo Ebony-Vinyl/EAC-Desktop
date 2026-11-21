@@ -1,39 +1,36 @@
-# dsh-plugin-mojobox
+# Mojobox 整合包管理（EAC 随包版）
 
-Mojobox 官方客户端整合包管理插件（EAC 随包版）。
+在「设置 → Mojobox」浏览功能包和外观包，或导入本地 `.dshpack`／ZIP；预览后选择组件安装或更新，查看进度、重试失败项、保存脱敏日志，以及启停／删除单个组件。
 
-作为 EAC 内置随包插件，本目录只保留运行时产物：宿主导入入口
-`lib/index.js`（esbuild 自包含打包，已内联 `ajv`/`semver`/`tar`/`yauzl`
-运行时依赖）和浏览器侧 `lib/client.js`，配合 `cordis.patch.yml` 注册
-`mojobox-manager` 行。源码与测试不在本目录整树收纳随包，见下方来源。
+目录来自 <https://mojobox.cn>，整合包来自主仓 GitHub Releases，组件由宿主配置的 npm 注册表提供。投稿者、下载量与热度后台加载，展示数据失败不阻断目录和安装。
 
-- **能力**：在设置的「Mojobox」入口完成整合包导入、预览、选择安装、更新核对、
-  失败项重试与单组件启停/删除。
-- **数据目录**：当前 Profile 的 `.mojobox-manager/`。
-- **宿主兼容**：`engines.dsh >= 0.1.5-rc.1`（node `>=24.9.0`）。
+- 包版本：`0.0.1-p3.1`。
+- 源码：[Mojobox-Installer@26d775a](https://github.com/lanyun077/Mojobox-Installer/tree/26d775a3a45cebeb4841e33073f20c71c9576881)（MIT）。
+- 数据目录：当前 Profile 的 `.mojobox-manager/`，保留原有安装记录和配置。
+- 宿主：Node.js `>=24.9.0`；沿用上游实际接口和权限 Hook，不额外设置 DSH 版本门槛。模拟接口通过不代表所有 EAC 客户端版本已完成真实安装验收。
 
-## 来源
+此副本从固定主线提交重建，包含 `v0.0.1-p3.1` 发行后的分类与兼容修复；它不是 GitHub Release 附件的原始字节。来源台账见 `assets/SOURCES.json#C122`。
 
-上游源码：<https://github.com/lanyun077/Mojobox-Installer> （MIT）。
+## 随包布局
 
-随包产物取自 EAC 历史提交 `5d6edc0` 中已适配 EAC 0.2.1 的 mojobox 完整树
-（含已构建 `lib/`、兼容处理 `engines.dsh >=0.1.5-rc.1`）。为满足随包自包含
-要求、避免缺失 `tar`/`yauzl` 运行时依赖导致「failed to import」，宿主导入入口
-`lib/index.js` 用 esbuild 重新打包（`packages: 'bundle'`），将真实 npm 依赖
-内联进单一文件，与 `ds-harness-remote`/`dsh-wechat` 同法。内联依赖的第三方
-许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+本目录只保留运行时与许可文件，不携带源码、测试或 `node_modules`。`lib/index.js` 内联运行依赖和 Schema，`lib/client.js` 保留上游 `window.__ModuleLoader__.load` 包装及外部 React 注入。
 
-## 构建（若要重建 `lib/index.js`）
+`cordis.patch.yml` 仍注册 `mojobox-manager`，由 EAC 的 companion-sync 加载。依赖与传递依赖许可见 [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)。
+
+## 从固定源码重建
+
+在独立构建目录执行，完成后将 `lib/index.js` 和 `lib/client.js` 同步到此目录，并核对包版本、来源台账与第三方许可：
 
 ```bash
-npm install        # 取得 esbuild 与运行时依赖（仅构建机）
-npx esbuild src/index.ts --bundle --platform=node --format=esm \
+git clone https://github.com/lanyun077/Mojobox-Installer.git
+cd Mojobox-Installer
+git checkout 26d775a3a45cebeb4841e33073f20c71c9576881
+npm ci
+npm run typecheck
+npm test
+npx --yes esbuild@0.28.2 src/index.ts --bundle --platform=node --format=esm \
   --target=es2023 --packages=bundle --outfile=lib/index.js \
   --banner:js='import { createRequire as __bannerCreateRequire } from "node:module"; const require = __bannerCreateRequire(import.meta.url);'
 ```
 
-> `--banner:js` 不是可选项：内联进来的 CJS 依赖会在运行期调用 `require()`，
-> 缺了它这个 ESM 包一 import 就抛 `Dynamic require of "fs" is not supported`。
-
-> 当前随包树不收纳 `src/`（构建痕迹）；如需从源码重建/审阅，检出上游或 EAC
-> 历史提交中的完整树。
+`createRequire` 不可省略：内联的 CommonJS 依赖需要它访问 Node.js 内置模块，否则 ESM 导入会报 `Dynamic require of "fs" is not supported`。重建后应通过复制到独立 Profile 的导入和路由测试，不能依赖开发机已有的 `node_modules`。

@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-mojobox",
-  "version": "0.0.1-p3.0",
+  "version": "0.0.1-p3.1",
   "private": true,
   "description": "Mojobox 官方客户端整合包管理插件（EAC 随包）",
   "license": "MIT",
@@ -20,8 +20,7 @@
     "./package.json": "./package.json"
   },
   "engines": {
-    "node": ">=24.9.0",
-    "dsh": ">=0.1.5-rc.1"
+    "node": ">=24.9.0"
   },
   "dsh": {
     "bundle": {
