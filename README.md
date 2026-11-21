@@ -181,8 +181,8 @@ docs/adr/          架构决策与模块边界
 使用 Git、Node.js 24、pnpm 11.7.0 与 Rust stable。Windows 需要对应 Rust 目标的 C++ 构建工具；Linux 需要 Tauri / WebKitGTK 依赖。
 
 ```sh
-git clone --recurse-submodules https://github.com/says693/Deepseek-Harness-EAC.git
-cd Deepseek-Harness-EAC
+git clone --recurse-submodules https://github.com/Ebony-Vinyl/EAC-Desktop.git
+cd EAC-Desktop
 git submodule update --init --recursive
 node tauri-shell/check-dpx-pin.mjs
 npm install --global pnpm@11.7.0

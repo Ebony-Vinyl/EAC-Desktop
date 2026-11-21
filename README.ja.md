@@ -196,8 +196,8 @@ docs/adr/          Architecture decisions and module boundaries
 Git、Node.js 24、pnpm 11.7.0、Rust stable を使います。Windows では Rust のターゲットのための C++ のビルドツールが、Linux では Tauri/WebKitGTK の依存関係が必要です。
 
 ```sh
-git clone --recurse-submodules https://github.com/says693/Deepseek-Harness-EAC.git
-cd Deepseek-Harness-EAC
+git clone --recurse-submodules https://github.com/Ebony-Vinyl/EAC-Desktop.git
+cd EAC-Desktop
 git submodule update --init --recursive
 node tauri-shell/check-dpx-pin.mjs
 npm install --global pnpm@11.7.0

@@ -196,8 +196,8 @@ The packaging matrix covers Windows/Linux x64 and arm64; the repository also inc
 Use Git, Node.js 24, pnpm 11.7.0 and Rust stable. Windows needs C++ build tools for the Rust target; Linux needs Tauri/WebKitGTK dependencies.
 
 ```sh
-git clone --recurse-submodules https://github.com/says693/Deepseek-Harness-EAC.git
-cd Deepseek-Harness-EAC
+git clone --recurse-submodules https://github.com/Ebony-Vinyl/EAC-Desktop.git
+cd EAC-Desktop
 git submodule update --init --recursive
 node tauri-shell/check-dpx-pin.mjs
 npm install --global pnpm@11.7.0
