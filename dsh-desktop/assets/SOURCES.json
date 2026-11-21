@@ -2933,6 +2933,30 @@
         "archiveBytes": 1323263,
         "provenance": "私有 ESM 包（private: true），npm 无发布；GitHub Release v2.5.2 提供官方预构建 tgz 与 SHA256SUMS.txt"
       }
+    },
+    {
+      "id": "C122",
+      "line": "main",
+      "name": "dsh-plugin-mojobox",
+      "type": "plugin",
+      "origin": "upstream",
+      "version": "0.0.1-p3.1",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-mojobox",
+      "registryStatus": "注册表默认启用",
+      "shipsAsBuiltin": true,
+      "audit": {
+        "verdict": "vendored-snapshot",
+        "compare": "vendored-snapshot",
+        "note": "从真上游固定提交 26d775a 重建 0.0.1-p3.1：正式目录、GitHub Release 下载、功能包与外观包分类、投稿者和下载统计、0.2.1 权限 Hook。上游已移除无依据的 engines.dsh 门槛。esbuild 0.28.2 内联宿主运行依赖并注入 createRequire，保留上游客户端 loader 包装；不携带 node_modules。原有 distro.mjs 与 companion-sync 接线不变。",
+        "basis": "lanyun077/Mojobox-Installer@26d775a3a45cebeb4841e33073f20c71c9576881 的源码和锁文件 + esbuild 0.28.2 自包含重建",
+        "conflict": null
+      },
+      "upstream": {
+        "repository": "https://github.com/lanyun077/Mojobox-Installer",
+        "refType": "revision",
+        "refCommit": "26d775a3a45cebeb4841e33073f20c71c9576881",
+        "provenance": "固定上游 main 源码提交重建；包版本与最新预览发行 v0.0.1-p3.1 相同，另含发行后功能及兼容修复，不冒称 Release 附件原始字节。"
+      }
     }
   ]
 }

@@ -156,8 +156,9 @@ test('staging drops the retired plugin but preserves the ADR 0010 manager fallba
   // ISO-003：eac-core-bridge 的端点生产者缺失（DSH_EAC_BRIDGE_URL/TOKEN 零写入方）
   // → 退役出装配清单（资产目录保留，等进程隔离接回）。
   assert.equal(stagedDirs.includes('dsh-eac-core-bridge'), false, 'ISO-003：Core Bridge 不得再随包装配');
-  // 14 个基础配套（含开机动画、微信、远程访问、外链修复和 OFM）+ 2 个视觉核心。
-  assert.equal(stagedDirs.length, 16, '装配清单应为 16 个随包插件（14 基础 + 2 视觉核心）');
+  // 15 个基础配套（含开机动画、微信、远程访问、外链修复、OFM 和 Mojobox）+ 2 个视觉核心。
+  assert.equal(stagedDirs.length, 17, '装配清单应为 17 个随包插件（15 基础 + 2 视觉核心）');
+  assert.equal(stagedDirs.includes('dsh-plugin-mojobox'), true, 'Mojobox 整合包管理应随包');
   assert.equal(stagedDirs.includes('dsh-external-links'), true, '外链/登录授权页修复应随包');
   assert.equal(stagedDirs.includes('dsh-plugin-wallpaper-engine'), true, '壁纸引擎应随包');
   assert.equal(stagedDirs.includes('dsh-client-ui-skin-deep-whale-manager'), true, '皮肤管理器应随包');
