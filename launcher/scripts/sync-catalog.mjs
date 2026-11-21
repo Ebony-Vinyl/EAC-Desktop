@@ -10,7 +10,7 @@ const repoRoot = join(root, '..')
 const revision = '98729a72cef16785293e593242c022b04950be2d'
 const repository = 'https://github.com/look-back-lysj/deep-seek-harness-Unity'
 const sourceUrl = `https://raw.githubusercontent.com/look-back-lysj/deep-seek-harness-Unity/${revision}/packages/market/data/index.json`
-const desktopRepository = 'https://github.com/DSH-EAC/DSH-Desktop-EAC'
+const desktopRepository = 'https://github.com/Ebony-Vinyl/EAC-Desktop'
 const desktopRevision = 'dc22280beb9d0a6338d1e02d99f5e5346f72f4f0'
 const catalogPackage = 'dsh-plugin-catalog'
 

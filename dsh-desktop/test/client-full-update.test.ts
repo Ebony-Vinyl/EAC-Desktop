@@ -14,7 +14,7 @@ const key = crypto.generateKeyPairSync('ed25519');
 const keyId = crypto.randomBytes(8);
 const publicKey = Buffer.concat([Buffer.from('Ed'), keyId,
   (key.publicKey.export({format:'der',type:'spki'}) as Buffer).subarray(-32)]).toString('base64');
-const defaults = {schemaVersion:1,github:{repo:'DSH-EAC/EAC-Desktop'},gitee:{repo:''},
+const defaults = {schemaVersion:1,github:{repo:'Ebony-Vinyl/EAC-Desktop'},gitee:{repo:''},
   geoUrl:'https://geo.example/',trustedKeys:{test:publicKey}};
 function sign(data: Buffer, prehashed=false): string {
   const message = prehashed ? crypto.createHash('blake2b512').update(data).digest() : data;
