@@ -31,10 +31,6 @@ pub fn arr<'a>(v: &'a Value, key: &str) -> &'a [Value] {
         .unwrap_or(&[])
 }
 
-pub fn get_str<'a>(v: &'a Value, key: &str) -> Option<&'a str> {
-    v.get(key).and_then(Value::as_str)
-}
-
 // ---- 格式化 ----
 
 pub fn date_time(raw: &str) -> String {
@@ -48,14 +44,6 @@ pub fn date_time(raw: &str) -> String {
                 .to_string()
         })
         .unwrap_or_else(|_| raw.to_string())
-}
-
-pub fn short_date(raw: &str) -> String {
-    if raw.len() >= 10 {
-        raw[5..10].replace('-', "/")
-    } else {
-        raw.to_string()
-    }
 }
 
 pub fn bytes(value: f64) -> String {

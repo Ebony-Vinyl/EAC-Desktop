@@ -335,7 +335,7 @@ pub fn settings(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
                     app.run(
                         "open_path",
                         json!({ "path": root }),
-                        "打开数据目录",
+                        "",
                     );
                 }
                 if util::ghost_button(ui, pal, "复制路径").clicked() && !root.is_empty() {

@@ -640,7 +640,7 @@ pub fn kernels(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
                                 app.run(
                                     "open_path",
                                     json!({ "path": util::s(kernel, "path") }),
-                                    "打开内核目录",
+                                    "",
                                 );
                             }
                         });

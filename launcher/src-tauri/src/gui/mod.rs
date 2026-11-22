@@ -99,7 +99,6 @@ pub enum Skin {
 }
 
 pub struct Notice {
-    id: u64,
     message: String,
     tone: Tone,
     at: Instant,
@@ -351,9 +350,7 @@ impl App {
     }
 
     pub fn notify(&mut self, message: impl Into<String>, tone: Tone) {
-        self.seq += 1;
         self.notices.push(Notice {
-            id: self.seq,
             message: message.into(),
             tone,
             at: Instant::now(),

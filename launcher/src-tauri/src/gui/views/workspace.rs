@@ -704,7 +704,7 @@ fn details_tab(ui: &mut egui::Ui, app: &mut App, pal: &Palette, instance: &Value
             app.run(
                 "open_path",
                 json!({ "path": util::s(instance, "home") }),
-                "打开实例目录",
+                "",
             );
         }
         if util::ghost_button(ui, pal, "复制实例 ID").clicked() {

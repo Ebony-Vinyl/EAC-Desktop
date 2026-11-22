@@ -62,7 +62,7 @@ pub fn instance_actions(
                 app.run(
                     "open_path",
                     json!({ "path": util::s(instance, "home") }),
-                    "打开实例目录",
+                    "",
                 );
             }
             if util::ghost_button(ui, pal, "删除").clicked() && online && !running {
