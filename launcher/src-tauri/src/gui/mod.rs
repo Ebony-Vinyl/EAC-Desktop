@@ -968,7 +968,7 @@ impl App {
                         .color(if self.online() { pal.green } else { pal.coral }),
                     );
                     ui.add_space(6.0);
-                    if util::primary_button(ui, pal, "＋  新建实例").clicked() {
+                    if util::primary_icon_button(ui, pal, util::Icon::Plus, "新建实例").clicked() {
                         self.dialog = Some(dialogs::Dialog::create(None));
                     }
                     ui.add_space(2.0);
@@ -1050,8 +1050,15 @@ impl eframe::App for App {
         }
         ui.painter()
             .rect_filled(ui.max_rect(), egui::CornerRadius::ZERO, pal.bg);
+        // 环境粒子（原 AmbientWorld）；动画需要约 20fps 的重绘。
+        let ambient_time = if self.reduced_motion {
+            0.0
+        } else {
+            ui.input(|i| i.time) as f32
+        };
+        util::ambient_particles(ui, &pal, ambient_time);
         ui.ctx()
-            .request_repaint_after(Duration::from_millis(400));
+            .request_repaint_after(Duration::from_millis(48));
 
         if let Some(error) = &self.fatal {
             ui.vertical_centered(|ui| {

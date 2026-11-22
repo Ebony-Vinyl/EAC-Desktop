@@ -296,6 +296,137 @@ pub fn stage_pixels(ui: &mut egui::Ui, pal: &Palette) {
     }
 }
 
+/// 像素小鱼（32×16，variant 翻转配色）。
+pub fn paint_fish(painter: &egui::Painter, origin: egui::Pos2, scale: f32, variant: usize) {
+    let (body, fin) = if variant % 2 == 1 {
+        (
+            egui::Color32::from_rgb(0xea, 0xf7, 0xff),
+            egui::Color32::from_rgb(0x6f, 0xb8, 0xff),
+        )
+    } else {
+        (
+            egui::Color32::from_rgb(0x6f, 0xb8, 0xff),
+            egui::Color32::from_rgb(0xea, 0xf7, 0xff),
+        )
+    };
+    let eye = egui::Color32::from_rgb(0x08, 0x1a, 0x3a);
+    let rect = |x: f32, y: f32, w: f32, h: f32, color: egui::Color32| {
+        painter.rect_filled(
+            egui::Rect::from_min_size(
+                origin + egui::vec2(x * scale, y * scale),
+                egui::vec2(w * scale, h * scale),
+            ),
+            egui::CornerRadius::same(0),
+            color,
+        );
+    };
+    rect(0.0, 8.0, 8.0, 4.0, fin);
+    rect(8.0, 4.0, 24.0, 4.0, body);
+    rect(4.0, 8.0, 20.0, 4.0, body);
+    rect(8.0, 12.0, 12.0, 4.0, body);
+    rect(20.0, 8.0, 4.0, 4.0, eye);
+    rect(12.0, 12.0, 8.0, 4.0, fin);
+}
+
+/// 像素云。
+pub fn paint_cloud(painter: &egui::Painter, origin: egui::Pos2, scale: f32, color: egui::Color32) {
+    for (x, y, w, h) in [(0.0f32, 6.0, 8.0, 4.0), (5.0, 2.0, 9.0, 8.0), (13.0, 6.0, 8.0, 4.0)] {
+        painter.rect_filled(
+            egui::Rect::from_min_size(
+                origin + egui::vec2(x * scale, y * scale),
+                egui::vec2(w * scale, h * scale),
+            ),
+            egui::CornerRadius::same(0),
+            color,
+        );
+    }
+}
+
+/// 全窗环境粒子（原 AmbientWorld 画布的移植）。
+pub fn ambient_particles(ui: &mut egui::Ui, _pal: &Palette, t: f32) {
+    let area = ui.max_rect();
+    let w = area.width();
+    let h = area.height();
+    if w <= 0.0 || h <= 0.0 {
+        return;
+    }
+    let count = ((w * h / 18000.0) as usize).min(90);
+    for i in 0..count {
+        let base_x = ((i as f32 * 137.51) % 997.0) / 997.0 * w;
+        let base_y = ((i as f32 * 283.73) % 991.0) / 991.0 * h;
+        let depth = 0.2 + (i % 7) as f32 / 9.0;
+        let size = if i % 10 == 0 {
+            4.0
+        } else if i % 3 == 0 {
+            3.0
+        } else {
+            2.0
+        };
+        let phase = i as f32 * 1.618;
+        let cross = i % 12 == 0;
+        let x = (((base_x + t * 6.0 * depth + w) % w) / 2.0).floor() * 2.0;
+        let y = ((base_y + (t * 0.4 + phase).sin() * 9.0) / 2.0).floor() * 2.0;
+        let alpha = (0.1 + depth * 0.32 + (t + phase).sin() * 0.09).clamp(0.06, 0.6);
+        let alpha = (alpha * 255.0) as u8;
+        let color = if cross {
+            egui::Color32::from_rgba_unmultiplied(226, 245, 255, alpha)
+        } else {
+            egui::Color32::from_rgba_unmultiplied(71, 151, 255, alpha)
+        };
+        let painter = ui.painter();
+        let origin = area.min + egui::vec2(x, y);
+        painter.rect_filled(
+            egui::Rect::from_min_size(origin, egui::vec2(size, size)),
+            egui::CornerRadius::same(0),
+            color,
+        );
+        if cross {
+            painter.rect_filled(
+                egui::Rect::from_min_size(origin + egui::vec2(-5.0, 1.0), egui::vec2(15.0, 2.0)),
+                egui::CornerRadius::same(0),
+                color,
+            );
+            painter.rect_filled(
+                egui::Rect::from_min_size(origin + egui::vec2(1.0, -5.0), egui::vec2(2.0, 15.0)),
+                egui::CornerRadius::same(0),
+                color,
+            );
+        }
+    }
+}
+
+/// 图标 + 文字整体居中的主按钮。
+pub fn primary_icon_button(ui: &mut egui::Ui, pal: &Palette, icon: Icon, text: &str) -> egui::Response {
+    let font = egui::FontId::proportional(13.0);
+    let galley = ui.painter().layout_no_wrap(text.to_owned(), font.clone(), egui::Color32::WHITE);
+    let gap = 6.0;
+    let content = 13.0 + gap + galley.size().x;
+    let response = ui.add(
+        egui::Button::new(egui::RichText::new(" "))
+            .fill(pal.accent)
+            .stroke(egui::Stroke::new(1.0, pal.accent))
+            .corner_radius(egui::CornerRadius::same(9))
+            .min_size(egui::vec2(content + 30.0, 30.0)),
+    );
+    let start = response.rect.center().x - content * 0.5;
+    let cy = response.rect.center().y;
+    paint_icon(
+        ui.painter(),
+        egui::pos2(start + 6.5, cy),
+        13.0,
+        icon,
+        egui::Color32::WHITE,
+    );
+    ui.painter().text(
+        egui::pos2(start + 13.0 + gap, cy),
+        egui::Align2::LEFT_CENTER,
+        text,
+        font,
+        egui::Color32::WHITE,
+    );
+    response
+}
+
 // ---- 轻量 JSON 读取：引擎返回的都是 serde_json::Value，直接按字段取，
 // 缺字段一律回落为空值，避免为了展示再造一套镜像类型。 ----
 

@@ -556,7 +556,9 @@ pub fn kernels(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
             );
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            if util::primary_button(ui, pal, "＋ 安装精确版本").clicked() && app.online() {
+            if util::primary_icon_button(ui, pal, util::Icon::Plus, "安装精确版本").clicked()
+                && app.online()
+            {
                 app.dialog = Some(Dialog::install_kernel(None));
             }
             if util::ghost_button(ui, pal, "注册已有内核").clicked() && app.online() {

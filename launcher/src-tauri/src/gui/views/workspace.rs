@@ -41,7 +41,9 @@ pub fn overview(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
             );
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            if util::primary_button(ui, pal, "＋  新建实例").clicked() && app.online() {
+            if util::primary_icon_button(ui, pal, util::Icon::Plus, "新建实例").clicked()
+                && app.online()
+            {
                 app.dialog = Some(Dialog::create(None));
             }
         });
@@ -104,7 +106,67 @@ pub fn overview(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
                         egui::vec2(280.0 * scale, 124.0 * scale),
                         egui::Sense::hover(),
                     );
+                    let t = if app.reduced_motion {
+                        0.0
+                    } else {
+                        ui.input(|i| i.time) as f32
+                    };
                     let painter = ui.painter();
+                    // 声呐波纹
+                    let sonar = egui::pos2(rect.center().x, rect.center().y);
+                    for offset in [0.0f32, 1.5] {
+                        let progress = ((t + offset) % 3.0) / 3.0;
+                        let alpha = ((1.0 - progress) * 0.4).max(0.0) * 255.0;
+                        painter.circle(
+                            sonar,
+                            (10.0 + progress * 70.0) * scale,
+                            egui::Color32::TRANSPARENT,
+                            egui::Stroke::new(
+                                1.5,
+                                egui::Color32::from_rgba_unmultiplied(0x9e, 0xd8, 0xff, alpha as u8),
+                            ),
+                        );
+                    }
+                    // 云
+                    let cloud_color =
+                        egui::Color32::from_rgba_unmultiplied(0xea, 0xf7, 0xff, 80);
+                    for (i, (speed, y_off, cloud_scale)) in
+                        [(10.0f32, 4.0, 1.0), (7.0, 30.0, 0.8)].iter().enumerate()
+                    {
+                        let span = rect.width() + 60.0;
+                        let x = rect.right() - ((t * speed + i as f32 * 130.0) % span) - 20.0;
+                        util::paint_cloud(
+                            painter,
+                            egui::pos2(x, rect.top() + y_off),
+                            scale * cloud_scale,
+                            cloud_color,
+                        );
+                    }
+                    // 海床
+                    for i in 0..8 {
+                        let x = rect.left() + 8.0 + i as f32 * (rect.width() - 20.0) / 7.0;
+                        painter.rect_filled(
+                            egui::Rect::from_min_size(
+                                egui::pos2(x, rect.bottom() - 4.0),
+                                egui::vec2(3.0, 3.0),
+                            ),
+                            egui::CornerRadius::same(0),
+                            pal.muted.gamma_multiply(0.7),
+                        );
+                    }
+                    // 游动小鱼（画在鲸鱼身后）
+                    for (i, (speed, y_off, variant)) in
+                        [(26.0f32, 98.0, 0usize), (34.0, 112.0, 1)].iter().enumerate()
+                    {
+                        let span = rect.width() + 40.0;
+                        let x = rect.right() - ((t * speed + i as f32 * 150.0) % span) - 20.0;
+                        util::paint_fish(
+                            painter,
+                            egui::pos2(x, rect.top() + y_off),
+                            scale,
+                            *variant,
+                        );
+                    }
                     let shadow = egui::pos2(rect.center().x, rect.bottom() - 4.0);
                     for (radius, alpha) in [(46.0f32, 16u8), (34.0, 26), (20.0, 34)] {
                         painter.circle_filled(
@@ -114,6 +176,31 @@ pub fn overview(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
                         );
                     }
                     util::paint_whale(painter, rect.min, scale);
+                    // 火花
+                    for (i, (sx, sy)) in [
+                        (40.0f32, 16.0),
+                        (150.0, 2.0),
+                        (238.0, 44.0),
+                    ]
+                    .iter()
+                    .enumerate()
+                    {
+                        let alpha = (0.25 + 0.65 * (0.5 + 0.5 * (t * 2.2 + i as f32 * 1.9).sin()))
+                            * 255.0;
+                        painter.rect_filled(
+                            egui::Rect::from_min_size(
+                                egui::pos2(rect.left() + sx * scale, rect.top() + sy * scale),
+                                egui::vec2(3.0, 3.0),
+                            ),
+                            egui::CornerRadius::same(0),
+                            egui::Color32::from_rgba_unmultiplied(
+                                0xea,
+                                0xf7,
+                                0xff,
+                                alpha as u8,
+                            ),
+                        );
+                    }
                     ui.add_space(6.0);
                     util::stage_pixels(ui, pal);
                 },
@@ -516,7 +603,9 @@ pub fn instances(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {    let snaps
             );
         });
         ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-            if util::primary_button(ui, pal, "＋  新建实例").clicked() && app.online() {
+            if util::primary_icon_button(ui, pal, util::Icon::Plus, "新建实例").clicked()
+                && app.online()
+            {
                 app.dialog = Some(Dialog::create(None));
             }
             if util::ghost_button(ui, pal, "导入实例").clicked() && app.online() {
