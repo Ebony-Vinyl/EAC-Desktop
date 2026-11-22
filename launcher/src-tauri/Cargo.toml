@@ -43,7 +43,7 @@ tempfile = "3"
 tiny_http = "0.12"
 url = "2"
 uuid = { version = "1", features = ["v4"] }
-zip = { version = "2.6", default-features = false, features = ["deflate"] }
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 zstd = "0.13"
 
 [target.'cfg(windows)'.dependencies]
