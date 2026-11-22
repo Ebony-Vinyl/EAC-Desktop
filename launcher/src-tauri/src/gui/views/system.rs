@@ -279,7 +279,7 @@ pub fn settings(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
         });
 
     ui.add_space(10.0);
-    util::section(ui, pal, "引擎连接", None);
+    util::section(ui, pal, "引擎信息", None);
     egui::Frame::new()
         .fill(pal.card)
         .stroke(egui::Stroke::new(1.0, pal.line))
@@ -287,33 +287,19 @@ pub fn settings(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
         .inner_margin(egui::Margin::same(12))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new("原生 Rust 引擎")
-                        .size(12.5)
-                        .strong()
-                        .color(pal.text),
-                );
-                util::badge(
-                    ui,
-                    pal,
-                    if app.online() { "已连接" } else { "未连接" },
-                    if app.online() { Tone::Accent } else { Tone::Coral },
-                );
-                if !app.engine_error().is_empty() {
-                    ui.label(
-                        egui::RichText::new(app.engine_error())
-                            .size(10.0)
-                            .color(pal.coral),
-                    );
-                }
-            });
-            ui.label(
-                egui::RichText::new("单进程 · 零 WebView2 · 零监听端口；所有操作直接调用本地引擎。")
-                    .size(10.5)
-                    .color(pal.muted),
-            );
-            ui.separator();
+            if !app.online() {
+                ui.horizontal(|ui| {
+                    util::badge(ui, pal, "引擎未连接", Tone::Coral);
+                    if !app.engine_error().is_empty() {
+                        ui.label(
+                            egui::RichText::new(app.engine_error())
+                                .size(10.0)
+                                .color(pal.coral),
+                        );
+                    }
+                });
+                ui.add_space(4.0);
+            }
             ui.label(
                 egui::RichText::new("应用数据目录")
                     .size(12.0)

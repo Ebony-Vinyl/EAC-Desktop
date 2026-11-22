@@ -11,7 +11,6 @@ pub enum PathKind {
 }
 
 pub enum Dialog {
-    Connection,
     Instance {
         id: Option<String>,
         name: String,
@@ -245,7 +244,6 @@ impl Dialog {
 
     fn title(&self) -> String {
         match self {
-            Dialog::Connection => "连接本地引擎".into(),
             Dialog::Instance { id, .. } => {
                 if id.is_some() {
                     "配置实例".into()
@@ -274,7 +272,6 @@ impl Dialog {
 
     fn body(&mut self, app: &mut App, ui: &mut egui::Ui, pal: &Palette, close: &mut bool) {
         match self {
-            Dialog::Connection => connection(app, ui, pal, close),
             Dialog::Instance {
                 id,
                 name,
@@ -702,45 +699,6 @@ fn combo(
                 ui.selectable_value(value, key.clone(), label);
             }
         });
-}
-
-fn connection(app: &mut App, ui: &mut egui::Ui, pal: &Palette, close: &mut bool) {
-    ui.label(
-        egui::RichText::new("原生窗口直接调用本地 Rust 引擎，不再经过 WebView2 或 HTTP 桥接。")
-            .size(11.0)
-            .color(pal.muted),
-    );
-    ui.add_space(6.0);
-    ui.horizontal(|ui| {
-        ui.label(egui::RichText::new("引擎状态").size(11.0).color(pal.muted));
-        util::badge(
-            ui,
-            pal,
-            if app.online() {
-                "已连接"
-            } else if app.connecting() {
-                "连接中"
-            } else {
-                "未连接"
-            },
-            if app.online() {
-                util::Tone::Accent
-            } else {
-                util::Tone::Coral
-            },
-        );
-    });
-    if !app.engine_error().is_empty() {
-        ui.label(
-            egui::RichText::new(app.engine_error())
-                .size(10.5)
-                .color(pal.coral),
-        );
-    }
-    ui.add_space(8.0);
-    if ui.button("完成").clicked() {
-        *close = true;
-    }
 }
 
 #[allow(clippy::too_many_arguments)]

@@ -971,10 +971,6 @@ impl App {
                     if util::primary_icon_button(ui, pal, util::Icon::Plus, "新建实例").clicked() {
                         self.dialog = Some(dialogs::Dialog::create(None));
                     }
-                    ui.add_space(2.0);
-                    if util::ghost_button(ui, pal, "连接设置").clicked() {
-                        self.dialog = Some(dialogs::Dialog::Connection);
-                    }
                     ui.add_space(6.0);
                 });
             },

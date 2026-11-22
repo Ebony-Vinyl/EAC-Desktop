@@ -281,25 +281,20 @@ pub fn overview(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
                         );
                         ui.add_space(8.0);
                         ui.horizontal(|ui| {
-                            if util::primary_button(
-                                ui,
-                                pal,
-                                if kernels.is_empty() && app.online() {
-                                    "准备内核"
+                            let label = if !app.online() {
+                                "查看引擎状态"
+                            } else if kernels.is_empty() {
+                                "准备内核"
+                            } else {
+                                "创建第一个实例"
+                            };
+                            if util::primary_button(ui, pal, label).clicked() {
+                                if !app.online() {
+                                    app.view = View::Settings;
+                                } else if kernels.is_empty() {
+                                    app.view = View::Kernels;
                                 } else {
-                                    "创建第一个实例"
-                                },
-                            )
-                            .clicked()
-                            {
-                                if app.online() {
-                                    if kernels.is_empty() {
-                                        app.view = View::Kernels;
-                                    } else {
-                                        app.dialog = Some(Dialog::create(None));
-                                    }
-                                } else {
-                                    app.dialog = Some(Dialog::Connection);
+                                    app.dialog = Some(Dialog::create(None));
                                 }
                             }
                             if util::ghost_button(ui, pal, "浏览插件  →").clicked() {
