@@ -1101,6 +1101,7 @@ impl eframe::App for App {
         self.header(ui, &pal);
         ui.separator();
         ui.horizontal_top(|ui| {
+            ui.add_space(14.0);
             self.sidebar(ui, &pal);
             ui.separator();
             let available = ui.available_size();
@@ -1155,12 +1156,26 @@ fn install_fonts(ctx: &egui::Context) {
     ctx.set_fonts(fonts);
 }
 
+fn load_app_icon() -> egui::IconData {
+    let bytes = include_bytes!("../../resources/icon.png");
+    let decoded = image::load_from_memory(bytes)
+        .expect("embedded app icon must decode")
+        .to_rgba8();
+    let (width, height) = decoded.dimensions();
+    egui::IconData {
+        rgba: decoded.into_raw(),
+        width,
+        height,
+    }
+}
+
 pub fn run() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
             .with_inner_size([1440.0, 920.0])
             .with_min_inner_size([1024.0, 680.0])
-            .with_title("EAC 启动器"),
+            .with_title("EAC 启动器")
+            .with_icon(load_app_icon()),
         ..Default::default()
     };
     eframe::run_native(

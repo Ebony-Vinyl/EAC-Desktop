@@ -506,6 +506,7 @@ dependencies = [
  "dirs",
  "eframe",
  "fs2",
+ "image",
  "junction",
  "libc",
  "regex",

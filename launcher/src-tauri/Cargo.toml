@@ -33,6 +33,7 @@ features = ["default_fonts", "glow"]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
 dirs = "6"
 fs2 = "0.4"
+image = { version = "0.25", default-features = false, features = ["png"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
 regex = "1"
 semver = "1"
