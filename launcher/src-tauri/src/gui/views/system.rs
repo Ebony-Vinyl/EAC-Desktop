@@ -480,12 +480,9 @@ pub fn settings(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
     ui.add_space(10.0);
     util::section(ui, pal, "关于 EAC", None);
     ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new("EAC")
-                .size(26.0)
-                .strong()
-                .color(pal.accent),
-        );
+        if let Some(tex) = &app.icon_tex {
+            util::logo(ui, tex, 34.0);
+        }
         ui.vertical(|ui| {
             ui.label(
                 egui::RichText::new("EAC 启动器")
@@ -500,9 +497,4 @@ pub fn settings(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
             );
         });
     });
-    ui.label(
-        egui::RichText::new("实例使用独立 home 与进程 · 内核版本由你显式选择 · 安装结果以真实引擎响应为准")
-            .size(10.0)
-            .color(pal.muted),
-    );
 }

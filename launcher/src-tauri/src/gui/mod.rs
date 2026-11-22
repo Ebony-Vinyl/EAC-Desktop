@@ -173,6 +173,7 @@ impl App {
 pub struct App {
     bridge: Option<Bridge>,
     fatal: Option<String>,
+    icon_tex: Option<egui::TextureHandle>,
     pub view: View,
     pub selected_id: String,
     pub dialog: Option<dialogs::Dialog>,
@@ -255,9 +256,21 @@ impl App {
             bridge.call("achievements", "achievements", "", json!({}));
             bridge.call("market_stats", "market_stats", "", json!({}));
         }
+        let icon_tex = {
+            let decoded = image::load_from_memory(include_bytes!("../../resources/icon.png"))
+                .expect("embedded app icon must decode")
+                .to_rgba8();
+            let (width, height) = decoded.dimensions();
+            let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                [width as usize, height as usize],
+                &decoded.into_raw(),
+            );
+            Some(cc.egui_ctx.load_texture("eac-app-icon", color_image, egui::TextureOptions::NEAREST))
+        };
         Self {
             bridge,
             fatal,
+            icon_tex,
             view: View::Overview,
             selected_id: String::new(),
             dialog: None,
@@ -770,12 +783,9 @@ impl App {
     fn header(&mut self, ui: &mut egui::Ui, pal: &Palette) {
         ui.horizontal(|ui| {
             ui.add_space(14.0);
-            ui.label(
-                egui::RichText::new("EAC")
-                    .size(17.0)
-                    .strong()
-                    .color(pal.accent),
-            );
+            if let Some(tex) = &self.icon_tex {
+                util::logo(ui, tex, 18.0);
+            }
             ui.label(
                 egui::RichText::new("启动器")
                     .size(13.0)
@@ -855,12 +865,9 @@ impl App {
             |ui| {
                 ui.add_space(10.0);
                 ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new("EAC")
-                            .size(22.0)
-                            .strong()
-                            .color(pal.accent),
-                    );
+                    if let Some(tex) = &self.icon_tex {
+                        util::logo(ui, tex, 30.0);
+                    }
                     ui.vertical(|ui| {
                         ui.label(
                             egui::RichText::new("启动器")

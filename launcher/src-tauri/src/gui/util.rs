@@ -138,6 +138,14 @@ pub fn icon(ui: &mut egui::Ui, icon: Icon, color: egui::Color32, size: f32) {
     paint_icon(ui.painter(), rect.center(), size, icon, color);
 }
 
+/// 原版鲸鱼 logo（窗口图标同一张图）。
+pub fn logo(ui: &mut egui::Ui, texture: &egui::TextureHandle, size: f32) {
+    ui.add(egui::Image::from_texture((
+        texture.id(),
+        egui::vec2(size, size),
+    )));
+}
+
 // ---- 像素鲸鱼与驾驶舱装饰（数据来自原 pixel-world.tsx）----
 
 type Px = (f32, f32, f32, f32);
