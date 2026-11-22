@@ -14,6 +14,16 @@ name: 构建安装包（本体 + 启动器）
 on:
   workflow_dispatch:
   pull_request:
+    # 纯文档/报告/静态资源改动不触发（安装包构建很贵）。
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'reports/**'
+      - '**/*.png'
+      - '**/*.jpg'
+      - '**/*.jpeg'
+      - '**/*.gif'
+      - '**/*.svg'
 
 concurrency:
   group: build-installers-${{ github.ref }}
