@@ -28,13 +28,13 @@ impl View {
     pub const ALL: [View; 10] = [
         View::Overview,
         View::Instances,
-        View::Market,
         View::Kernels,
+        View::Market,
         View::Packs,
         View::Releases,
-        View::Tasks,
         View::Profile,
         View::Achievements,
+        View::Tasks,
         View::Settings,
     ];
 
@@ -72,8 +72,8 @@ impl View {
         match self {
             View::Overview => "01",
             View::Instances => "02",
-            View::Market => "03",
-            View::Kernels => "04",
+            View::Kernels => "03",
+            View::Market => "04",
             View::Packs => "05",
             View::Releases => "06",
             View::Profile => "07",
