@@ -47,126 +47,186 @@ pub fn overview(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
         });
     });
 
-    // 主控台
-    util::card(ui, pal, |ui| {
-        if let Some(instance) = &selected {
-            ui.horizontal(|ui| {
-                ui.vertical(|ui| {
+    // 主控台（驾驶舱舞台）
+    let stage = util::card(ui, pal, |ui| {
+        ui.set_width(ui.available_width());
+        // 顶部遥测条
+        ui.horizontal(|ui| {
+            ui.label(
+                egui::RichText::new("DEEP//SEA")
+                    .size(9.5)
+                    .color(pal.accent)
+                    .monospace(),
+            );
+            ui.label(
+                egui::RichText::new("X 031.08 / Y 112.74")
+                    .size(9.0)
+                    .color(pal.muted)
+                    .monospace(),
+            );
+            util::telemetry_bars(ui, pal);
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                let (rect, _) =
+                    ui.allocate_exact_size(egui::vec2(7.0, 7.0), egui::Sense::hover());
+                ui.painter().circle_filled(
+                    rect.center(),
+                    3.0,
+                    if app.online() { pal.green } else { pal.coral },
+                );
+                ui.label(
+                    egui::RichText::new(if app.online() {
+                        format!("LINK STABLE // {:02} ACTIVE", running)
+                    } else {
+                        "AWAITING LINK".to_string()
+                    })
+                    .size(9.0)
+                    .color(pal.muted)
+                    .monospace(),
+                );
+            });
+        });
+        ui.add_space(4.0);
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
+            // 右侧鲸鱼舞台
+            ui.allocate_ui_with_layout(
+                egui::vec2(310.0, 164.0),
+                egui::Layout::top_down(egui::Align::Max),
+                |ui| {
                     ui.label(
-                        egui::RichText::new("01 / INSTANCE CONTROL")
-                            .size(10.0)
-                            .color(pal.muted),
-                    );
-                    ui.label(
-                        egui::RichText::new(util::s(instance, "name"))
-                            .size(22.0)
-                            .strong()
-                            .color(pal.text),
-                    );
-                    let kernel = util::s(instance, "kernelId");
-                    let version = kernels
-                        .iter()
-                        .find(|item| util::s(item, "id") == kernel)
-                        .map(|item| util::s(item, "version").to_string())
-                        .unwrap_or_else(|| {
-                            if util::s(instance, "kind") == "harness" {
-                                "未指定内核".into()
-                            } else {
-                                "桌面端随附内核".into()
-                            }
-                        });
-                    ui.label(
-                        egui::RichText::new(format!(
-                            "{} / {}",
-                            util::kind_label(util::s(instance, "kind")),
-                            version
-                        ))
-                        .size(12.0)
-                        .color(pal.muted),
-                    );
-                    ui.add_space(6.0);
-                    instance_actions(app, ui, pal, instance, false);
-                });
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Min), |ui| {
-                    ui.vertical(|ui| {
-                        util::status_chip(ui, pal, util::s(instance, "status"));
-                        ui.label(
-                            egui::RichText::new(format!(
-                                "PORT {}",
-                                util::s(instance, "port")
-                            ))
-                            .size(10.5)
+                        egui::RichText::new("SECTOR 07 / LOCAL FIRST")
+                            .size(9.0)
                             .color(pal.muted)
                             .monospace(),
+                    );
+                    ui.add_space(6.0);
+                    let scale = 1.0f32.min(ui.available_width() / 280.0);
+                    let (rect, _) = ui.allocate_exact_size(
+                        egui::vec2(280.0 * scale, 124.0 * scale),
+                        egui::Sense::hover(),
+                    );
+                    let painter = ui.painter();
+                    let shadow = egui::pos2(rect.center().x, rect.bottom() - 4.0);
+                    for (radius, alpha) in [(46.0f32, 16u8), (34.0, 26), (20.0, 34)] {
+                        painter.circle_filled(
+                            shadow,
+                            radius * scale,
+                            egui::Color32::from_black_alpha(alpha),
                         );
-                        if let Some(url) = util::opt(instance, "url") {
-                            if util::s(instance, "status") == "running" {
-                                ui.hyperlink_to(
-                                    egui::RichText::new("打开本地服务").size(11.5),
-                                    url,
-                                );
-                            }
+                    }
+                    util::paint_whale(painter, rect.min, scale);
+                    ui.add_space(6.0);
+                    util::stage_pixels(ui, pal);
+                },
+            );
+            ui.allocate_ui_with_layout(
+                egui::vec2(ui.available_width(), 164.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.horizontal(|ui| {
+                        ui.label(
+                            egui::RichText::new("01 / INSTANCE CONTROL")
+                                .size(9.5)
+                                .color(pal.muted)
+                                .monospace(),
+                        );
+                        if let Some(instance) = &selected {
+                            util::status_chip(ui, pal, util::s(instance, "status"));
                         }
                     });
-                });
-            });
-        } else {
-            ui.vertical_centered(|ui| {
-                ui.add_space(12.0);
-                ui.label(
-                    egui::RichText::new(if app.online() {
-                        "从第一个实例开始"
+                    ui.add_space(2.0);
+                    if let Some(instance) = &selected {
+                        ui.label(
+                            egui::RichText::new(util::s(instance, "name"))
+                                .size(24.0)
+                                .strong()
+                                .color(pal.text),
+                        );
+                        let kernel = util::s(instance, "kernelId");
+                        let version = kernels
+                            .iter()
+                            .find(|item| util::s(item, "id") == kernel)
+                            .map(|item| util::s(item, "version").to_string())
+                            .unwrap_or_else(|| {
+                                if util::s(instance, "kind") == "harness" {
+                                    "未指定内核".into()
+                                } else {
+                                    "桌面端随附内核".into()
+                                }
+                            });
+                        ui.label(
+                            egui::RichText::new(format!(
+                                "{} / {}",
+                                util::kind_label(util::s(instance, "kind")),
+                                version
+                            ))
+                            .size(12.0)
+                            .color(pal.muted),
+                        );
+                        ui.add_space(8.0);
+                        instance_actions(app, ui, pal, instance, false);
+                        ui.add_space(6.0);
+                        stage_readout(ui, pal, &util::s(instance, "port").to_string());
                     } else {
-                        "连接你的本地工作空间"
-                    })
-                    .size(20.0)
-                    .strong()
-                    .color(pal.text),
-                );
-                ui.label(
-                    egui::RichText::new(if app.online() {
-                        if kernels.is_empty() {
-                            "先安装或注册一个内核，再创建 Harness 实例。"
-                        } else {
-                            "创建独立实例，让内核、插件和配置拥有自己的空间。"
-                        }
-                    } else {
-                        "本地引擎未连接，实例信息尚不可用。"
-                    })
-                    .size(12.0)
-                    .color(pal.muted),
-                );
-                ui.add_space(8.0);
-                ui.horizontal(|ui| {
-                    if util::primary_button(
-                        ui,
-                        pal,
-                        if kernels.is_empty() && app.online() {
-                            "准备内核"
-                        } else {
-                            "创建第一个实例"
-                        },
-                    )
-                    .clicked()
-                    {
-                        if app.online() {
-                            if kernels.is_empty() {
-                                app.view = View::Kernels;
+                        ui.label(
+                            egui::RichText::new(if app.connecting() {
+                                "正在读取工作空间"
+                            } else if app.online() {
+                                "从第一个实例开始"
                             } else {
-                                app.dialog = Some(Dialog::create(None));
+                                "连接你的本地工作空间"
+                            })
+                            .size(24.0)
+                            .strong()
+                            .color(pal.text),
+                        );
+                        ui.label(
+                            egui::RichText::new(if app.online() {
+                                if kernels.is_empty() {
+                                    "先安装或注册一个内核，再创建 Harness 实例。"
+                                } else {
+                                    "创建独立实例，让内核、插件和配置拥有自己的空间。"
+                                }
+                            } else {
+                                "本地引擎未连接，实例信息尚不可用。"
+                            })
+                            .size(12.0)
+                            .color(pal.muted),
+                        );
+                        ui.add_space(8.0);
+                        ui.horizontal(|ui| {
+                            if util::primary_button(
+                                ui,
+                                pal,
+                                if kernels.is_empty() && app.online() {
+                                    "准备内核"
+                                } else {
+                                    "创建第一个实例"
+                                },
+                            )
+                            .clicked()
+                            {
+                                if app.online() {
+                                    if kernels.is_empty() {
+                                        app.view = View::Kernels;
+                                    } else {
+                                        app.dialog = Some(Dialog::create(None));
+                                    }
+                                } else {
+                                    app.dialog = Some(Dialog::Connection);
+                                }
                             }
-                        } else {
-                            app.dialog = Some(Dialog::Connection);
-                        }
+                            if util::ghost_button(ui, pal, "浏览插件  →").clicked() {
+                                app.view = View::Market;
+                            }
+                        });
+                        ui.add_space(6.0);
+                        stage_readout(ui, pal, "----");
                     }
-                    if util::ghost_button(ui, pal, "浏览插件  →").clicked() {
-                        app.view = View::Market;
-                    }
-                });
-                ui.add_space(12.0);
-            });
-        }
+                },
+            );
+        });
     });
+    util::cockpit_corners(ui.painter(), stage.response.rect, pal);
 
     ui.add_space(10.0);
     // 指标
@@ -412,8 +472,34 @@ fn console(
     });
 }
 
-pub fn instances(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
-    let snapshot = app.snap();
+/// 舞台底部的小字读数：■ LOCAL ENGINE / ENCRYPTED / PORT。
+fn stage_readout(ui: &mut egui::Ui, pal: &Palette, port: &str) {
+    ui.horizontal(|ui| {
+        let (rect, _) = ui.allocate_exact_size(egui::vec2(6.0, 6.0), egui::Sense::hover());
+        ui.painter()
+            .rect_filled(rect, egui::CornerRadius::same(1), pal.accent);
+        ui.label(
+            egui::RichText::new("LOCAL ENGINE")
+                .size(9.0)
+                .color(pal.muted)
+                .monospace(),
+        );
+        ui.label(
+            egui::RichText::new("ENCRYPTED / ISOLATED")
+                .size(9.0)
+                .color(pal.muted)
+                .monospace(),
+        );
+        ui.label(
+            egui::RichText::new(format!("PORT {}", port))
+                .size(9.0)
+                .color(pal.muted)
+                .monospace(),
+        );
+    });
+}
+
+pub fn instances(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {    let snapshot = app.snap();
     let all = snapshot
         .as_ref()
         .map(|value| util::arr(value, "instances").to_vec())

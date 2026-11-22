@@ -956,23 +956,16 @@ impl App {
 
                 ui.with_layout(egui::Layout::bottom_up(egui::Align::Min), |ui| {
                     ui.add_space(8.0);
-                    ui.horizontal(|ui| {
-                        ui.label(
-                            egui::RichText::new(if self.online() {
-                                "● 本地引擎已连接"
-                            } else if self.connecting() {
-                                "● 连接引擎中"
-                            } else {
-                                "● 本地引擎未连接"
-                            })
-                            .size(11.0)
-                            .color(if self.online() { pal.green } else { pal.coral }),
-                        );
-                    });
                     ui.label(
-                        egui::RichText::new("TAURI 已移除 · 原生 GUI")
-                            .size(9.5)
-                            .color(pal.muted),
+                        egui::RichText::new(if self.online() {
+                            "● 本地引擎已连接"
+                        } else if self.connecting() {
+                            "● 连接引擎中"
+                        } else {
+                            "● 本地引擎未连接"
+                        })
+                        .size(11.0)
+                        .color(if self.online() { pal.green } else { pal.coral }),
                     );
                     ui.add_space(6.0);
                     if util::primary_button(ui, pal, "＋  新建实例").clicked() {

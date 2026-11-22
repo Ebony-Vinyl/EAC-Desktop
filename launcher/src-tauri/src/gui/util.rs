@@ -138,6 +138,164 @@ pub fn icon(ui: &mut egui::Ui, icon: Icon, color: egui::Color32, size: f32) {
     paint_icon(ui.painter(), rect.center(), size, icon, color);
 }
 
+// ---- 像素鲸鱼与驾驶舱装饰（数据来自原 pixel-world.tsx）----
+
+type Px = (f32, f32, f32, f32);
+
+const WHALE_BODY_LIGHT: &[Px] = &[
+    (92.0, 12.0, 12.0, 4.0), (84.0, 16.0, 40.0, 4.0), (76.0, 20.0, 72.0, 4.0),
+    (68.0, 24.0, 104.0, 4.0), (60.0, 28.0, 144.0, 4.0), (52.0, 32.0, 176.0, 4.0),
+    (44.0, 36.0, 192.0, 4.0), (36.0, 40.0, 192.0, 4.0), (36.0, 44.0, 184.0, 4.0),
+    (32.0, 48.0, 184.0, 4.0), (24.0, 52.0, 184.0, 4.0), (20.0, 56.0, 180.0, 4.0),
+    (16.0, 60.0, 176.0, 4.0), (12.0, 64.0, 176.0, 4.0), (8.0, 68.0, 172.0, 4.0),
+    (8.0, 72.0, 164.0, 4.0), (4.0, 76.0, 160.0, 4.0), (4.0, 80.0, 152.0, 4.0),
+    (8.0, 84.0, 144.0, 4.0), (12.0, 88.0, 132.0, 4.0), (16.0, 92.0, 116.0, 4.0),
+    (24.0, 96.0, 100.0, 4.0), (32.0, 100.0, 84.0, 4.0), (44.0, 104.0, 60.0, 4.0),
+];
+const WHALE_BODY_MID: &[Px] = &[
+    (92.0, 44.0, 124.0, 4.0), (80.0, 48.0, 144.0, 4.0), (68.0, 52.0, 156.0, 4.0),
+    (56.0, 56.0, 164.0, 4.0), (44.0, 60.0, 168.0, 4.0), (36.0, 64.0, 164.0, 4.0),
+    (32.0, 68.0, 160.0, 4.0), (28.0, 72.0, 152.0, 4.0), (28.0, 76.0, 144.0, 4.0),
+    (32.0, 80.0, 132.0, 4.0), (40.0, 84.0, 120.0, 4.0), (52.0, 88.0, 104.0, 4.0),
+    (68.0, 92.0, 84.0, 4.0),
+];
+const WHALE_BODY_DARK: &[Px] = &[
+    (48.0, 88.0, 108.0, 4.0), (60.0, 92.0, 96.0, 4.0), (76.0, 96.0, 80.0, 4.0),
+    (96.0, 100.0, 64.0, 4.0), (120.0, 104.0, 40.0, 4.0), (128.0, 108.0, 24.0, 4.0),
+];
+const WHALE_BODY_WHITE: &[Px] = &[
+    (36.0, 64.0, 12.0, 8.0), (52.0, 72.0, 12.0, 4.0), (68.0, 80.0, 16.0, 4.0),
+    (88.0, 84.0, 20.0, 4.0), (112.0, 88.0, 16.0, 4.0), (136.0, 88.0, 16.0, 4.0),
+];
+const WHALE_BODY_NAVY: &[Px] = &[
+    (64.0, 72.0, 8.0, 8.0), (104.0, 84.0, 20.0, 4.0), (112.0, 92.0, 16.0, 4.0),
+    (124.0, 100.0, 12.0, 4.0), (144.0, 104.0, 8.0, 4.0),
+];
+const WHALE_BODY_PALE: &[Px] = &[
+    (56.0, 28.0, 8.0, 4.0), (72.0, 32.0, 12.0, 4.0), (88.0, 40.0, 12.0, 4.0),
+    (112.0, 48.0, 20.0, 4.0), (132.0, 56.0, 16.0, 4.0), (156.0, 64.0, 12.0, 4.0),
+];
+const WHALE_TAIL_LIGHT: &[Px] = &[
+    (208.0, 48.0, 16.0, 4.0), (216.0, 44.0, 12.0, 4.0), (224.0, 40.0, 12.0, 4.0),
+    (228.0, 32.0, 16.0, 4.0), (232.0, 24.0, 16.0, 4.0), (240.0, 16.0, 16.0, 4.0),
+    (244.0, 8.0, 16.0, 4.0), (252.0, 4.0, 20.0, 4.0), (264.0, 8.0, 12.0, 4.0),
+    (260.0, 16.0, 16.0, 4.0), (256.0, 20.0, 12.0, 4.0), (248.0, 28.0, 12.0, 4.0),
+    (244.0, 36.0, 12.0, 4.0), (236.0, 44.0, 16.0, 4.0), (228.0, 52.0, 16.0, 4.0),
+    (224.0, 60.0, 12.0, 4.0), (216.0, 64.0, 16.0, 4.0), (212.0, 72.0, 12.0, 4.0),
+    (204.0, 76.0, 16.0, 4.0), (196.0, 80.0, 16.0, 4.0),
+];
+const WHALE_TAIL_WHITE: &[Px] = &[
+    (252.0, 4.0, 20.0, 4.0), (260.0, 8.0, 12.0, 4.0), (244.0, 16.0, 8.0, 4.0),
+];
+const WHALE_TAIL_MID: &[Px] = &[
+    (216.0, 52.0, 12.0, 4.0), (224.0, 60.0, 12.0, 4.0), (212.0, 68.0, 12.0, 4.0),
+    (204.0, 76.0, 12.0, 4.0),
+];
+const WHALE_BELLY: &[(f32, f32, f32, f32, egui::Color32)] = &[
+    (36.0, 92.0, 12.0, 4.0, egui::Color32::from_rgb(0xbd, 0xe7, 0xff)),
+    (52.0, 96.0, 16.0, 4.0, egui::Color32::from_rgb(0xbd, 0xe7, 0xff)),
+    (72.0, 100.0, 20.0, 4.0, egui::Color32::from_rgb(0x8f, 0xd0, 0xff)),
+    (96.0, 104.0, 24.0, 4.0, egui::Color32::from_rgb(0x6f, 0xb8, 0xff)),
+];
+
+/// 按原版 viewBox (280×124) 绘制像素鲸鱼；scale=1 时逐像素清晰。
+pub fn paint_whale(painter: &egui::Painter, origin: egui::Pos2, scale: f32) {
+    let light = egui::Color32::from_rgb(0x72, 0xb9, 0xff);
+    let mid = egui::Color32::from_rgb(0x2f, 0x7c, 0xff);
+    let dark = egui::Color32::from_rgb(0x15, 0x50, 0xb8);
+    let white = egui::Color32::from_rgb(0xea, 0xf7, 0xff);
+    let navy = egui::Color32::from_rgb(0x0a, 0x23, 0x4f);
+    let pale = egui::Color32::from_rgb(0x9e, 0xd8, 0xff);
+    let draw = |rects: &[Px], color: egui::Color32| {
+        for (x, y, w, h) in rects {
+            painter.rect_filled(
+                egui::Rect::from_min_size(
+                    egui::pos2(origin.x + x * scale, origin.y + y * scale),
+                    egui::vec2(w * scale, h * scale),
+                ),
+                egui::CornerRadius::same(0),
+                color,
+            );
+        }
+    };
+    draw(WHALE_TAIL_LIGHT, light);
+    draw(WHALE_TAIL_WHITE, white);
+    draw(WHALE_TAIL_MID, mid);
+    draw(WHALE_BODY_LIGHT, light);
+    draw(WHALE_BODY_MID, mid);
+    draw(WHALE_BODY_DARK, dark);
+    draw(WHALE_BODY_WHITE, white);
+    draw(WHALE_BODY_NAVY, navy);
+    draw(WHALE_BODY_PALE, pale);
+    for (x, y, w, h, color) in WHALE_BELLY {
+        painter.rect_filled(
+            egui::Rect::from_min_size(
+                egui::pos2(origin.x + x * scale, origin.y + y * scale),
+                egui::vec2(w * scale, h * scale),
+            ),
+            egui::CornerRadius::same(0),
+            *color,
+        );
+    }
+}
+
+/// 驾驶舱四角的 ⌐ 括号。
+pub fn cockpit_corners(painter: &egui::Painter, rect: egui::Rect, pal: &Palette) {
+    let stroke = egui::Stroke::new(1.5, pal.text.gamma_multiply(0.45));
+    let inset = 6.0;
+    let length = 16.0;
+    let tl = egui::pos2(rect.left() + inset, rect.top() + inset);
+    painter.line_segment([tl, egui::pos2(tl.x + length, tl.y)], stroke);
+    painter.line_segment([tl, egui::pos2(tl.x, tl.y + length)], stroke);
+    let tr = egui::pos2(rect.right() - inset, rect.top() + inset);
+    painter.line_segment([egui::pos2(tr.x - length, tr.y), tr], stroke);
+    painter.line_segment([tr, egui::pos2(tr.x, tr.y + length)], stroke);
+    let bl = egui::pos2(rect.left() + inset, rect.bottom() - inset);
+    painter.line_segment([bl, egui::pos2(bl.x + length, bl.y)], stroke);
+    painter.line_segment([egui::pos2(bl.x, bl.y - length), bl], stroke);
+    let br = egui::pos2(rect.right() - inset, rect.bottom() - inset);
+    painter.line_segment([egui::pos2(br.x - length, br.y), br], stroke);
+    painter.line_segment([egui::pos2(br.x, br.y - length), br], stroke);
+}
+
+/// 顶部遥测条里的 8 根小柱。
+pub fn telemetry_bars(ui: &mut egui::Ui, pal: &Palette) {
+    let heights = [5.0f32, 9.0, 6.0, 12.0, 7.0, 10.0, 4.0, 8.0];
+    let (area, _) = ui.allocate_exact_size(egui::vec2(38.0, 12.0), egui::Sense::hover());
+    for (index, height) in heights.iter().enumerate() {
+        let color = match index % 3 {
+            0 => pal.accent,
+            1 => pal.muted,
+            _ => pal.text.gamma_multiply(0.55),
+        };
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(
+                egui::pos2(area.left() + index as f32 * 4.6, area.bottom() - height),
+                egui::vec2(3.0, *height),
+            ),
+            egui::CornerRadius::same(1),
+            color,
+        );
+    }
+}
+
+/// 舞台右下角的均衡器小柱。
+pub fn stage_pixels(ui: &mut egui::Ui, pal: &Palette) {
+    let heights = [8.0f32, 14.0, 6.0, 11.0];
+    let colors = [pal.accent, pal.text, pal.coral, pal.muted];
+    let (area, _) = ui.allocate_exact_size(egui::vec2(46.0, 14.0), egui::Sense::hover());
+    for (index, height) in heights.iter().enumerate() {
+        ui.painter().rect_filled(
+            egui::Rect::from_min_size(
+                egui::pos2(area.right() - 5.0 - index as f32 * 11.0, area.bottom() - height),
+                egui::vec2(5.0, *height),
+            ),
+            egui::CornerRadius::same(1),
+            colors[index],
+        );
+    }
+}
+
 // ---- 轻量 JSON 读取：引擎返回的都是 serde_json::Value，直接按字段取，
 // 缺字段一律回落为空值，避免为了展示再造一套镜像类型。 ----
 
@@ -521,7 +679,7 @@ impl egui::Widget for SelectableLabel {
     }
 }
 
-pub fn card(ui: &mut egui::Ui, pal: &Palette, add: impl FnOnce(&mut egui::Ui)) {
+pub fn card(ui: &mut egui::Ui, pal: &Palette, add: impl FnOnce(&mut egui::Ui)) -> egui::InnerResponse<()> {
     egui::Frame::new()
         .fill(pal.card)
         .stroke(egui::Stroke::new(1.0, pal.line))
@@ -530,7 +688,7 @@ pub fn card(ui: &mut egui::Ui, pal: &Palette, add: impl FnOnce(&mut egui::Ui)) {
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             add(ui);
-        });
+        })
 }
 
 pub fn empty(ui: &mut egui::Ui, pal: &Palette, title: &str, desc: &str) {
