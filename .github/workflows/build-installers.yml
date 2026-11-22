@@ -60,6 +60,12 @@ jobs:
       - name: Set up Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher/src-tauri
+          cache-on-failure: true
+
       - name: 构建启动器
         run: cargo build --release --manifest-path launcher/src-tauri/Cargo.toml --bin eac-launcher
 
@@ -141,6 +147,12 @@ jobs:
 
       - name: Set up stable Rust
         uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: tauri-shell
+          cache-on-failure: true
 
       - name: Fetch Cargo dependencies
         working-directory: ${{ github.workspace }}/tauri-shell
