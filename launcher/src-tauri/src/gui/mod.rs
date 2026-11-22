@@ -780,34 +780,24 @@ impl App {
         }
     }
 
-    fn header(&mut self, ui: &mut egui::Ui, pal: &Palette) {
+    fn header(&mut self, ui: &mut egui::Ui) {
+        // 顶栏只保留唯一功能（搜索、皮肤、主题）；面包屑与引擎状态由
+        // 标题栏 / 侧栏承担，避免与边框重复。
         ui.horizontal(|ui| {
             ui.add_space(14.0);
-            if let Some(tex) = &self.icon_tex {
-                util::logo(ui, tex, 18.0);
+            let mut search = self.search.clone();
+            let response = ui.add_sized(
+                [280.0, 26.0],
+                egui::TextEdit::singleline(&mut search)
+                    .hint_text("搜索插件…（回车跳转插件市场）"),
+            );
+            self.search = search;
+            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                self.market_query = self.search.trim().to_string();
+                self.view = View::Market;
             }
-            ui.label(
-                egui::RichText::new("启动器")
-                    .size(13.0)
-                    .color(pal.muted),
-            );
-            ui.label(egui::RichText::new("›").size(13.0).color(pal.muted));
-            ui.label(
-                egui::RichText::new(self.view.label())
-                    .size(13.0)
-                    .strong()
-                    .color(pal.text),
-            );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(14.0);
-                let (label, color) = if self.online() {
-                    ("● 引擎在线", pal.green)
-                } else if self.connecting() {
-                    ("● 连接中", pal.yellow)
-                } else {
-                    ("● 离线", pal.coral)
-                };
-                ui.label(egui::RichText::new(label).size(11.5).color(color));
                 if ui
                     .add(
                         egui::Button::new(
@@ -842,16 +832,6 @@ impl App {
                     } else {
                         Skin::Pixel
                     };
-                }
-                let mut search = self.search.clone();
-                let response = ui.add_sized(
-                    [220.0, 24.0],
-                    egui::TextEdit::singleline(&mut search).hint_text("搜索插件…"),
-                );
-                self.search = search;
-                if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                    self.market_query = self.search.trim().to_string();
-                    self.view = View::Market;
                 }
             });
         });
@@ -1101,7 +1081,7 @@ impl eframe::App for App {
         }
 
         self.tick();
-        self.header(ui, &pal);
+        self.header(ui);
         ui.separator();
         ui.horizontal_top(|ui| {
             ui.add_space(14.0);

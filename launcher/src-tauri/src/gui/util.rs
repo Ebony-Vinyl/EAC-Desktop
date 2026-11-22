@@ -766,33 +766,57 @@ pub fn status_chip(ui: &mut egui::Ui, pal: &Palette, status: &str) {
     });
 }
 
-pub fn primary_button(ui: &mut egui::Ui, pal: &Palette, text: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(egui::RichText::new(text).size(13.0).color(egui::Color32::WHITE))
-            .fill(pal.accent)
-            .stroke(egui::Stroke::new(1.0, pal.accent))
+fn styled_button(
+    ui: &mut egui::Ui,
+    text: &str,
+    fill: egui::Color32,
+    stroke: egui::Stroke,
+    text_color: egui::Color32,
+) -> egui::Response {
+    // egui 0.37 的 Button 不保证文字水平居中，用 galley 显式居中绘制。
+    let font = egui::FontId::proportional(13.0);
+    let galley = ui
+        .painter()
+        .layout_no_wrap(text.to_owned(), font.clone(), text_color);
+    let response = ui.add(
+        egui::Button::new(egui::RichText::new(" "))
+            .fill(fill)
+            .stroke(stroke)
             .corner_radius(egui::CornerRadius::same(9))
-            .min_size(egui::vec2(0.0, 30.0)),
+            .min_size(egui::vec2(galley.size().x + 30.0, 30.0)),
+    );
+    let pos = response.rect.center() - galley.size() * 0.5;
+    ui.painter().galley(pos, galley, egui::Color32::WHITE);
+    response
+}
+
+pub fn primary_button(ui: &mut egui::Ui, pal: &Palette, text: &str) -> egui::Response {
+    styled_button(
+        ui,
+        text,
+        pal.accent,
+        egui::Stroke::new(1.0, pal.accent),
+        egui::Color32::WHITE,
     )
 }
 
 pub fn ghost_button(ui: &mut egui::Ui, pal: &Palette, text: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(egui::RichText::new(text).size(13.0).color(pal.text))
-            .fill(egui::Color32::TRANSPARENT)
-            .stroke(egui::Stroke::new(1.0, pal.line))
-            .corner_radius(egui::CornerRadius::same(9))
-            .min_size(egui::vec2(0.0, 30.0)),
+    styled_button(
+        ui,
+        text,
+        egui::Color32::TRANSPARENT,
+        egui::Stroke::new(1.0, pal.line),
+        pal.text,
     )
 }
 
 pub fn danger_button(ui: &mut egui::Ui, pal: &Palette, text: &str) -> egui::Response {
-    ui.add(
-        egui::Button::new(egui::RichText::new(text).size(13.0).color(egui::Color32::WHITE))
-            .fill(pal.coral)
-            .stroke(egui::Stroke::new(1.0, pal.coral))
-            .corner_radius(egui::CornerRadius::same(9))
-            .min_size(egui::vec2(0.0, 30.0)),
+    styled_button(
+        ui,
+        text,
+        pal.coral,
+        egui::Stroke::new(1.0, pal.coral),
+        egui::Color32::WHITE,
     )
 }
 
