@@ -6,17 +6,14 @@ name: 构建安装包（本体 + 启动器）
 #   3. 启动器安装版（NSIS 安装器）
 #
 # 触发方式：
-#   · workflow_dispatch 手动触发（默认，产物从 Actions 页下载）
-#   · 推送 v* tag 时自动触发，并发布为 GitHub Release
+#   · pull_request 有人提 PR 时自动构建（产物从 Actions 页下载）
+#   · workflow_dispatch 手动触发
 #
-# 构建很贵（本体需要拉取内核/运行时并打 Tauri 包），只在手动或打 tag 时跑，
-# 不挂在日常 main 推送下。
+# 构建很贵（本体需要拉取内核/运行时并打 Tauri 包），不在日常 main 推送下自动跑。
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
+  pull_request:
 
 concurrency:
   group: build-installers-${{ github.ref }}
@@ -175,24 +172,3 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
-  # ---- 打 tag 时发布 GitHub Release ----
-  release:
-    needs: [launcher, desktop]
-    if: startsWith(github.ref, 'refs/tags/')
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - name: Download artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release
-
-      - name: Publish GitHub Release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh release create "${{ github.ref_name }}" release/*/* \
-            --repo "${{ github.repository }}" \
-            --title "EAC ${{ github.ref_name }}" \
-            --generate-notes
