@@ -1,4 +1,4 @@
-use super::instance_actions;
+﻿use super::instance_actions;
 use crate::gui::dialogs::{Dialog, PathKind};
 use crate::gui::util::{self, Palette};
 use crate::gui::{App, View};
@@ -171,19 +171,22 @@ pub fn overview(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
     ui.add_space(10.0);
     // 指标
     let metrics = [
-        ("全部实例", instances.len(), "独立工作空间"),
-        ("正在运行", running, "活跃进程"),
-        ("已装内核", kernels.len(), "固定版本"),
-        ("进行中", running_tasks.len().max(app.pending.len()), "当前操作"),
+        ("全部实例", util::Icon::Instances, instances.len(), "独立工作空间"),
+        ("正在运行", util::Icon::Radio, running, "活跃进程"),
+        ("已装内核", util::Icon::Kernels, kernels.len(), "固定版本"),
+        ("进行中", util::Icon::Tasks, running_tasks.len().max(app.pending.len()), "当前操作"),
     ];
     ui.columns(4, |cols| {
-        for (index, (label, value, suffix)) in metrics.iter().enumerate() {
+        for (index, (label, icon, value, suffix)) in metrics.iter().enumerate() {
             util::card(&mut cols[index], pal, |ui| {
-                ui.label(
-                    egui::RichText::new(*label)
-                        .size(10.5)
-                        .color(pal.muted),
-                );
+                ui.horizontal(|ui| {
+                    util::icon(ui, *icon, pal.muted, 13.0);
+                    ui.label(
+                        egui::RichText::new(*label)
+                            .size(10.5)
+                            .color(pal.muted),
+                    );
+                });
                 ui.label(
                     egui::RichText::new(if app.online() {
                         value.to_string()
@@ -232,12 +235,20 @@ pub fn overview(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
         .enumerate()
         {
             util::card(&mut cols[index], pal, |ui| {
-                ui.label(
-                    egui::RichText::new(*title)
-                        .size(14.0)
-                        .strong()
-                        .color(pal.text),
-                );
+                ui.horizontal(|ui| {
+                    util::icon(
+                        ui,
+                        view.icon(),
+                        if index == 0 { pal.accent } else { pal.coral },
+                        18.0,
+                    );
+                    ui.label(
+                        egui::RichText::new(*title)
+                            .size(14.0)
+                            .strong()
+                            .color(pal.text),
+                    );
+                });
                 ui.label(
                     egui::RichText::new(*subtitle)
                         .size(11.0)
@@ -343,7 +354,7 @@ fn console(
             egui::Color32::from_rgb(238, 243, 250)
         })
         .stroke(egui::Stroke::new(1.0, pal.line))
-        .corner_radius(egui::CornerRadius::same(6))
+        .corner_radius(egui::CornerRadius::same(10))
         .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
             egui::ScrollArea::vertical()
@@ -773,7 +784,7 @@ fn plugins_tab(
         egui::Frame::new()
             .fill(pal.card)
             .stroke(egui::Stroke::new(1.0, pal.line))
-            .corner_radius(egui::CornerRadius::same(6))
+            .corner_radius(egui::CornerRadius::same(10))
             .inner_margin(egui::Margin::same(10))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -888,7 +899,7 @@ fn backups_tab(
         egui::Frame::new()
             .fill(pal.card)
             .stroke(egui::Stroke::new(1.0, pal.line))
-            .corner_radius(egui::CornerRadius::same(6))
+            .corner_radius(egui::CornerRadius::same(10))
             .inner_margin(egui::Margin::same(10))
             .show(ui, |ui| {
                 ui.set_width(ui.available_width());
@@ -935,3 +946,4 @@ fn backups_tab(
         ui.add_space(4.0);
     }
 }
+

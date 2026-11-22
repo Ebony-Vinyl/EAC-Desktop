@@ -68,18 +68,18 @@ impl View {
         }
     }
 
-    pub fn glyph(self) -> &'static str {
+    pub fn icon(self) -> util::Icon {
         match self {
-            View::Overview => "01",
-            View::Instances => "02",
-            View::Kernels => "03",
-            View::Market => "04",
-            View::Packs => "05",
-            View::Releases => "06",
-            View::Profile => "07",
-            View::Achievements => "08",
-            View::Tasks => "09",
-            View::Settings => "10",
+            View::Overview => util::Icon::Overview,
+            View::Instances => util::Icon::Instances,
+            View::Kernels => util::Icon::Kernels,
+            View::Market => util::Icon::Market,
+            View::Packs => util::Icon::Packs,
+            View::Releases => util::Icon::Releases,
+            View::Profile => util::Icon::Profile,
+            View::Achievements => util::Icon::Achievements,
+            View::Tasks => util::Icon::Tasks,
+            View::Settings => util::Icon::Settings,
         }
     }
 
@@ -909,26 +909,47 @@ impl App {
                         );
                     }
                     let selected = self.view == view;
-                    let mut extra = String::new();
-                    if view == View::Tasks && active_tasks > 0 {
-                        extra = format!("  ({})", active_tasks);
-                    }
-                    if view == View::Instances && instance_count > 0 {
-                        extra = format!("  ({})", instance_count);
-                    }
-                    let label = format!("{}   {}{}", view.glyph(), view.label(), extra);
-                    let rich = if selected {
-                        egui::RichText::new(label).size(12.5).strong().color(pal.accent)
+                    let count = if view == View::Tasks {
+                        active_tasks
+                    } else if view == View::Instances {
+                        instance_count
                     } else {
-                        egui::RichText::new(label).size(12.5).color(pal.text)
+                        0
                     };
-                    if ui
-                        .add_sized(
-                            [196.0, 30.0],
-                            util::SelectableLabel::new(selected, rich),
-                        )
-                        .clicked()
-                    {
+                    let mut label = view.label().to_string();
+                    if count > 0 {
+                        label.push_str(&format!("   {}", count));
+                    }
+                    let row_h = 34.0;
+                    let (rect, response) =
+                        ui.allocate_exact_size(egui::vec2(196.0, row_h), egui::Sense::click());
+                    let fill = if selected {
+                        pal.accent_soft
+                    } else if response.hovered() {
+                        pal.card
+                    } else {
+                        egui::Color32::TRANSPARENT
+                    };
+                    let painter = ui.painter_at(rect);
+                    if fill != egui::Color32::TRANSPARENT {
+                        painter.rect_filled(rect, egui::CornerRadius::same(10), fill);
+                    }
+                    let icon_color = if selected { pal.accent } else { pal.muted };
+                    util::paint_icon(
+                        &painter,
+                        egui::pos2(rect.left() + 24.0, rect.center().y),
+                        16.0,
+                        view.icon(),
+                        icon_color,
+                    );
+                    painter.text(
+                        egui::pos2(rect.left() + 42.0, rect.center().y),
+                        egui::Align2::LEFT_CENTER,
+                        label,
+                        egui::FontId::proportional(12.5),
+                        if selected { pal.text } else { pal.muted },
+                    );
+                    if response.clicked() {
                         self.view = view;
                     }
                 }
@@ -1007,7 +1028,7 @@ impl App {
                     egui::Frame::new()
                         .fill(pal.panel)
                         .stroke(egui::Stroke::new(1.0, color))
-                        .corner_radius(egui::CornerRadius::same(6))
+                        .corner_radius(egui::CornerRadius::same(10))
                         .inner_margin(egui::Margin::same(10))
                         .show(ui, |ui| {
                             ui.set_max_width(360.0);

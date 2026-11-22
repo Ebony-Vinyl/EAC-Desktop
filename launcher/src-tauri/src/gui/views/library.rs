@@ -1,4 +1,4 @@
-use crate::gui::dialogs::{Dialog, PathKind};
+﻿use crate::gui::dialogs::{Dialog, PathKind};
 use crate::gui::util::{self, Palette, Tone};
 use crate::gui::App;
 use eframe::egui;
@@ -587,7 +587,7 @@ pub fn kernels(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
             egui::Frame::new()
                 .fill(pal.card)
                 .stroke(egui::Stroke::new(1.0, pal.line))
-                .corner_radius(egui::CornerRadius::same(6))
+                .corner_radius(egui::CornerRadius::same(10))
                 .inner_margin(egui::Margin::same(10))
                 .show(ui, |ui| {
                     ui.set_width(ui.available_width());
@@ -1091,3 +1091,4 @@ pub fn releases(app: &mut App, ui: &mut egui::Ui, pal: &Palette) {
             .color(pal.muted),
     );
 }
+

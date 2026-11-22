@@ -1,6 +1,143 @@
 use eframe::egui;
 use serde_json::Value;
 
+// ---- 内置矢量图标：原界面 lucide 图标的最小手绘集，随主题着色 ----
+
+#[derive(Clone, Copy)]
+pub enum Icon {
+    Overview,
+    Instances,
+    Kernels,
+    Market,
+    Packs,
+    Releases,
+    Profile,
+    Achievements,
+    Tasks,
+    Settings,
+    Plus,
+    Radio,
+}
+
+pub fn paint_icon(painter: &egui::Painter, center: egui::Pos2, size: f32, icon: Icon, color: egui::Color32) {
+    let stroke = egui::Stroke::new(1.5, color);
+    let s = size * 0.5;
+    let c = center;
+    let pt = |dx: f32, dy: f32| egui::pos2(c.x + dx * s, c.y + dy * s);
+    let line = |points: Vec<egui::Pos2>| painter.add(egui::Shape::line(points, stroke));
+    let seg = |a: egui::Pos2, b: egui::Pos2| painter.line_segment([a, b], stroke);
+    let kind = egui::StrokeKind::Middle;
+    match icon {
+        Icon::Overview => {
+            for (dx, dy) in [(-0.42f32, -0.42f32), (0.42, -0.42), (-0.42, 0.42), (0.42, 0.42)] {
+                let rect = egui::Rect::from_center_size(pt(dx, dy), egui::vec2(0.48 * s, 0.48 * s));
+                painter.rect_stroke(rect, egui::CornerRadius::same(2), stroke, kind);
+            }
+        }
+        Icon::Instances => {
+            // 立方体
+            painter.add(egui::Shape::closed_line(
+                vec![
+                    pt(0.0, -0.68),
+                    pt(-0.6, -0.34),
+                    pt(-0.6, 0.34),
+                    pt(0.0, 0.68),
+                    pt(0.6, 0.34),
+                    pt(0.6, -0.34),
+                ],
+                stroke,
+            ));
+            line(vec![pt(-0.6, -0.34), pt(0.0, 0.0), pt(0.6, -0.34)]);
+            line(vec![pt(0.0, 0.0), pt(0.0, 0.68)]);
+        }
+        Icon::Kernels => {
+            for dy in [-0.45f32, 0.0, 0.45] {
+                line(vec![pt(-0.62, dy), pt(0.0, dy + 0.22), pt(0.62, dy)]);
+            }
+        }
+        Icon::Market => {
+            let rect = egui::Rect::from_center_size(c, egui::vec2(1.0 * s, 1.3 * s));
+            painter.rect_stroke(rect, egui::CornerRadius::same(2), stroke, kind);
+            seg(
+                egui::pos2(rect.right() - 0.35 * s, rect.top()),
+                egui::pos2(rect.right(), rect.top() + 0.35 * s),
+            );
+            let inner = egui::Rect::from_center_size(pt(0.0, 0.2), egui::vec2(0.5 * s, 0.5 * s));
+            painter.rect_stroke(inner, egui::CornerRadius::same(1), stroke, kind);
+        }
+        Icon::Packs => {
+            let rect = egui::Rect::from_center_size(c, egui::vec2(1.25 * s, 1.25 * s));
+            painter.rect_stroke(rect, egui::CornerRadius::same(2), stroke, kind);
+            let y = rect.top() + 0.38 * s;
+            seg(egui::pos2(rect.left(), y), egui::pos2(rect.right(), y));
+            seg(pt(0.0, y), pt(0.0, y + 0.32 * s));
+        }
+        Icon::Releases => {
+            seg(pt(0.0, -0.62), pt(0.0, 0.25));
+            line(vec![pt(-0.35, -0.12), pt(0.0, 0.25), pt(0.35, -0.12)]);
+            seg(pt(-0.55, 0.6), pt(0.55, 0.6));
+        }
+        Icon::Profile => {
+            painter.circle(pt(0.0, -0.28), 0.3 * s, egui::Color32::TRANSPARENT, stroke);
+            let mut pts = Vec::new();
+            for i in 0..=12 {
+                let a = std::f32::consts::PI * (1.0 - i as f32 / 12.0);
+                pts.push(egui::pos2(
+                    c.x + (0.55 * s) * a.cos(),
+                    c.y + 0.62 * s - (0.42 * s) * a.sin(),
+                ));
+            }
+            line(pts);
+        }
+        Icon::Achievements => {
+            seg(pt(-0.42, -0.5), pt(0.42, -0.5));
+            line(vec![pt(-0.42, -0.5), pt(-0.3, 0.1), pt(0.3, 0.1), pt(0.42, -0.5)]);
+            seg(pt(0.0, 0.1), pt(0.0, 0.42));
+            seg(pt(-0.25, 0.42), pt(-0.25, 0.55));
+            seg(pt(0.25, 0.42), pt(0.25, 0.55));
+            seg(pt(-0.35, 0.55), pt(0.35, 0.55));
+        }
+        Icon::Tasks => {
+            line(vec![
+                pt(-0.68, 0.0),
+                pt(-0.32, 0.0),
+                pt(-0.1, -0.55),
+                pt(0.14, 0.55),
+                pt(0.34, 0.0),
+                pt(0.68, 0.0),
+            ]);
+        }
+        Icon::Settings => {
+            seg(pt(-0.6, -0.28), pt(0.6, -0.28));
+            painter.circle(pt(0.18, -0.28), 0.16 * s, egui::Color32::TRANSPARENT, stroke);
+            seg(pt(-0.6, 0.3), pt(0.6, 0.3));
+            painter.circle(pt(-0.2, 0.3), 0.16 * s, egui::Color32::TRANSPARENT, stroke);
+        }
+        Icon::Plus => {
+            seg(pt(-0.5, 0.0), pt(0.5, 0.0));
+            seg(pt(0.0, -0.5), pt(0.0, 0.5));
+        }
+        Icon::Radio => {
+            painter.circle(c, 0.14 * s, color, egui::Stroke::NONE);
+            for r in [0.32f32, 0.58] {
+                let mut pts = Vec::new();
+                for i in 0..=8 {
+                    let a = -std::f32::consts::FRAC_PI_4
+                        + std::f32::consts::FRAC_PI_2 * (i as f32 / 8.0);
+                    pts.push(egui::pos2(c.x + r * s * a.cos(), c.y - r * s * a.sin()));
+                }
+                line(pts);
+            }
+        }
+    }
+}
+
+/// 在当前布局里画一个图标占位。
+pub fn icon(ui: &mut egui::Ui, icon: Icon, color: egui::Color32, size: f32) {
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(size, size), egui::Sense::hover());
+    paint_icon(ui.painter(), rect.center(), size, icon, color);
+}
+
 // ---- 轻量 JSON 读取：引擎返回的都是 serde_json::Value，直接按字段取，
 // 缺字段一律回落为空值，避免为了展示再造一套镜像类型。 ----
 
@@ -242,8 +379,17 @@ pub fn apply_visuals(ctx: &egui::Context, pal: &Palette) {
     visuals.selection.bg_fill = pal.accent_soft;
     visuals.selection.stroke = egui::Stroke::new(1.0, pal.accent);
     visuals.window_stroke = egui::Stroke::new(1.0, pal.line);
-    visuals.window_corner_radius = egui::CornerRadius::same(8);
-    visuals.menu_corner_radius = egui::CornerRadius::same(8);
+    visuals.window_corner_radius = egui::CornerRadius::same(14);
+    visuals.menu_corner_radius = egui::CornerRadius::same(10);
+    for widget in [
+        &mut visuals.widgets.noninteractive,
+        &mut visuals.widgets.inactive,
+        &mut visuals.widgets.hovered,
+        &mut visuals.widgets.active,
+        &mut visuals.widgets.open,
+    ] {
+        widget.corner_radius = egui::CornerRadius::same(8);
+    }
     ctx.set_visuals(visuals);
 }
 
@@ -303,7 +449,7 @@ pub fn badge(ui: &mut egui::Ui, pal: &Palette, text: &str, tone: Tone) {
     egui::Frame::new()
         .fill(bg)
         .stroke(egui::Stroke::new(1.0, color.gamma_multiply(0.55)))
-        .corner_radius(egui::CornerRadius::same(4))
+        .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::symmetric(6, 1))
         .show(ui, |ui| {
             ui.label(egui::RichText::new(text).size(10.5).color(color));
@@ -328,7 +474,7 @@ pub fn primary_button(ui: &mut egui::Ui, pal: &Palette, text: &str) -> egui::Res
         egui::Button::new(egui::RichText::new(text).size(13.0).color(egui::Color32::WHITE))
             .fill(pal.accent)
             .stroke(egui::Stroke::new(1.0, pal.accent))
-            .corner_radius(egui::CornerRadius::same(6))
+            .corner_radius(egui::CornerRadius::same(9))
             .min_size(egui::vec2(0.0, 30.0)),
     )
 }
@@ -338,7 +484,7 @@ pub fn ghost_button(ui: &mut egui::Ui, pal: &Palette, text: &str) -> egui::Respo
         egui::Button::new(egui::RichText::new(text).size(13.0).color(pal.text))
             .fill(egui::Color32::TRANSPARENT)
             .stroke(egui::Stroke::new(1.0, pal.line))
-            .corner_radius(egui::CornerRadius::same(6))
+            .corner_radius(egui::CornerRadius::same(9))
             .min_size(egui::vec2(0.0, 30.0)),
     )
 }
@@ -348,7 +494,7 @@ pub fn danger_button(ui: &mut egui::Ui, pal: &Palette, text: &str) -> egui::Resp
         egui::Button::new(egui::RichText::new(text).size(13.0).color(egui::Color32::WHITE))
             .fill(pal.coral)
             .stroke(egui::Stroke::new(1.0, pal.coral))
-            .corner_radius(egui::CornerRadius::same(6))
+            .corner_radius(egui::CornerRadius::same(9))
             .min_size(egui::vec2(0.0, 30.0)),
     )
 }
@@ -367,14 +513,19 @@ impl SelectableLabel {
 
 impl egui::Widget for SelectableLabel {
     fn ui(self, ui: &mut egui::Ui) -> egui::Response {
-        ui.add(egui::Button::selectable(self.selected, self.text).frame(false))
+        ui.add(
+            egui::Button::selectable(self.selected, self.text)
+                .frame(false)
+                .corner_radius(egui::CornerRadius::same(8)),
+        )
     }
 }
 
-pub fn card(ui: &mut egui::Ui, pal: &Palette, add: impl FnOnce(&mut egui::Ui)) {    egui::Frame::new()
+pub fn card(ui: &mut egui::Ui, pal: &Palette, add: impl FnOnce(&mut egui::Ui)) {
+    egui::Frame::new()
         .fill(pal.card)
         .stroke(egui::Stroke::new(1.0, pal.line))
-        .corner_radius(egui::CornerRadius::same(8))
+        .corner_radius(egui::CornerRadius::same(12))
         .inner_margin(egui::Margin::same(12))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
@@ -427,7 +578,7 @@ pub fn task_row(ui: &mut egui::Ui, pal: &Palette, task: &Value) {
     egui::Frame::new()
         .fill(pal.card)
         .stroke(egui::Stroke::new(1.0, pal.line))
-        .corner_radius(egui::CornerRadius::same(6))
+        .corner_radius(egui::CornerRadius::same(8))
         .inner_margin(egui::Margin::same(10))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
