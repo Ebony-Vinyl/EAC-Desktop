@@ -41,6 +41,28 @@ src-tauri\target\debug\eac-launcher.exe
 
 `tauri build` 打的正式包走同一条路径（`custom-protocol`），同样没有本地服务。
 
+### 纯原生 egui 界面（不依赖 WebView2）
+
+`gui` feature 提供一个单进程的 eframe/egui 前端，直接调用与 React 版相同的
+`Engine::call`，覆盖总览、实例、插件市场、内核、整合包、发行版本、任务、
+个人中心、成就与偏好设置。窗口内没有 WebView2、没有本地 HTTP 服务，也不会
+启动任何 `msedgewebview2.exe` 子进程。
+
+```powershell
+cd launcher\src-tauri
+cargo run --no-default-features --features gui --bin eac-launcher-gui
+```
+
+发布构建：
+
+```powershell
+cargo build --release --no-default-features --features gui --bin eac-launcher-gui
+```
+
+`EAC_LAUNCHER_HOME` 与 React 版共用同一套数据目录。皮肤、大厅地址与捉虫模式
+保存在 `%LOCALAPPDATA%\EACLauncher\gui-appearance.json`；主题与减少动态效果
+通过 `save_settings` 写回引擎。把 `.eacpack.json` 拖进窗口即可导入整合包清单。
+
 ## 当前能力
 
 - 独立实例目录、端口和 `DSH_HOME`，固定绑定内核，不自动升级旧实例。

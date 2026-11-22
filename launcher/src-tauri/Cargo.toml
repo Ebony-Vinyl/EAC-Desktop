@@ -19,10 +19,22 @@ name = "eac-launcher-api"
 path = "src/bin/api.rs"
 required-features = ["api"]
 
+[[bin]]
+name = "eac-launcher-gui"
+path = "src/bin/gui.rs"
+required-features = ["gui"]
+
 [features]
 default = ["desktop"]
 desktop = ["dep:tauri", "dep:tauri-build"]
 api = []
+gui = ["dep:eframe"]
+
+[dependencies.eframe]
+version = "0.37"
+optional = true
+default-features = false
+features = ["default_fonts", "glow"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }
