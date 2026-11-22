@@ -588,6 +588,36 @@ pub struct Palette {
     pub line: egui::Color32,
 }
 
+fn lerp_color(a: egui::Color32, b: egui::Color32, t: f32) -> egui::Color32 {
+    // 直接对 gamma 字节插值；egui::Rgba 是线性空间，混完会整体变暗。
+    let mix = |x: u8, y: u8| (x as f32 + (y as f32 - x as f32) * t).round().clamp(0.0, 255.0) as u8;
+    egui::Color32::from_rgba_unmultiplied(
+        mix(a.r(), b.r()),
+        mix(a.g(), b.g()),
+        mix(a.b(), b.b()),
+        mix(a.a(), b.a()),
+    )
+}
+
+/// 在明暗两套配色间按 t 插值，用于主题切换的平滑过渡。
+pub fn blend_palette(from: Palette, to: Palette, t: f32) -> Palette {
+    let t = t.clamp(0.0, 1.0);
+    Palette {
+        dark: to.dark,
+        bg: lerp_color(from.bg, to.bg, t),
+        panel: lerp_color(from.panel, to.panel, t),
+        card: lerp_color(from.card, to.card, t),
+        text: lerp_color(from.text, to.text, t),
+        muted: lerp_color(from.muted, to.muted, t),
+        accent: lerp_color(from.accent, to.accent, t),
+        accent_soft: lerp_color(from.accent_soft, to.accent_soft, t),
+        coral: lerp_color(from.coral, to.coral, t),
+        yellow: lerp_color(from.yellow, to.yellow, t),
+        green: lerp_color(from.green, to.green, t),
+        line: lerp_color(from.line, to.line, t),
+    }
+}
+
 pub fn palette(dark: bool, pixel: bool) -> Palette {
     match (dark, pixel) {
         (true, true) => Palette {

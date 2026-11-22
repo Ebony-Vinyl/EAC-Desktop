@@ -233,10 +233,9 @@ pub struct App {
     pub task_query: String,
     pub ach_category: String,
     pub ach_status: String,
-    pub search: String,
     seq: u64,
     appearance_loaded: bool,
-    theme_key: Option<(bool, bool)>,
+    theme_anim: f32,
     pub job: Option<InstallJob>,
 }
 
@@ -334,16 +333,20 @@ impl App {
             task_query: String::new(),
             ach_category: "全部".into(),
             ach_status: "all".into(),
-            search: String::new(),
             seq: 0,
             appearance_loaded: false,
-            theme_key: None,
+            theme_anim: if prefs.dark.unwrap_or(true) { 1.0 } else { 0.0 },
             job: None,
         }
     }
 
     pub fn pal(&self) -> Palette {
-        util::palette(self.dark, self.skin == Skin::Pixel)
+        let pixel = self.skin == Skin::Pixel;
+        util::blend_palette(
+            util::palette(false, pixel),
+            util::palette(true, pixel),
+            self.theme_anim,
+        )
     }
 
     pub fn snap(&self) -> Option<Arc<Value>> {
@@ -781,21 +784,8 @@ impl App {
     }
 
     fn header(&mut self, ui: &mut egui::Ui) {
-        // 顶栏只保留唯一功能（搜索、皮肤、主题）；面包屑与引擎状态由
-        // 标题栏 / 侧栏承担，避免与边框重复。
+        // 顶栏只保留主题/皮肤切换；搜索已并入插件市场页。
         ui.horizontal(|ui| {
-            ui.add_space(14.0);
-            let mut search = self.search.clone();
-            let response = ui.add_sized(
-                [280.0, 26.0],
-                egui::TextEdit::singleline(&mut search)
-                    .hint_text("搜索插件…（回车跳转插件市场）"),
-            );
-            self.search = search;
-            if response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                self.market_query = self.search.trim().to_string();
-                self.view = View::Market;
-            }
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.add_space(14.0);
                 if ui
@@ -1025,12 +1015,13 @@ impl eframe::App for App {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        // 深浅色切换的平滑过渡：animate_value_with_time 在目标变化时线性插值。
+        let theme_target = if self.dark { 1.0 } else { 0.0 };
+        self.theme_anim = ui
+            .ctx()
+            .animate_value_with_time(egui::Id::new("eac-theme"), theme_target, 0.28);
         let pal = self.pal();
-        let key = (self.dark, self.skin == Skin::Pixel);
-        if self.theme_key != Some(key) {
-            util::apply_visuals(ui.ctx(), &pal);
-            self.theme_key = Some(key);
-        }
+        util::apply_visuals(ui.ctx(), &pal);
         ui.painter()
             .rect_filled(ui.max_rect(), egui::CornerRadius::ZERO, pal.bg);
         // 环境粒子（原 AmbientWorld）；动画需要约 20fps 的重绘。
