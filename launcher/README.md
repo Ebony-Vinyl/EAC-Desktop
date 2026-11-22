@@ -26,6 +26,21 @@ node scripts/dev-connected.mjs
 忽略目录 `.verify/preview.json`。它不是模拟后端。
 测试时将 `EAC_LAUNCHER_HOME` 指向新建临时目录，避免使用日常数据。
 
+### 不开本地服务运行完整界面
+
+界面本身不需要任何 web 服务：`frontendDist` 里的资源会被编进可执行文件，
+由 Tauri 的自定义协议直接读取。只有 `tauri dev` 为了热更新才起 Vite。
+
+要跑完整的原始界面、又不起服务，用内嵌资源编译一次：
+
+```powershell
+cd launcher
+npm run app:static
+src-tauri\target\debug\eac-launcher.exe
+```
+
+`tauri build` 打的正式包走同一条路径（`custom-protocol`），同样没有本地服务。
+
 ## 当前能力
 
 - 独立实例目录、端口和 `DSH_HOME`，固定绑定内核，不自动升级旧实例。
