@@ -1,0 +1,198 @@
+name: 构建安装包（本体 + 启动器）
+
+# 一次性产出三类可下载产物：
+#   1. 本体安装包（EAC-Lite NSIS，来自 tauri-shell）
+#   2. 启动器便携版（eac-launcher.exe + runtime/ 的 zip）
+#   3. 启动器安装版（NSIS 安装器）
+#
+# 触发方式：
+#   · workflow_dispatch 手动触发（默认，产物从 Actions 页下载）
+#   · 推送 v* tag 时自动触发，并发布为 GitHub Release
+#
+# 构建很贵（本体需要拉取内核/运行时并打 Tauri 包），只在手动或打 tag 时跑，
+# 不挂在日常 main 推送下。
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+concurrency:
+  group: build-installers-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '11.28.5'
+  KERNEL_VERSION: '0.2.1-rc.2'
+  DISTRO: lite
+
+jobs:
+  # ---- 启动器：便携版 + 安装版 ----
+  launcher:
+    name: 启动器便携版 + 安装版（windows/x64）
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: 准备内置 Node 运行时
+        working-directory: launcher
+        run: node scripts/prepare-runtime.mjs
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: 构建启动器
+        run: cargo build --release --manifest-path launcher/src-tauri/Cargo.toml --bin eac-launcher
+
+      - name: 打包便携版（zip）
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path out\launcher-portable\EAC-Launcher | Out-Null
+          Copy-Item launcher\src-tauri\target\release\eac-launcher.exe out\launcher-portable\EAC-Launcher\
+          Copy-Item -Recurse launcher\runtime out\launcher-portable\EAC-Launcher\runtime
+          Compress-Archive -Path out\launcher-portable\EAC-Launcher -DestinationPath out\EAC-Launcher-portable-windows-x64.zip -Force
+
+      - name: 构建安装版（NSIS）
+        working-directory: launcher/installer
+        shell: pwsh
+        run: |
+          choco install nsis -y --no-progress
+          & 'C:\Program Files (x86)\NSIS\makensis.exe' /V2 launcher.nsi
+
+      - name: 生成校验和
+        shell: pwsh
+        run: |
+          Get-FileHash out\EAC-Launcher-portable-windows-x64.zip, out\EAC-Launcher-setup-x64.exe -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLower())  $([IO.Path]::GetFileName($_.Path))" } |
+            Set-Content out\SHA256SUMS-launcher.txt
+
+      - name: 上传启动器产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: eac-launcher-windows-x64
+          path: |
+            out/EAC-Launcher-portable-windows-x64.zip
+            out/EAC-Launcher-setup-x64.exe
+            out/SHA256SUMS-launcher.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---- 本体：EAC-Lite 安装包 + 便携版 ----
+  desktop:
+    name: 本体安装包（windows/x64）
+    runs-on: windows-latest
+    timeout-minutes: 150
+    defaults:
+      run:
+        working-directory: dsh-desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Verify dsh-dpx submodule pin
+        working-directory: ${{ github.workspace }}
+        run: node tauri-shell/check-dpx-pin.mjs
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dsh-desktop/package-lock.json
+
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@${{ env.PNPM_VERSION }} && pnpm --version
+
+      - name: Cache vendored kernel
+        uses: actions/cache@v4
+        with:
+          path: dsh-desktop/vendor/kernel
+          key: ${{ runner.os }}-${{ env.KERNEL_VERSION }}-kernel-${{ hashFiles('dsh-desktop/scripts/fetch-kernel.ts') }}
+
+      - name: Prepare vendored kernel
+        run: node scripts/fetch-kernel.js
+
+      - name: Install dependencies
+        run: npm run ci:install
+
+      - name: Fetch bundled Node and npm runtimes
+        run: npm run fetch-runtime
+
+      - name: Set up stable Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Fetch Cargo dependencies
+        working-directory: ${{ github.workspace }}/tauri-shell
+        run: cargo fetch --locked
+
+      - name: Assemble staged runtime (${{ env.DISTRO }})
+        working-directory: ${{ github.workspace }}
+        run: node tauri-shell/stage-resources.mjs --target=win32 --distro=${{ env.DISTRO }} --skip-npm
+
+      - name: Verify staged closure and bundle integrity
+        working-directory: ${{ github.workspace }}
+        run: node dsh-desktop/scripts/verify-staged-runtime.mjs
+
+      - name: Build Tauri installers
+        working-directory: ${{ github.workspace }}/tauri-shell
+        env:
+          CARGO_ENCODED_RUSTFLAGS: '--remap-path-prefix=${{ github.workspace }}=eac-build'
+        run: npx -y @tauri-apps/cli@2 build --verbose
+
+      - name: Build portable package (zip)
+        working-directory: ${{ github.workspace }}/tauri-shell
+        run: node make-portable.mjs --out target/release/portable
+
+      - name: Collect artifacts
+        working-directory: ${{ github.workspace }}
+        shell: bash
+        run: |
+          mkdir -p out
+          find tauri-shell/target/release/bundle -name '*.exe' -path '*nsis*' -exec cp {} out/ \;
+          find tauri-shell/target/release/portable -name '*.zip' -exec cp {} out/ \;
+          find tauri-shell/target/release/bundle -name 'SHA256SUMS*.txt' -exec cp {} out/ \; || true
+          ls -la out
+
+      - name: 上传本体产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: eac-desktop-windows-x64
+          path: out/*
+          if-no-files-found: error
+          retention-days: 30
+
+  # ---- 打 tag 时发布 GitHub Release ----
+  release:
+    needs: [launcher, desktop]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" release/*/* \
+            --repo "${{ github.repository }}" \
+            --title "EAC ${{ github.ref_name }}" \
+            --generate-notes
