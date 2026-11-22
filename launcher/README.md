@@ -1,67 +1,52 @@
 # EAC 启动器
 
 面向 DeepSeek Harness 的独立启动器，位于 EAC Desktop 仓库的 `launcher/`。
-采用 Tauri 2 + React / TypeScript + Rust，与现有桌面端分别构建和分发。
-本次没有提交、推送、创建 GitHub Release 或上传构建产物。
+纯 Rust 单进程实现：eframe/egui 原生窗口，不依赖 WebView2、不启动本地 HTTP 服务、
+不监听端口。所有操作直接调用本地 `Engine`，与之前的前端共用同一套数据目录。
 
 ## 运行
 
 ```powershell
-cd launcher
-npm ci
-npm run runtime:prepare
-npm run tauri:dev
+cd launcher\src-tauri
+cargo run --bin eac-launcher
 ```
 
-`runtime:prepare` 下载固定版本 Node 24.22.1，核对 Node 官方 SHA-256，
-再安装 pnpm 11.7.0。打包时把完整运行时附带进安装包。首次下载需要联网。
-
-浏览器联调使用同一个 Rust 引擎：
+默认 feature `gui` 编译原生窗口。也可以直接跑产物：
 
 ```powershell
-node scripts/dev-connected.mjs
-```
-
-默认地址 `http://127.0.0.1:5178`，只监听本机。联调桥随机端口和令牌保存在
-忽略目录 `.verify/preview.json`。它不是模拟后端。
-测试时将 `EAC_LAUNCHER_HOME` 指向新建临时目录，避免使用日常数据。
-
-### 不开本地服务运行完整界面
-
-界面本身不需要任何 web 服务：`frontendDist` 里的资源会被编进可执行文件，
-由 Tauri 的自定义协议直接读取。只有 `tauri dev` 为了热更新才起 Vite。
-
-要跑完整的原始界面、又不起服务，用内嵌资源编译一次：
-
-```powershell
-cd launcher
-npm run app:static
 src-tauri\target\debug\eac-launcher.exe
 ```
 
-`tauri build` 打的正式包走同一条路径（`custom-protocol`），同样没有本地服务。
+`EAC_LAUNCHER_HOME` 选择隔离数据目录（默认 `%LOCALAPPDATA%\EACLauncher`）；
+测试时指向新建临时目录可避免使用日常数据。
 
-### 纯原生 egui 界面（不依赖 WebView2）
+### 内置运行时与目录
 
-`gui` feature 提供一个单进程的 eframe/egui 前端，直接调用与 React 版相同的
-`Engine::call`，覆盖总览、实例、插件市场、内核、整合包、发行版本、任务、
-个人中心、成就与偏好设置。窗口内没有 WebView2、没有本地 HTTP 服务，也不会
-启动任何 `msedgewebview2.exe` 子进程。
+引擎在以下场景会用到一个随附的 Node 运行时（内核安装 / 本机扫描）：
 
 ```powershell
-cd launcher\src-tauri
-cargo run --no-default-features --features gui --bin eac-launcher-gui
+node launcher\scripts\prepare-runtime.mjs
 ```
 
-发布构建：
+从 Node 官方源下载并校验固定版本 Node + pnpm，写入 `launcher/runtime/`。
+没有运行时也不影响已安装内核的启动，只会让「注册已有内核 / 本机发现」少一个来源。
+
+目录由 `scripts/sync-catalog.mjs` 生成并提交到 `resources/catalog.json`（引擎
+`include_str!` 内嵌）：
 
 ```powershell
-cargo build --release --no-default-features --features gui --bin eac-launcher-gui
+node launcher\scripts\sync-catalog.mjs
 ```
 
-`EAC_LAUNCHER_HOME` 与 React 版共用同一套数据目录。皮肤、大厅地址与捉虫模式
-保存在 `%LOCALAPPDATA%\EACLauncher\gui-appearance.json`；主题与减少动态效果
-通过 `save_settings` 写回引擎。把 `.eacpack.json` 拖进窗口即可导入整合包清单。
+## 界面
+
+单窗口覆盖原前端的全部页面：总览、实例管理、插件市场、内核仓库、整合包、
+发行版本、任务记录、个人中心、成就、偏好设置。对话框涵盖新建/配置/克隆实例、
+注册/导入/导出、安装精确内核、按引用安装插件、整合包与便携桌面端安装、删除与恢复确认。
+
+外观偏好（皮肤、大厅地址、捉虫模式）保存在
+`%LOCALAPPDATA%\EACLauncher\gui-appearance.json`；主题与减少动态效果通过
+`save_settings` 写回引擎。把 `.eacpack.json` 拖进窗口即可导入整合包清单。
 
 ## 当前能力
 
@@ -73,22 +58,16 @@ cargo build --release --no-default-features --features gui --bin eac-launcher-gu
 - 官方 Desktop 下载入口，以及已安装桌面 EXE 的登记。
 - 真实进程、日志、认证 HTTP 就绪检查、启动与停止。
 - 备份、恢复、克隆、描述文件导入导出、任务结果和深浅主题。
-- GitHub 登录（设备流 + 细粒度/经典令牌、点赞、直接 Star）已完成开发并在真机验证；
-  **当前版本按发布计划暂不开放**，界面显示「开发中」。开放时把
-  `src/api.ts` 的 `GITHUB_LOGIN_ENABLED` 与 `src-tauri/src/social.rs` 的
-  `LOGIN_ENABLED` 置回 `true` 即可，数据结构无需迁移。
-- 个人中心：GitHub 公开资料、自定义头像、DSH 会话用量热力图、Token/缓存/推理
-  统计、模型平均速度、按可编辑单价估算费用、连续使用天数与成就进度。
+- 个人中心：GitHub 公开资料、DSH 会话用量热力图、Token/缓存/推理统计、模型平均速度。
 - 成就系统：29 项真实事件成就（启航 / 社交 / 工坊 / 坚持），含隐藏成就、稀有度、
-  进度与解锁时间；安装、启动、备份、登录、Star、点赞、发布整合包等都会记录。
-- 插件市场：日/周/月真实安装次数榜；大厅（144.126.133.165:4317）已部署新版接口，
-  点赞/Star 随登录开放后立即可用。
+  进度与解锁时间；安装、启动、备份、Star、点赞、发布整合包等都会记录。
 
 插件兼容性按官方核心的准入规则检查；未声明或未实测保持未知。不同内核通过
 不同实例并存；同一个进程里的插件不能分别使用两套内核。
 
-GitHub 登录的 OAuth App 创建、权限范围、令牌存储和 Star 行为见
-[`docs/GITHUB-LOGIN.md`](docs/GITHUB-LOGIN.md)。
+GitHub 登录（设备流 + 令牌、点赞、直接 Star）在 Rust 引擎中已完成开发并在真机验证，
+但当前版本按发布计划**暂不开放**，界面显示「开发中」。开放时把
+`src-tauri/src/social.rs` 的 `LOGIN_ENABLED` 置回 `true` 即可。
 
 ## 边界
 
@@ -101,32 +80,24 @@ GitHub 登录的 OAuth App 创建、权限范围、令牌存储和 Star 行为�
   依赖会拒绝导出，不会悄悄替换成同名 npm 包；完整数据恢复使用实例备份。
 - 下载尚未实现断点续传；任务可报告实际结果，安装仍需等待 npm/pnpm 完成。
 - GitHub 浏览器设备流需要发布者或用户自备 OAuth App Client ID；发布构建时设置
-  `EAC_GITHUB_CLIENT_ID` 会把它编译进程序（`option_env!`），运行时环境变量或登录
-  窗口手填也可覆盖。仓库源码本身不内置 Client ID。
+  `EAC_GITHUB_CLIENT_ID` 会把它编译进程序（`option_env!`），运行时环境变量覆盖。
+  仓库源码本身不内置 Client ID。
 - `github.com` 无法直连的网络下，设备流与 GitHub 下载需要显式设置 `EAC_HTTPS_PROXY`
   （http/https 代理，如 `http://127.0.0.1:7890`）；未设置时引擎保持 DNS 固定 +
   私网校验，不读取系统代理。
-- 全局插件下载榜需要部署新版 `pack-hall/server.mjs`；旧大厅或离线时明确回退到
-  本机真实安装记录，不伪造全站数据。
+- 全局插件下载榜与玩家大厅依赖外部 `pack-hall/server.mjs`；离线时明确回退到本机
+  真实安装记录，不伪造全站数据。
 - 个人中心只读取本机 DSH 会话日志中的 usage、模型与耗时字段，不读取或上传消息
   内容；使用自定义 `EAC_LAUNCHER_HOME` 时，默认只扫描该目录下的实例数据。
-- 本地 Windows 验证结果见 `docs/ACCEPTANCE.md`；未验证平台与第三方业务按该清单验收。
 
 ## 构建与检查
 
 ```powershell
-npm run build
-cargo test --manifest-path src-tauri/Cargo.toml --no-default-features --lib
-npm run tauri:build -- --debug
+cargo test --manifest-path src-tauri/Cargo.toml --lib
+cargo build --manifest-path src-tauri/Cargo.toml --release --bin eac-launcher
 ```
 
-当前 Rust 回归共 25 项，覆盖路径边界、实例生命周期、备份恢复、GitHub 参数校验、
-成就状态机、会话用量解析与本地排行榜。浏览器联调使用真实 Rust 桥接；测试数据
-放在忽略目录 `.verify/`。
+Rust 回归覆盖路径边界、实例生命周期、备份恢复、GitHub 参数校验、成就状态机、
+会话用量解析与本地排行榜。以上命令均不上传产物，也没有会自动发布的 CI 工作流。
 
-`--debug` 是本地验收构建。正式分发应去掉该参数，并完成签名和目标系统验收；
-以上构建命令均不上传产物。尚未添加会自动发布的 CI 工作流。
-
-`scripts/sync-catalog.mjs` 从固定社区提交和公开发行元数据生成目录，
-保留来源提交与摘要；目录同步不是插件安装。
-视觉与开源参考记录位于 `docs/RESEARCH.md`。
+视觉与开源参考记录位于 `docs/RESEARCH.md`，验收清单见 `docs/ACCEPTANCE.md`。

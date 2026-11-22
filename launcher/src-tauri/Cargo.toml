@@ -7,26 +7,19 @@ default-run = "eac-launcher"
 
 [lib]
 name = "eac_launcher_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+crate-type = ["rlib"]
 
 [[bin]]
 name = "eac-launcher"
-path = "src/main.rs"
-required-features = ["desktop"]
+path = "src/bin/gui.rs"
 
 [[bin]]
 name = "eac-launcher-api"
 path = "src/bin/api.rs"
 required-features = ["api"]
 
-[[bin]]
-name = "eac-launcher-gui"
-path = "src/bin/gui.rs"
-required-features = ["gui"]
-
 [features]
-default = ["desktop"]
-desktop = ["dep:tauri", "dep:tauri-build"]
+default = ["gui"]
 api = []
 gui = ["dep:eframe"]
 
@@ -35,9 +28,6 @@ version = "0.37"
 optional = true
 default-features = false
 features = ["default_fonts", "glow"]
-
-[build-dependencies]
-tauri-build = { version = "2", features = [], optional = true }
 
 [dependencies]
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
@@ -50,7 +40,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sha2 = "0.10"
 sysinfo = "0.33"
-tauri = { version = "2", features = [], optional = true }
 tempfile = "3"
 tiny_http = "0.12"
 url = "2"

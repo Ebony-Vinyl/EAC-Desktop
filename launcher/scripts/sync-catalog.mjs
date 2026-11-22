@@ -48,7 +48,7 @@ try {
   // Network can be unavailable during local development. Reuse the last
   // generated records instead of shipping an empty market; provenance below
   // records that this build did not re-read the upstream revision.
-  const previous = JSON.parse(await readFile(join(root, 'public/catalog.json'), 'utf8'))
+  const previous = JSON.parse(await readFile(join(root, 'resources/catalog.json'), 'utf8'))
   offlineReuse = true
   previousPlugins = previous.plugins || []
   previousPacks = previous.packs || []
@@ -331,8 +331,7 @@ const catalog = {
   plugins,
   packs,
 }
-for (const directory of ['resources', 'public']) {
-  await mkdir(join(root, directory), { recursive: true })
-  await writeFile(join(root, directory, 'catalog.json'), JSON.stringify(catalog, null, 2) + '\n')
-}
+// 引擎通过 include_str! 读取 resources/catalog.json；不再维护浏览器侧的 public/ 拷贝。
+await mkdir(join(root, 'resources'), { recursive: true })
+await writeFile(join(root, 'resources', 'catalog.json'), JSON.stringify(catalog, null, 2) + '\n')
 console.log(`Catalog: ${plugins.length} records; ${plugins.filter(p => p.installable).length} installable; ${packs.length} packs; +${desktopAdded} desktop assets; +${packsAdded} mojobox packs${catalogMeta ? `; community catalog ${catalogMeta.version}` : ''}${offlineReuse ? ' (offline reuse)' : ''}`)
