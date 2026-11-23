@@ -230,6 +230,19 @@ if (maxEntryLength > 154) {
 }
 console.log('[portable] 长路径门禁 PASS（最长 ≤ 154；目标目录 105 字符内右键解压不炸）');
 
+// 档位一致性门禁（2026-11）：产物名与 profile.txt **由同一来源派生**，装配
+// （stage-resources.mjs）漏拷或多拷载荷时，两者会一起说谎，打包日志看不出来。
+// 只有把「该档位应有的载荷面」（distro.mjs）与「zip 里实际有的」比对才能发现：
+//   lite 混进 full 专属皮肤 / full 缺专属皮肤 / 随包插件缺失 / 标记与内容不符。
+// 未登记的额外目录只告警不拦（资产演进快，硬拦会误伤），另一档专属载荷硬拦。
+const { verifyPortableEntries, formatChecks } = await import('./verify-portable.mjs');
+const stagedMarkerPath = path.join(staging, 'dsh-desktop', 'profile.txt');
+const stagedMarker = existsSync(stagedMarkerPath) ? readFileSync(stagedMarkerPath, 'utf8') : null;
+const distroCheck = verifyPortableEntries({ entries: zipEntries, distro, profileMarker: stagedMarker });
+console.log('[portable] 档位一致性门禁：');
+console.log(formatChecks(distroCheck));
+if (!distroCheck.ok) throw new Error('[portable] 档位一致性门禁 FAIL（见上方 FAIL 行）');
+
 console.log('[portable] 计算 SHA256');
 const hash = createHash('sha256');
 for await (const chunk of createReadStream(zipPath)) hash.update(chunk);

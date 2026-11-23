@@ -58,6 +58,13 @@ async function temporary(t:any){const parent=await fs.realpath(os.tmpdir());cons
 async function tree(root:string,version:string,dll=true){
   await fs.mkdir(root);for(const relative of BASE_FILES){const file=path.join(root,...relative.split('/'));await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,version+':'+relative);}
   await fs.mkdir(path.join(root,'dsh-desktop'));await fs.writeFile(path.join(root,'dsh-desktop/package.json'),JSON.stringify({version}));
+  // 让合成树同时满足便携包档位门禁（verify-portable.mjs）：真实装配产出的
+  // profile.txt 与 assets/plugins、assets/skins 必须有对应条目，否则打包会
+  // 在门禁处 FAIL —— 夹具树也按 lite 档位补齐。
+  await fs.writeFile(path.join(root,'dsh-desktop/profile.txt'),'lite\n');
+  const {builtinPluginDirs,bundledSkinDirs}=await import('../../tauri-shell/distro.mjs');
+  for(const dir of builtinPluginDirs('lite')){const file=path.join(root,'dsh-desktop/assets/plugins',dir,'package.json');await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,JSON.stringify({name:dir}));}
+  for(const dir of bundledSkinDirs('lite')){const file=path.join(root,'dsh-desktop/assets/skins',dir,'skin.json');await fs.mkdir(path.dirname(file),{recursive:true});await fs.writeFile(file,version+':'+dir);}
   if(dll)await fs.writeFile(path.join(root,'WebView2Loader.dll'),version+' dll');
   return makeReleaseFiles(root,version,TARGET);
 }
@@ -219,7 +226,7 @@ test('health failure cannot roll back files while the new process shutdown remai
 test('packager names both PE architectures and ships the complete file inventory and marker',{skip:process.platform!=='win32'},async t=>{
  const root=await temporary(t);const shell=path.join(root,'tauri-shell');const desktop=path.join(root,'dsh-desktop');await fs.mkdir(shell);await fs.mkdir(path.join(desktop,'lib/desktop'),{recursive:true});
  await fs.writeFile(path.join(desktop,'package.json'),JSON.stringify({version:'6.0.1'}));
- for(const name of ['make-portable.mjs','portable-unzip-hint.mjs','portable-path-shrink.mjs'])await fs.copyFile(path.resolve('../tauri-shell/'+name),path.join(shell,name));
+ for(const name of ['make-portable.mjs','portable-unzip-hint.mjs','portable-path-shrink.mjs','verify-portable.mjs','distro.mjs'])await fs.copyFile(path.resolve('../tauri-shell/'+name),path.join(shell,name));
  for(const name of ['update-package.js','update-backup.js'])await fs.copyFile(require.resolve('../lib/desktop/'+name),path.join(desktop,'lib/desktop',name));
  const output=path.join(root,'输出 目录');
  async function run(args:string[]){const child=spawn(process.execPath,[path.join(shell,'make-portable.mjs'),...args],{stdio:['ignore','pipe','pipe'],windowsHide:true});let log='';child.stdout.on('data',data=>log+=data);child.stderr.on('data',data=>log+=data);const status=await new Promise<number|null>(resolve=>child.once('exit',resolve));return {status,log};}
