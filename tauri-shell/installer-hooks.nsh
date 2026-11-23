@@ -826,12 +826,18 @@ FunctionEnd
     ; 方案 2：复选框只删"本版本"数据，共享环境（产品数据根 = 多版本共享的 dpx
     ; 环境/插件/会话/凭据）留给"最后一份安装"卸载时清理。当前产品还没有按版本
     ; 分账的用户数据目录，因此其它版本仍在时这里不删任何用户数据。
-    !insertmacro DSH_ScanOtherInstall HKCU $R2
-    StrCpy $R6 $R2
-    ${If} $R6 == 0
-      !insertmacro DSH_ScanOtherInstall HKLM $R2
+    ; 测试接缝：夹具可用 /DDSH_ASSUME_LAST_INSTALL=1 显式模拟"最后一份安装"，
+    ; 否则开发机上的真实 EAC 安装会让该用例变成环境相关（CI 干净机器上不暴露）。
+    !ifdef DSH_ASSUME_LAST_INSTALL
+      StrCpy $R6 0
+    !else
+      !insertmacro DSH_ScanOtherInstall HKCU $R2
       StrCpy $R6 $R2
-    ${EndIf}
+      ${If} $R6 == 0
+        !insertmacro DSH_ScanOtherInstall HKLM $R2
+        StrCpy $R6 $R2
+      ${EndIf}
+    !endif
     ${If} $R6 == 1
       DetailPrint "EAC: 检测到其它版本安装，保留共享环境（复选框只删本版本数据）"
     ${Else}

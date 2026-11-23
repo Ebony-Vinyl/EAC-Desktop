@@ -25,7 +25,7 @@ function execute(file:string,args:string[]):Promise<{code:number|null;output:str
  });
 }
 
-async function fixture(t:any,appDataState:0|1){
+async function fixture(t:any,appDataState:0|1,assumeLastInstall=false){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'eac-nsis-uninst-'));
  t.after(async()=>{const resolved=path.resolve(root);assert.equal(path.dirname(resolved),path.resolve(os.tmpdir()));assert.ok(path.basename(resolved).startsWith('eac-nsis-uninst-'));await fs.rm(resolved,{recursive:true,force:true});});
 
@@ -54,6 +54,7 @@ InstallDir "${installDir}"
 !define MAINBINARYNAME "dsh-eac-shell"
 !define ESTIMATEDSIZE "1"
 !define UNINSTKEY "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EACUninstallFixture"
+${assumeLastInstall ? '!define DSH_ASSUME_LAST_INSTALL' : '; 未声明：走真实"其它安装"扫描'}
 !define DSH_PRODUCT_DATA_DIR "${dataDir}"
 !define DSH_PRODUCT_ROAMING_DIR "${roamingDir}"
 !include MUI2.nsh
@@ -98,7 +99,7 @@ FunctionEnd
 }
 
 test('勾选"删除应用数据"时清理产品数据根，且不跟进其中指向外部的 junction',{skip:unavailable},async t=>{
- const f=await fixture(t,1);
+ const f=await fixture(t,1,true);
  assert.equal(existsSync(f.dataDir),false,'产品数据根应被删除');
  assert.equal(existsSync(f.roamingDir),false,'Roaming 产品数据根应被删除');
  assert.equal(existsSync(path.join(f.canary,'canary.txt')),true,'junction 目标（安装树之外）不得被删除');
