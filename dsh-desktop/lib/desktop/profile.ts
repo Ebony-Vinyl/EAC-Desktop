@@ -17,7 +17,7 @@ import path = require('node:path');
 import fs = require('node:fs');
 import os = require('node:os');
 import { updCtx, APP_ROOT } from './runtime-paths';
-import { seedFullProfile, adoptFullProfile, bindFullHostClosure } from './full-composition';
+import { seedFullProfile, adoptFullProfile, bindFullHostClosure, repairHostClosure } from './full-composition';
 // updater.js 尚未类型化（Wave 3 收编），先以窄签名消费。
 const updater = require('../../updater') as {
   loadSettings(c: ReturnType<typeof updCtx>): { shareWebProfile?: boolean };
@@ -102,6 +102,12 @@ export function ensureDesktopProfileInit() {
         ctx.log('boot', '已将既有 profile 补齐到随包完整清单: '
           + `新增 ${adopted.adopted.length}、刷新 ${adopted.refreshed.length}、保留用户包 ${adopted.kept.length}`);
       }
+    }
+    // 每次启动都修一遍共享闭包：安装目录被卸载/换版本后，旧 junction 会整棵悬空
+    // （实测 383 条），这里重链到当前安装闭包，避免插件树永久变砖。
+    const closure = repairHostClosure(home);
+    if (closure.relinked || closure.pruned) {
+      ctx.log('boot', `已修复 profile 共享闭包：重链 ${closure.relinked}、清理 ${closure.pruned}`);
     }
     fs.mkdirSync(dir, { recursive: true });
     const manifest = path.join(dir, 'package.json');
