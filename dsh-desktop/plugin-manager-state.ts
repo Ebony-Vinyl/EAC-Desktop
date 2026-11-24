@@ -13,9 +13,9 @@ import type { BundleIdentities } from './lib/bundle-identity';
 //    写默认禁用插件（如 dsh-dafeiyu）用的是 insert 内层形态，v4.2 曾只认
 //    顶层条目，导致管理页把 dsh-dafeiyu 错报为「已启用」、host 端 config
 //    端点不存在（桌宠加载不出 + 「未连接 DSH Host」）；
-//  · hasConfig 仍只读顶层条目：insert 内层的 config 是 sync 的固定形态
-//    （如 dsh-pet 行带 config），计入会把管理页开关误锁成不可切换，破坏
-//    dsh-pet-settings 桌宠卡片的启停（它走同一个 setEnabled IPC）。
+//  · 顶层或 insert 内层携带 `config` 均不锁定开关：仅 L1 builtin、内核骨架 core
+//    与已移除项锁定不可停用，避免非核心插件经历「停用 → 补齐 config → 再启用」后
+//    因顶层保留 `config` 而被永久锁死（issue #436）。
 //
 // M3/#416 三层分级（L1 builtin / L2 recommended / L3 external）：
 //  · canonical 字段是 `.sync/plugin-distribution.json` 的 `distributionClass`
@@ -212,7 +212,7 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
     : null;
 
   const insertById = new Map<string, { name: string; disabled: boolean; hasDisabled: boolean }>();
-  const userById = new Map<string, { name: string; disabled: boolean; hasDisabled: boolean; hasConfig: boolean }>();
+  const userById = new Map<string, { name: string; disabled: boolean; hasDisabled: boolean }>();
   for (const entry of entries) {
     if (!entry || typeof entry !== 'object') continue;
     const ent = entry as { insert?: unknown; id?: unknown };
@@ -224,12 +224,11 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
         }
       }
     } else if (typeof ent.id === 'string') {
-      const e2 = entry as { id: string; name?: string; disabled?: boolean; config?: unknown };
+      const e2 = entry as { id: string; name?: string; disabled?: boolean };
       userById.set(e2.id, {
         name: e2.name || '',
         disabled: e2.disabled === true,
         hasDisabled: typeof e2.disabled === 'boolean',
-        hasConfig: e2.config !== undefined && e2.config !== null,
       });
     }
   }
@@ -243,7 +242,6 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
     const insert = insertById.get(id);
     // 顶层或 insert 内层任一登记点带 disabled 即禁用（v4.2 修复点）。
     const disabled = !!(user && user.disabled) || !!(insert && insert.disabled);
-    const hasConfig = !!(user && user.hasConfig);
     const isRemoved = !!(extra && extra.removed);
     const isCore = !!(extra && extra.core);
     const distributionClass = distributionClassOf(id, group, distributionClasses, builtinIds, recommendedIds);
@@ -251,7 +249,7 @@ function collectPluginRows(entries: unknown[], ctx: CollectCtx = {}): PluginRow[
     // 同一 id 集合直接拒绝，这里同步锁定开关，避免出现按不动的控件）。
     const builtin = distributionClass === 'builtin';
     const optionalWallpaper = id === 'wallpaper-engine';
-    const toggleable = optionalWallpaper || (group !== 'core' && !isCore && !builtin && !(hasConfig && !disabled));
+    const toggleable = optionalWallpaper || (group !== 'core' && !isCore && !builtin);
     rows.push({
       id,
       name: name || id,
