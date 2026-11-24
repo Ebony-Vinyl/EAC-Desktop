@@ -70,7 +70,7 @@ pub fn spawn(mut command: Command, log: &Path) -> Result<(Child, OwnedProcess)> 
     let expected_executable = files::canonical(Path::new(command.get_program()))
         .map(|path| text(&path))
         .unwrap_or_else(|_| text(Path::new(command.get_program())));
-    let mut child = command.spawn().map_err(|e| format!("Start process: {e}"))?;
+    let mut child = command.spawn().map_err(|e| display_spawn_error(&e))?;
     let job = format!("EACLauncher-{}", new_id());
     if let Err(error) = platform::attach(&child, &job) {
         let _ = child.kill();
@@ -448,5 +448,40 @@ mod platform {
             return Err(std::io::Error::last_os_error().to_string());
         }
         Ok(())
+    }
+}
+
+pub fn display_spawn_error(error: &std::io::Error) -> String {
+    const FILENAME_EXCED_RANGE: i32 = 206; // ERROR_FILENAME_EXCED_RANGE (Windows)
+    let command_too_long = error.raw_os_error() == Some(FILENAME_EXCED_RANGE) || {
+        #[cfg(unix)]
+        {
+            error.raw_os_error() == Some(libc::E2BIG)
+        }
+        #[cfg(not(unix))]
+        {
+            false
+        }
+    };
+    if command_too_long {
+        return format!(
+            "Start process: 启动命令或参数超过系统长度上限（请检查安装路径深度或已启用插件环境）：{error}"
+        );
+    }
+    format!("Start process: {error}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn spawn_error_formats_command_line_limit_with_actionable_hint() {
+        let too_long = std::io::Error::from_raw_os_error(206);
+        let formatted = display_spawn_error(&too_long);
+        assert!(formatted.starts_with("Start process: 启动命令或参数超过系统长度上限"));
+
+        let missing = std::io::Error::new(std::io::ErrorKind::NotFound, "program missing");
+        assert_eq!(display_spawn_error(&missing), "Start process: program missing");
     }
 }

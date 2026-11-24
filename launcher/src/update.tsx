@@ -73,9 +73,13 @@ export function UpdateDialog({ trigger, onClose }: { trigger: UpdateCandidate; o
   const visible = onClose ? true : open;
   const close = () => (onClose ? onClose() : setOpen(false));
   const install = async () => {
+    if (!asset.sha256) {
+      setError("该发行版本未提供可信 SHA-256 摘要，出于安全策略已拒绝自动安装，请前往 GitHub Releases 手动核验下载。");
+      return;
+    }
     setBusy(true); setError("");
     try {
-      const result = await run<{ path: string }>("install_update", { url: asset.url, filename: asset.name, ...(asset.sha256 ? { sha256: asset.sha256 } : {}) }, `下载更新 ${asset.name}`, false);
+      const result = await run<{ path: string }>("install_update", { url: asset.url, filename: asset.name, sha256: asset.sha256 }, `下载更新 ${asset.name}`, false);
       setStarted(result.path);
       notify("更新安装程序已启动，应用即将退出。", "success");
       if (native) window.setTimeout(() => { void import("@tauri-apps/api/window").then(({ getCurrentWindow }) => getCurrentWindow().close()).catch(() => undefined); }, 1600);
@@ -84,14 +88,14 @@ export function UpdateDialog({ trigger, onClose }: { trigger: UpdateCandidate; o
   if (!visible) return null;
   return <Modal title={`发现新版本 v${parseLabel(release.tag)}`} subtitle={`发布于 ${release.publishedAt.slice(0, 10)} · 来自 GitHub Releases`} onClose={close} busy={busy}>
     <div className="modal-body">
-      <div className="update-asset"><Download size={17} /><div><strong>{asset.name}</strong><span>{bytes(asset.size)}{asset.sha256 ? " · SHA-256 已由 GitHub 提供" : " · 来源未提供 SHA-256，以引擎记录的下载哈希为准"}</span></div></div>
+      <div className="update-asset"><Download size={17} /><div><strong>{asset.name}</strong><span>{bytes(asset.size)}{asset.sha256 ? " · SHA-256 已由 GitHub 提供（安装前强制校验）" : " · 来源未提供 SHA-256（安全策略禁止自动执行）"}</span></div></div>
       {release.body && <details className="release-notes" open><summary>更新内容</summary><pre>{release.body}</pre></details>}
       {started ? <div className="success-line"><Check size={17} />安装程序已启动（{started}）。桌面端会自动退出，按安装器提示完成更新。</div> : <div className="update-note">更新会把当前应用替换为发布版安装器的内容；实例与内核数据不受影响。</div>}
       <FormError error={error} />
     </div>
     <div className="modal-footer">
       <Button onClick={close} disabled={busy}>{started ? "关闭" : "稍后再说"}</Button>
-      {!started && <Button variant="primary" icon={Download} busy={busy} onClick={() => void install()}>下载并安装更新</Button>}
+      {!started && <Button variant="primary" icon={Download} busy={busy} disabled={!asset.sha256} onClick={() => void install()}>下载并安装更新</Button>}
     </div>
   </Modal>;
 }

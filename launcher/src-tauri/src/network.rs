@@ -4,11 +4,15 @@ use crate::{
     model::{new_id, Result},
     process,
 };
-use reqwest::{blocking::Response, header::LOCATION, Method};
+use reqwest::{
+    blocking::Response,
+    header::{CONTENT_RANGE, LOCATION, RANGE},
+    Method, StatusCode,
+};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::{
-    fs,
+    fs::{self, File, OpenOptions},
     io::{Read, Write},
     net::{IpAddr, SocketAddr, ToSocketAddrs},
     path::Path,
@@ -348,77 +352,354 @@ impl Engine {
     }
 
     pub(crate) fn download_action(&self, payload: &Value) -> Result<Value> {
-        self.download(
-            required(payload, "url")?,
+        let sources = extract_download_sources(payload)?;
+        self.download_sources(
+            &sources,
             required(payload, "filename")?,
             optional(payload, "sha256")?,
         )
     }
 
-    pub(crate) fn download(
+    pub(crate) fn download_sources(
         &self,
-        url: &str,
+        sources: &[String],
         filename: &str,
         expected: Option<&str>,
     ) -> Result<Value> {
+        self.download_with_fetcher(sources, filename, expected, |url, offset| {
+            let headers = if offset > 0 {
+                vec![(RANGE.as_str().to_string(), format!("bytes={offset}-"))]
+            } else {
+                Vec::new()
+            };
+            let response = self.secure_request(
+                Method::GET,
+                url,
+                &headers,
+                None,
+                Duration::from_secs(30 * 60),
+            )?;
+            let status = response.status();
+            let content_length = response.content_length();
+            let content_range = response
+                .headers()
+                .get(CONTENT_RANGE)
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned);
+            Ok(TransferResponse {
+                status,
+                content_length,
+                content_range,
+                body: Box::new(response),
+            })
+        })
+    }
+
+    pub(crate) fn download_with_fetcher<F>(
+        &self,
+        raw_sources: &[String],
+        filename: &str,
+        expected: Option<&str>,
+        mut fetcher: F,
+    ) -> Result<Value>
+    where
+        F: FnMut(&str, u64) -> Result<TransferResponse>,
+    {
         files::safe_filename(filename)?;
-        validate_download_url(url)?;
+        let sources = normalize_download_sources(raw_sources)?;
         if let Some(hash) = expected {
             files::valid_digest(hash)?;
         }
-        let response = self.secure_get(url)?;
-        let expected_size = response.content_length();
-        if expected_size.is_some_and(|size| size > MAX_DOWNLOAD) {
-            return Err("Download exceeds 2 GiB limit".into());
-        }
         let cache = self.path("cache/downloads")?;
         fs::create_dir_all(&cache).map_err(|e| e.to_string())?;
-        let mut output = tempfile::NamedTempFile::new_in(&cache).map_err(|e| e.to_string())?;
-        let mut source = response;
-        let mut hash = Sha256::new();
-        let mut size = 0u64;
-        let mut bytes = [0; 64 * 1024];
-        loop {
-            let count = source
-                .read(&mut bytes)
-                .map_err(|e| format!("Download interrupted: {e}"))?;
-            if count == 0 {
-                break;
+
+        // 已落盘且 SHA-256 校验匹配的缓存文件直接复用，跳过重复下载。
+        if let Some(expected_hash) = expected {
+            let cached_path =
+                self.path(format!("cache/downloads/{}-{filename}", expected_hash.to_ascii_lowercase()))?;
+            if cached_path.is_file() {
+                match verify_file_sha256(&cached_path) {
+                    Ok((actual_hash, size)) if actual_hash.eq_ignore_ascii_case(expected_hash) => {
+                        let part_name = format!(
+                            ".partial-{}.part",
+                            partial_download_key(&sources[0], filename, expected)
+                        );
+                        let _ = fs::remove_file(cache.join(part_name));
+                        return Ok(json!({
+                            "path": text(&cached_path),
+                            "sha256": actual_hash,
+                            "size": size,
+                            "verified": true,
+                            "cached": true
+                        }));
+                    }
+                    _ => {
+                        let _ = fs::remove_file(&cached_path);
+                    }
+                }
             }
-            size += count as u64;
-            if size > MAX_DOWNLOAD {
-                return Err("Download exceeds 2 GiB limit".into());
-            }
-            output
-                .write_all(&bytes[..count])
-                .map_err(|e| e.to_string())?;
-            hash.update(&bytes[..count]);
         }
-        if expected_size.is_some_and(|expected| size != expected) {
-            return Err("Download size differs from HTTP Content-Length".into());
-        }
-        let hash = format!("{:x}", hash.finalize());
-        if expected.is_some_and(|expected| !expected.eq_ignore_ascii_case(&hash)) {
-            return Err(format!(
-                "SHA-256 mismatch: downloaded {hash}; unverified bytes were discarded"
+
+        const MAX_ATTEMPTS_PER_SOURCE: usize = 3;
+        let mut errors: Vec<String> = Vec::new();
+
+        for source_url in &sources {
+            let part_path = cache.join(format!(
+                ".partial-{}.part",
+                partial_download_key(source_url, filename, expected)
             ));
+
+            for attempt in 0..MAX_ATTEMPTS_PER_SOURCE {
+                let mut offset = part_path
+                    .metadata()
+                    .ok()
+                    .filter(|meta| meta.is_file())
+                    .map(|meta| meta.len())
+                    .unwrap_or(0);
+                if offset > MAX_DOWNLOAD {
+                    let _ = fs::remove_file(&part_path);
+                    offset = 0;
+                }
+
+                let mut response = match fetcher(source_url, offset) {
+                    Ok(resp) => resp,
+                    Err(err) => {
+                        errors.push(format!("{source_url} (attempt {}): {err}", attempt + 1));
+                        continue;
+                    }
+                };
+
+                if response.status == StatusCode::RANGE_NOT_SATISFIABLE {
+                    if offset > 0 {
+                        if let Some(expected_hash) = expected {
+                            if let Ok((actual_hash, total_size)) = verify_file_sha256(&part_path) {
+                                if actual_hash.eq_ignore_ascii_case(expected_hash) {
+                                    let final_path = self.path(format!(
+                                        "cache/downloads/{actual_hash}-{filename}"
+                                    ))?;
+                                    persist_verified_part(&part_path, &final_path)?;
+                                    return Ok(json!({
+                                        "path": text(&final_path),
+                                        "sha256": actual_hash,
+                                        "size": total_size,
+                                        "verified": true
+                                    }));
+                                }
+                            }
+                        }
+                        let _ = fs::remove_file(&part_path);
+                        continue;
+                    }
+                    errors.push(format!("{source_url}: HTTP 416 Range Not Satisfiable"));
+                    break;
+                }
+
+                if !response.status.is_success() {
+                    errors.push(format!("{source_url}: HTTP {}", response.status));
+                    if response.status.is_client_error()
+                        && response.status != StatusCode::TOO_MANY_REQUESTS
+                        && response.status != StatusCode::REQUEST_TIMEOUT
+                    {
+                        break;
+                    }
+                    continue;
+                }
+
+                let (append_mode, base_offset, expected_stream_len, expected_total_len) =
+                    if offset > 0 && response.status == StatusCode::PARTIAL_CONTENT {
+                        let Some((start, end, total)) = response
+                            .content_range
+                            .as_deref()
+                            .and_then(parse_content_range)
+                        else {
+                            let _ = fs::remove_file(&part_path);
+                            errors.push(format!(
+                                "{source_url}: missing or malformed HTTP 206 Content-Range"
+                            ));
+                            continue;
+                        };
+                        if start != offset {
+                            let _ = fs::remove_file(&part_path);
+                            errors.push(format!(
+                                "{source_url}: HTTP 206 Content-Range start {start} != requested {offset}"
+                            ));
+                            continue;
+                        }
+                        if total.is_some_and(|t| t > MAX_DOWNLOAD) || end >= MAX_DOWNLOAD {
+                            let _ = fs::remove_file(&part_path);
+                            return Err("Download exceeds 2 GiB limit".into());
+                        }
+                        let span_len = end - start + 1;
+                        if response.content_length.is_some_and(|cl| cl != span_len) {
+                            let _ = fs::remove_file(&part_path);
+                            errors.push(format!(
+                                "{source_url}: HTTP 206 Content-Length disagrees with Content-Range"
+                            ));
+                            continue;
+                        }
+                        (true, offset, Some(span_len), total)
+                    } else if response.status == StatusCode::OK {
+                        if response.content_length.is_some_and(|cl| cl > MAX_DOWNLOAD) {
+                            let _ = fs::remove_file(&part_path);
+                            return Err("Download exceeds 2 GiB limit".into());
+                        }
+                        (false, 0, response.content_length, response.content_length)
+                    } else {
+                        errors.push(format!(
+                            "{source_url}: unexpected HTTP status {} for offset {offset}",
+                            response.status
+                        ));
+                        break;
+                    };
+
+                let write_outcome: std::result::Result<u64, String> = (|| {
+                    let mut file = if append_mode {
+                        OpenOptions::new()
+                            .create(true)
+                            .append(true)
+                            .open(&part_path)
+                            .map_err(|e| e.to_string())?
+                    } else {
+                        OpenOptions::new()
+                            .create(true)
+                            .write(true)
+                            .truncate(true)
+                            .open(&part_path)
+                            .map_err(|e| e.to_string())?
+                    };
+                    let mut stream_bytes = 0u64;
+                    let mut buf = [0u8; 64 * 1024];
+                    loop {
+                        let count = match response.body.read(&mut buf) {
+                            Ok(n) => n,
+                            Err(err) => {
+                                let _ = file.flush();
+                                return Err(format!("Download interrupted: {err}"));
+                            }
+                        };
+                        if count == 0 {
+                            break;
+                        }
+                        stream_bytes += count as u64;
+                        if base_offset + stream_bytes > MAX_DOWNLOAD {
+                            return Err("LIMIT_EXCEEDED".into());
+                        }
+                        file.write_all(&buf[..count]).map_err(|e| e.to_string())?;
+                    }
+                    if expected_stream_len.is_some_and(|expected_len| stream_bytes != expected_len)
+                    {
+                        let _ = file.flush();
+                        return Err("Download size differs from HTTP Content-Length".into());
+                    }
+                    file.sync_all().map_err(|e| e.to_string())?;
+                    Ok(stream_bytes)
+                })();
+
+                let stream_bytes = match write_outcome {
+                    Ok(written) => written,
+                    Err(msg) if msg == "LIMIT_EXCEEDED" => {
+                        let _ = fs::remove_file(&part_path);
+                        return Err("Download exceeds 2 GiB limit".into());
+                    }
+                    Err(err) => {
+                        errors.push(format!("{source_url} (attempt {}): {err}", attempt + 1));
+                        continue;
+                    }
+                };
+
+                // 终态体积与 Content-Range total（或 HTTP 200 Content-Length）逐字节核对，
+                // 防止服务端返回提前截断的最后一段在无摘要时被误认为完整文件。
+                let current_total = base_offset + stream_bytes;
+                if let Some(expected_total) = expected_total_len {
+                    if current_total > expected_total {
+                        let _ = fs::remove_file(&part_path);
+                        errors.push(format!(
+                            "{source_url}: downloaded {current_total} bytes exceeds expected total {expected_total}"
+                        ));
+                        continue;
+                    }
+                    if current_total < expected_total {
+                        errors.push(format!(
+                            "{source_url} (attempt {}): truncated transfer ({current_total}/{expected_total} bytes)",
+                            attempt + 1
+                        ));
+                        continue;
+                    }
+                }
+
+                let (actual_hash, total_size) = verify_file_sha256(&part_path)?;
+                if let Some(expected_total) = expected_total_len {
+                    if total_size != expected_total {
+                        let _ = fs::remove_file(&part_path);
+                        errors.push(format!(
+                            "{source_url}: persisted file size {total_size} disagrees with expected total {expected_total}"
+                        ));
+                        continue;
+                    }
+                }
+
+                if let Some(expected_hash) = expected {
+                    if !expected_hash.eq_ignore_ascii_case(&actual_hash) {
+                        let _ = fs::remove_file(&part_path);
+                        errors.push(format!(
+                            "SHA-256 mismatch: downloaded {actual_hash}; unverified bytes were discarded"
+                        ));
+                        break;
+                    }
+                    let final_path =
+                        self.path(format!("cache/downloads/{actual_hash}-{filename}"))?;
+                    persist_verified_part(&part_path, &final_path)?;
+                    return Ok(json!({
+                        "path": text(&final_path),
+                        "sha256": actual_hash,
+                        "size": total_size,
+                        "verified": true
+                    }));
+                }
+
+                // 无预期 SHA-256 时绝不用 {actual_hash} 命名缓存文件，避免后续代码将其误当成已校验产物；
+                // 改用 unverified- 前缀落盘，并在日志与返回值中显式声明本次未做完整性校验。
+                let unverified_path =
+                    self.path(format!("cache/downloads/unverified-{}-{filename}", new_id()))?;
+                persist_verified_part(&part_path, &unverified_path)?;
+                eprintln!(
+                    "[eac-launcher][download] unverified download (no expected SHA-256, integrity not verified): path={} sha256={} size={}",
+                    unverified_path.display(),
+                    actual_hash,
+                    total_size
+                );
+                return Ok(json!({
+                    "path": text(&unverified_path),
+                    "sha256": actual_hash,
+                    "size": total_size,
+                    "verified": false,
+                    "integrityWarning": "本次下载未提供预期 SHA-256，未做完整性校验"
+                }));
+            }
         }
-        output.as_file().sync_all().map_err(|e| e.to_string())?;
-        let path = self.path(format!("cache/downloads/{hash}-{filename}"))?;
-        output.persist(&path).map_err(|e| e.to_string())?;
-        Ok(json!({"path":text(&path),"sha256":hash,"size":size}))
+
+        Err(errors
+            .into_iter()
+            .reduce(|acc, item| format!("{acc}; {item}"))
+            .unwrap_or_else(|| "Download failed with no available sources".into()))
     }
 
-    // 应用内自更新：下载发布版安装器（可选 sha256 校验），分离进程启动后返回路径。
+    // 应用内自更新：强制校验预期 SHA-256 摘要后下载发布版安装器，分离进程启动后返回路径。
     // 真正的安装与替换由 NSIS 安装器完成；前端随后退出当前应用。
     pub(crate) fn install_update(&self, payload: &Value) -> Result<Value> {
-        let url = required(payload, "url")?;
+        let sources = extract_download_sources(payload)?;
         let filename = required(payload, "filename")?;
         if !filename.to_ascii_lowercase().ends_with(".exe") {
             return Err("Self-update expects the NSIS .exe installer asset".into());
         }
-        let expected = optional(payload, "sha256")?;
-        let download = self.download(url, filename, expected)?;
+        let expected = required(payload, "sha256").map_err(|_| {
+            "Self-update requires a trusted sha256 digest; refusing to execute an unverified installer"
+        })?;
+        files::valid_digest(expected)?;
+        let download = self.download_sources(&sources, filename, Some(expected))?;
+        if download["verified"].as_bool() != Some(true) {
+            return Err("Self-update download did not complete SHA-256 verification".into());
+        }
         let installer = std::path::PathBuf::from(required(&download, "path")?);
         let mut command = process::command(&installer);
         command
@@ -533,6 +814,138 @@ fn find_executables(path: &Path, results: &mut Vec<std::path::PathBuf>) -> Resul
     Ok(())
 }
 
+pub(crate) struct TransferResponse {
+    pub status: StatusCode,
+    pub content_length: Option<u64>,
+    pub content_range: Option<String>,
+    pub body: Box<dyn Read>,
+}
+
+pub(crate) fn optional_url_list(payload: &Value, key: &str) -> Result<Vec<String>> {
+    let Some(raw_list) = payload.get(key) else {
+        return Ok(Vec::new());
+    };
+    if raw_list.is_null() {
+        return Ok(Vec::new());
+    }
+    let items = raw_list
+        .as_array()
+        .ok_or_else(|| format!("{key} must be an array of HTTPS URLs"))?;
+    let mut urls = Vec::with_capacity(items.len());
+    for item in items {
+        let raw = item
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .ok_or_else(|| format!("Each entry in {key} must be a nonempty HTTPS URL"))?;
+        validate_download_url(raw)?;
+        urls.push(raw.to_string());
+    }
+    Ok(urls)
+}
+
+pub(crate) fn extract_download_sources(payload: &Value) -> Result<Vec<String>> {
+    let primary = optional(payload, "url")?;
+    let urls = optional_url_list(payload, "urls")?;
+    let mirrors = optional_url_list(payload, "mirrors")?;
+    let mut combined = Vec::new();
+    if let Some(first) = primary {
+        combined.push(first.to_string());
+    }
+    combined.extend(urls);
+    combined.extend(mirrors);
+    if combined.is_empty() {
+        required(payload, "url")?;
+    }
+    normalize_download_sources(&combined)
+}
+
+fn normalize_download_sources(raw_sources: &[String]) -> Result<Vec<String>> {
+    if raw_sources.is_empty() {
+        return Err("At least one download URL is required".into());
+    }
+    if raw_sources.len() > 16 {
+        return Err("Too many candidate download URLs (max 16)".into());
+    }
+    let mut unique = Vec::with_capacity(raw_sources.len());
+    for raw in raw_sources {
+        let trimmed = raw.trim();
+        validate_download_url(trimmed)?;
+        if !unique.iter().any(|existing: &String| existing == trimmed) {
+            unique.push(trimmed.to_string());
+        }
+    }
+    Ok(unique)
+}
+
+pub(crate) fn parse_content_range(raw: &str) -> Option<(u64, u64, Option<u64>)> {
+    let trimmed = raw.trim();
+    let rest = trimmed
+        .strip_prefix("bytes ")
+        .or_else(|| trimmed.strip_prefix("BYTES "))?;
+    let (span, total_raw) = rest.split_once('/')?;
+    let (start_raw, end_raw) = span.trim().split_once('-')?;
+    let start: u64 = start_raw.trim().parse().ok()?;
+    let end: u64 = end_raw.trim().parse().ok()?;
+    if start > end {
+        return None;
+    }
+    let total = if total_raw.trim() == "*" {
+        None
+    } else {
+        let parsed: u64 = total_raw.trim().parse().ok()?;
+        if end >= parsed {
+            return None;
+        }
+        Some(parsed)
+    };
+    Some((start, end, total))
+}
+
+fn partial_download_key(url: &str, filename: &str, expected: Option<&str>) -> String {
+    let mut hasher = Sha256::new();
+    match expected {
+        Some(hash) => {
+            hasher.update(b"sha256:");
+            hasher.update(hash.to_ascii_lowercase().as_bytes());
+        }
+        None => {
+            hasher.update(b"url:");
+            hasher.update(url.as_bytes());
+        }
+    }
+    hasher.update(b"\0");
+    hasher.update(filename.as_bytes());
+    let digest = format!("{:x}", hasher.finalize());
+    digest[..24].to_string()
+}
+
+fn verify_file_sha256(path: &Path) -> Result<(String, u64)> {
+    let mut file = File::open(path).map_err(|e| e.to_string())?;
+    let mut hasher = Sha256::new();
+    let mut size = 0u64;
+    let mut buf = [0u8; 64 * 1024];
+    loop {
+        let count = file.read(&mut buf).map_err(|e| e.to_string())?;
+        if count == 0 {
+            break;
+        }
+        size += count as u64;
+        if size > MAX_DOWNLOAD {
+            return Err("Download exceeds 2 GiB limit".into());
+        }
+        hasher.update(&buf[..count]);
+    }
+    Ok((format!("{:x}", hasher.finalize()), size))
+}
+
+fn persist_verified_part(part_path: &Path, final_path: &Path) -> Result<()> {
+    if final_path.exists() {
+        let _ = fs::remove_file(final_path);
+    }
+    fs::rename(part_path, final_path).map_err(|e| e.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -579,5 +992,430 @@ mod tests {
         );
         std::env::remove_var("EAC_GITHUB_PROXY");
         std::env::remove_var("EAC_HTTPS_PROXY");
+    }
+
+    struct FailingPrefixReader {
+        data: Vec<u8>,
+        pos: usize,
+        fail_at: usize,
+    }
+
+    impl Read for FailingPrefixReader {
+        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+            if self.pos >= self.fail_at {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::ConnectionReset,
+                    "simulated mid-stream network drop",
+                ));
+            }
+            let remaining = (self.fail_at - self.pos).min(buf.len());
+            buf[..remaining].copy_from_slice(&self.data[self.pos..self.pos + remaining]);
+            self.pos += remaining;
+            Ok(remaining)
+        }
+    }
+
+    fn sha256_hex(bytes: &[u8]) -> String {
+        let mut h = Sha256::new();
+        h.update(bytes);
+        format!("{:x}", h.finalize())
+    }
+
+    #[test]
+    fn parse_content_range_validates_bounds() {
+        assert_eq!(
+            parse_content_range("bytes 0-99/200"),
+            Some((0, 99, Some(200)))
+        );
+        assert_eq!(parse_content_range("bytes 100-199/*"), Some((100, 199, None)));
+        assert_eq!(parse_content_range("bytes 200-100/300"), None);
+        assert_eq!(parse_content_range("bytes 100-200/200"), None);
+        assert_eq!(parse_content_range("items 0-10/20"), None);
+    }
+
+    #[test]
+    fn download_resumes_interrupted_stream_via_http_206_and_verifies_sha256() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::at(dir.path()).unwrap();
+        let payload: Vec<u8> = (0..150_000).map(|i| (i % 251) as u8).collect();
+        let expected_sha = sha256_hex(&payload);
+        let url = "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1.0.0/bundle.dshpack".to_string();
+
+        let mut calls = Vec::new();
+        let result = engine
+            .download_with_fetcher(
+                std::slice::from_ref(&url),
+                "bundle.dshpack",
+                Some(&expected_sha),
+                |_, offset| {
+                    calls.push(offset);
+                    if calls.len() == 1 {
+                        Ok(TransferResponse {
+                            status: StatusCode::OK,
+                            content_length: Some(payload.len() as u64),
+                            content_range: None,
+                            body: Box::new(FailingPrefixReader {
+                                data: payload.clone(),
+                                pos: 0,
+                                fail_at: 80_000,
+                            }),
+                        })
+                    } else {
+                        let rest = payload[offset as usize..].to_vec();
+                        Ok(TransferResponse {
+                            status: StatusCode::PARTIAL_CONTENT,
+                            content_length: Some(rest.len() as u64),
+                            content_range: Some(format!(
+                                "bytes {offset}-{}/{}",
+                                payload.len() - 1,
+                                payload.len()
+                            )),
+                            body: Box::new(std::io::Cursor::new(rest)),
+                        })
+                    }
+                },
+            )
+            .expect("resume should complete download");
+
+        assert_eq!(calls, vec![0, 80_000]);
+        assert_eq!(result["sha256"], expected_sha);
+        assert_eq!(result["size"], payload.len() as u64);
+        let saved = fs::read(result["path"].as_str().unwrap()).unwrap();
+        assert_eq!(saved, payload);
+
+        // Repeat call hits verified local cache with zero network requests.
+        let cached = engine
+            .download_with_fetcher(
+                std::slice::from_ref(&url),
+                "bundle.dshpack",
+                Some(&expected_sha),
+                |_, _| panic!("cached file must skip network transfer"),
+            )
+            .expect("cache hit");
+        assert_eq!(cached["cached"], true);
+        assert_eq!(cached["sha256"], expected_sha);
+    }
+
+    #[test]
+    fn download_falls_back_across_mirrors_preserving_verified_partial_progress() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::at(dir.path()).unwrap();
+        let payload = b"multi-source-resumable-kernel-archive-bytes-0123456789".to_vec();
+        let expected_sha = sha256_hex(&payload);
+        let sources = vec![
+            "https://download.deepseek.com/desktop/broken-primary.tgz".to_string(),
+            "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1.0.0/partial-mirror.tgz"
+                .to_string(),
+            "https://cdn.jsdelivr.net/gh/Ebony-Vinyl/EAC-Desktop/final-mirror.tgz".to_string(),
+        ];
+
+        let mut trace = Vec::new();
+        let result = engine
+            .download_with_fetcher(&sources, "kernel.tgz", Some(&expected_sha), |url, offset| {
+                trace.push((url.to_string(), offset));
+                if url.contains("broken-primary") {
+                    Ok(TransferResponse {
+                        status: StatusCode::NOT_FOUND,
+                        content_length: None,
+                        content_range: None,
+                        body: Box::new(std::io::empty()),
+                    })
+                } else if url.contains("partial-mirror") {
+                    // Fails mid-way on first attempt, then returns 503 on subsequent attempts.
+                    if offset == 0 {
+                        Ok(TransferResponse {
+                            status: StatusCode::OK,
+                            content_length: Some(payload.len() as u64),
+                            content_range: None,
+                            body: Box::new(FailingPrefixReader {
+                                data: payload.clone(),
+                                pos: 0,
+                                fail_at: 20,
+                            }),
+                        })
+                    } else {
+                        Err("mirror upstream timeout".into())
+                    }
+                } else {
+                    // Third mirror seamlessly resumes from byte 20!
+                    let rest = payload[offset as usize..].to_vec();
+                    Ok(TransferResponse {
+                        status: StatusCode::PARTIAL_CONTENT,
+                        content_length: Some(rest.len() as u64),
+                        content_range: Some(format!(
+                            "bytes {offset}-{}/{}",
+                            payload.len() - 1,
+                            payload.len()
+                        )),
+                        body: Box::new(std::io::Cursor::new(rest)),
+                    })
+                }
+            })
+            .expect("third mirror should finish resumed download");
+
+        assert_eq!(result["sha256"], expected_sha);
+        assert_eq!(trace.first().unwrap().1, 0);
+        assert_eq!(trace.last().unwrap().1, 20, "third mirror resumed from partial offset 20");
+    }
+
+    #[test]
+    fn download_truncates_partial_when_server_ignores_range_with_200_and_discards_corrupted_sha() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::at(dir.path()).unwrap();
+        let good = b"authentic-release-payload-content".to_vec();
+        let expected_sha = sha256_hex(&good);
+        let sources = vec![
+            "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1.0.0/tampered.tgz"
+                .to_string(),
+            "https://cdn.jsdelivr.net/gh/Ebony-Vinyl/EAC-Desktop/no-range.tgz".to_string(),
+        ];
+
+        // First: verify that if all sources serve tampered bytes, .part is purged and error is reported.
+        let bad_only = &sources[..1];
+        let err = engine
+            .download_with_fetcher(bad_only, "pkg.tgz", Some(&expected_sha), |_, _| {
+                Ok(TransferResponse {
+                    status: StatusCode::OK,
+                    content_length: Some(7),
+                    content_range: None,
+                    body: Box::new(std::io::Cursor::new(b"corrupt".to_vec())),
+                })
+            })
+            .unwrap_err();
+        assert!(err.contains("SHA-256 mismatch"), "got {err}");
+        let partials: Vec<_> = fs::read_dir(engine.path("cache/downloads").unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| e.file_name().to_string_lossy().ends_with(".part"))
+            .collect();
+        assert!(partials.is_empty(), "corrupted .part must be discarded immediately");
+
+        // Second: tampered mirror fails SHA-256 -> automatically switches to healthy mirror
+        // that ignores Range and returns full 200 OK after an initial partial drop.
+        let mut second_calls = 0usize;
+        let ok = engine
+            .download_with_fetcher(&sources, "pkg.tgz", Some(&expected_sha), |url, _offset| {
+                if url.contains("tampered") {
+                    Ok(TransferResponse {
+                        status: StatusCode::OK,
+                        content_length: Some(7),
+                        content_range: None,
+                        body: Box::new(std::io::Cursor::new(b"corrupt".to_vec())),
+                    })
+                } else {
+                    second_calls += 1;
+                    if second_calls == 1 {
+                        Ok(TransferResponse {
+                            status: StatusCode::OK,
+                            content_length: Some(good.len() as u64),
+                            content_range: None,
+                            body: Box::new(FailingPrefixReader {
+                                data: good.clone(),
+                                pos: 0,
+                                fail_at: 10,
+                            }),
+                        })
+                    } else {
+                        // Server ignores Range header and returns full 200 OK instead of 206.
+                        Ok(TransferResponse {
+                            status: StatusCode::OK,
+                            content_length: Some(good.len() as u64),
+                            content_range: None,
+                            body: Box::new(std::io::Cursor::new(good.clone())),
+                        })
+                    }
+                }
+            })
+            .expect("healthy mirror returning 200 OK should truncate and succeed");
+        assert_eq!(ok["sha256"], expected_sha);
+        assert_eq!(fs::read(ok["path"].as_str().unwrap()).unwrap(), good);
+    }
+
+    #[test]
+    fn extract_download_sources_deduplicates_and_enforces_https_validation() {
+        let valid = extract_download_sources(&json!({
+            "url": "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1/a.zip",
+            "urls": [
+                "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1/a.zip",
+                "https://cdn.jsdelivr.net/gh/Ebony-Vinyl/EAC-Desktop/a.zip"
+            ]
+        }))
+        .unwrap();
+        assert_eq!(valid.len(), 2);
+
+        assert!(extract_download_sources(&json!({
+            "url": "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1/a.zip",
+            "mirrors": ["http://insecure-mirror.example.com/a.zip"]
+        }))
+        .is_err());
+    }
+
+    #[test]
+    fn install_update_rejects_missing_or_invalid_sha256() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::at(dir.path()).unwrap();
+
+        let missing = engine
+            .install_update(&json!({
+                "url": "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1.0.0/EAC-Setup.exe",
+                "filename": "EAC-Setup.exe"
+            }))
+            .unwrap_err();
+        assert!(
+            missing.contains("sha256") || missing.contains("unverified"),
+            "missing sha256 must be rejected before download: {missing}"
+        );
+
+        let invalid = engine
+            .install_update(&json!({
+                "url": "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1.0.0/EAC-Setup.exe",
+                "filename": "EAC-Setup.exe",
+                "sha256": "not-a-valid-hex-digest"
+            }))
+            .unwrap_err();
+        assert!(!invalid.is_empty(), "malformed sha256 must be rejected");
+    }
+
+    #[test]
+    fn download_without_expected_sha256_uses_unverified_prefix_and_marks_unverified() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::at(dir.path()).unwrap();
+        let payload = b"unverified-download-payload-bytes".to_vec();
+        let actual_sha = sha256_hex(&payload);
+        let url =
+            "https://download.deepseek.com/desktop/dsh-latest-windows-x64.exe".to_string();
+
+        let result = engine
+            .download_with_fetcher(
+                std::slice::from_ref(&url),
+                "dsh-latest-windows-x64.exe",
+                None,
+                |_, _| {
+                    Ok(TransferResponse {
+                        status: StatusCode::OK,
+                        content_length: Some(payload.len() as u64),
+                        content_range: None,
+                        body: Box::new(std::io::Cursor::new(payload.clone())),
+                    })
+                },
+            )
+            .expect("unverified download should still succeed for generic download_asset");
+
+        assert_eq!(result["verified"], false);
+        assert!(
+            result["integrityWarning"]
+                .as_str()
+                .is_some_and(|w| !w.is_empty()),
+            "unverified download must explicitly include integrityWarning"
+        );
+        let saved_path = std::path::PathBuf::from(result["path"].as_str().unwrap());
+        let file_name = saved_path.file_name().unwrap().to_string_lossy();
+        assert!(
+            file_name.starts_with("unverified-"),
+            "unverified artifact must use unverified- prefix, got {file_name}"
+        );
+        assert!(
+            !file_name.contains(&actual_sha),
+            "unverified artifact filename must not impersonate verified SHA-256 cache name: {file_name}"
+        );
+        assert_eq!(fs::read(&saved_path).unwrap(), payload);
+    }
+
+    #[test]
+    fn download_rejects_truncated_http_206_when_total_exceeds_offset_plus_span() {
+        let dir = tempfile::tempdir().unwrap();
+        let engine = Engine::at(dir.path()).unwrap();
+        let payload: Vec<u8> = (0..60).map(|i| i as u8).collect();
+        let url =
+            "https://github.com/Ebony-Vinyl/EAC-Desktop/releases/download/v1.0.0/truncated.bin"
+                .to_string();
+
+        // 1) 第一次下到 20 字节断开，随后服务端在 HTTP 206 返回 bytes 20-39/60（提前截断，仅 40/60 字节）
+        //    无摘要情况下绝不得把 40 字节当成完整文件落盘！
+        let mut stage = 0usize;
+        let err = engine
+            .download_with_fetcher(
+                std::slice::from_ref(&url),
+                "truncated.bin",
+                None,
+                |_, offset| {
+                    stage += 1;
+                    if stage == 1 {
+                        Ok(TransferResponse {
+                            status: StatusCode::OK,
+                            content_length: Some(payload.len() as u64),
+                            content_range: None,
+                            body: Box::new(FailingPrefixReader {
+                                data: payload.clone(),
+                                pos: 0,
+                                fail_at: 20,
+                            }),
+                        })
+                    } else {
+                        // 始终返回提前截断的 10 字节分片（不触达 total=60）
+                        let end = (offset + 9).min(49);
+                        let chunk = payload[offset as usize..=end as usize].to_vec();
+                        Ok(TransferResponse {
+                            status: StatusCode::PARTIAL_CONTENT,
+                            content_length: Some(chunk.len() as u64),
+                            content_range: Some(format!("bytes {offset}-{end}/{}", payload.len())),
+                            body: Box::new(std::io::Cursor::new(chunk)),
+                        })
+                    }
+                },
+            )
+            .unwrap_err();
+        assert!(
+            err.contains("truncated transfer"),
+            "truncated 206 final segment must be rejected: {err}"
+        );
+
+        // 2) 当后续续传真正补齐到 offset + span == total (60/60) 时正常完成。
+        let mut stage2 = 0usize;
+        let ok = engine
+            .download_with_fetcher(
+                std::slice::from_ref(&url),
+                "truncated-recover.bin",
+                None,
+                |_, offset| {
+                    stage2 += 1;
+                    if stage2 == 1 {
+                        Ok(TransferResponse {
+                            status: StatusCode::OK,
+                            content_length: Some(payload.len() as u64),
+                            content_range: None,
+                            body: Box::new(FailingPrefixReader {
+                                data: payload.clone(),
+                                pos: 0,
+                                fail_at: 20,
+                            }),
+                        })
+                    } else if stage2 == 2 {
+                        let chunk = payload[offset as usize..40].to_vec();
+                        Ok(TransferResponse {
+                            status: StatusCode::PARTIAL_CONTENT,
+                            content_length: Some(chunk.len() as u64),
+                            content_range: Some(format!("bytes {offset}-39/{}", payload.len())),
+                            body: Box::new(std::io::Cursor::new(chunk)),
+                        })
+                    } else {
+                        let chunk = payload[offset as usize..].to_vec();
+                        Ok(TransferResponse {
+                            status: StatusCode::PARTIAL_CONTENT,
+                            content_length: Some(chunk.len() as u64),
+                            content_range: Some(format!(
+                                "bytes {offset}-{}/{}",
+                                payload.len() - 1,
+                                payload.len()
+                            )),
+                            body: Box::new(std::io::Cursor::new(chunk)),
+                        })
+                    }
+                },
+            )
+            .expect("multi-chunk 206 reaching Content-Range total must succeed");
+        assert_eq!(ok["size"], payload.len() as u64);
+        assert_eq!(ok["verified"], false);
+        assert_eq!(fs::read(ok["path"].as_str().unwrap()).unwrap(), payload);
     }
 }

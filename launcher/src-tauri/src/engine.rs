@@ -869,44 +869,65 @@ impl Engine {
         Ok(manifests)
     }
 
-    // 官方评估器：与 preflight 完全相同的脚本与参数，仅作用于探针目录。
-    fn probe_evaluate(&self, kernel: &Kernel, profile: &Path, manifests: &[Value], home: &Path, workspace: &Path) -> Result<Vec<Value>> {
-        let script = r#"
-import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
-const [anchor, version, raw, profile] = process.argv.slice(1);
-const require = createRequire(pathToFileURL(anchor));
-const {evaluatePluginCompatibility, readProfileCompatibility} = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')));
-const exemptions = typeof readProfileCompatibility === 'function' ? readProfileCompatibility(profile).exemptions : {};
-const manifests = JSON.parse(raw);
-const results = manifests.map(m => ({
-  name: m.name,
-  known: Object.keys(m.peerDependencies ?? {}).some(k => k === '@deepseek-ai/dsh' || k.startsWith('@deepseek-ai/dsh-')),
-  issue: evaluatePluginCompatibility(m, exemptions, version) ?? null
-}));
-console.log(JSON.stringify(results));
-"#;
-        let mut command = process::command(files::external(Path::new(&kernel.node_path)));
-        command
-            .args(["--input-type=module", "--eval", script])
-            .arg(files::external(&Path::new(&kernel.path).join("package.json")))
-            .arg(&kernel.version)
-            .arg(serde_json::to_string(manifests).map_err(|e| e.to_string())?)
-            .arg(files::external(profile))
-            .env("DSH_HOME", files::external(home))
-            .env("DSH_EAC_DATA_ROOT", files::external(&home.join("eac-desktop")))
-            .env("DSH_DESKTOP_USER_DATA_DIR", files::external(&home.join("desktop-user-data")))
-            .env("npm_config_store_dir", files::external(&home.join(".pnpm-store")))
-            .env("npm_config_cache", files::external(&home.join(".npm-cache")))
-            .env_remove("NODE_PATH")
-            .env_remove("NODE_OPTIONS")
-            .current_dir(files::external(workspace));
-        add_node_path(
-            &mut command,
-            files::external(Path::new(&kernel.node_path)).as_path(),
-            Some(files::external(Path::new(&kernel.path)).as_path()),
-        )?;
-        let output = self.capture(&mut command, Duration::from_secs(60))?;
+    // 官方评估器：与 preflight 共用临时文件清单传递，避免插件过多时触发 Windows 32,767 字符命令行上限。
+    fn probe_evaluate(
+        &self,
+        kernel: &Kernel,
+        profile: &Path,
+        manifests: &[Value],
+        home: &Path,
+        workspace: &Path,
+    ) -> Result<Vec<Value>> {
+        self.evaluate_manifests_with_kernel(
+            kernel,
+            profile,
+            manifests,
+            Duration::from_secs(60),
+            |command| {
+                command
+                    .env("DSH_HOME", files::external(home))
+                    .env("DSH_EAC_DATA_ROOT", files::external(&home.join("eac-desktop")))
+                    .env(
+                        "DSH_DESKTOP_USER_DATA_DIR",
+                        files::external(&home.join("desktop-user-data")),
+                    )
+                    .env("npm_config_store_dir", files::external(&home.join(".pnpm-store")))
+                    .env("npm_config_cache", files::external(&home.join(".npm-cache")))
+                    .env_remove("NODE_PATH")
+                    .env_remove("NODE_OPTIONS")
+                    .current_dir(files::external(workspace));
+                add_node_path(
+                    command,
+                    files::external(Path::new(&kernel.node_path)).as_path(),
+                    Some(files::external(Path::new(&kernel.path)).as_path()),
+                )
+            },
+        )
+    }
+
+    pub(crate) fn evaluate_manifests_with_kernel(
+        &self,
+        kernel: &Kernel,
+        profile: &Path,
+        manifests: &[Value],
+        timeout: Duration,
+        configure: impl FnOnce(&mut Command) -> Result<()>,
+    ) -> Result<Vec<Value>> {
+        if manifests.is_empty() {
+            return Ok(Vec::new());
+        }
+        let manifest_path = self.path(format!("cache/preflight-manifests-{}.json", new_id()))?;
+        let _cleanup = TempFileGuard(manifest_path.clone());
+        files::atomic_json(&manifest_path, &manifests)?;
+        let mut command = build_compatibility_eval_command(kernel, &manifest_path, profile);
+        configure(&mut command)?;
+        if command_line_char_len(&command) > 32_000 {
+            return Err(
+                "启动预检参数超过系统命令行长度上限（32,000 字符），请缩短实例或内核安装目录路径后重试"
+                    .into(),
+            );
+        }
+        let output = self.capture(&mut command, timeout)?;
         serde_json::from_str(output.trim())
             .map_err(|error| format!("Official compatibility evaluator failed: {error}"))
     }
@@ -1476,39 +1497,18 @@ console.log(JSON.stringify(results));
                 manifests.push(files::read_json::<Value>(&path)?);
             }
         }
-        let script = r#"
-import { createRequire } from 'node:module';
-import { pathToFileURL } from 'node:url';
-const [anchor, version, raw, profile] = process.argv.slice(1);
-const require = createRequire(pathToFileURL(anchor));
-const {evaluatePluginCompatibility, readProfileCompatibility} = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')));
-const exemptions = typeof readProfileCompatibility === 'function' ? readProfileCompatibility(profile).exemptions : {};
-const manifests = JSON.parse(raw);
-const results = manifests.map(m => ({
-  name: m.name,
-  known: Object.keys(m.peerDependencies ?? {}).some(k => k === '@deepseek-ai/dsh' || k.startsWith('@deepseek-ai/dsh-')),
-  issue: evaluatePluginCompatibility(m, exemptions, version) ?? null
-}));
-console.log(JSON.stringify(results));
-"#;
-        let mut command = process::command(files::external(Path::new(&kernel.node_path)));
-        command
-            .args(["--input-type=module", "--eval", script])
-            .arg(files::external(
-                &Path::new(&kernel.path).join("package.json"),
-            ))
-            .arg(&kernel.version)
-            .arg(serde_json::to_string(&manifests).map_err(|e| e.to_string())?)
-            .arg(files::external(&profile));
-        self.isolate_command(
-            &mut command,
-            instance,
-            Path::new(&instance.home),
-            Some(kernel),
+        if manifests.is_empty() {
+            return Ok(());
+        }
+        let results = self.evaluate_manifests_with_kernel(
+            kernel,
+            &profile,
+            &manifests,
+            Duration::from_secs(30),
+            |command| {
+                self.isolate_command(command, instance, Path::new(&instance.home), Some(kernel))
+            },
         )?;
-        let output = self.capture(&mut command, Duration::from_secs(30))?;
-        let results: Vec<Value> = serde_json::from_str(output.trim())
-            .map_err(|e| format!("Official compatibility evaluator failed: {e}"))?;
         let incompatible: Vec<_> = results.iter().filter(|r| !r["issue"].is_null()).collect();
         if !incompatible.is_empty() {
             return Err(format!(
@@ -1553,11 +1553,14 @@ console.log(JSON.stringify(results));
                 self.check_catalog_block(reference)?;
                 installed_key = Some(achievement_plugin_key(reference));
                 let expected = optional(payload, "expectedSha256")?;
-                let reference = if let Some(hash) = expected {
+                let mirror_urls = crate::network::optional_url_list(payload, "mirrorUrls")?;
+                let reference = if expected.is_some() || !mirror_urls.is_empty() {
                     if !reference.starts_with("https://") {
-                        return Err("expectedSha256 requires an HTTPS tarball; a registry/git ref has no stable archive bytes".into());
+                        return Err("expectedSha256 or mirrorUrls requires an HTTPS tarball; a registry/git ref has no stable archive bytes".into());
                     }
-                    let file = self.download(reference, "plugin.tgz", Some(hash))?;
+                    let mut sources = vec![reference.to_string()];
+                    sources.extend(mirror_urls);
+                    let file = self.download_sources(&sources, "plugin.tgz", expected)?;
                     format!(
                         "file:{}",
                         files::external(Path::new(required(&file, "path")?))
@@ -2036,6 +2039,56 @@ writeProfileBundles(profileDir, inventory.manifest, bundles);
         })?;
         Ok(destination)
     }
+}
+
+const COMPATIBILITY_EVAL_SCRIPT: &str = r#"
+import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { pathToFileURL } from 'node:url';
+const [anchor, version, manifestPath, profile] = process.argv.slice(1);
+const require = createRequire(pathToFileURL(anchor));
+const { evaluatePluginCompatibility, readProfileCompatibility } = await import(pathToFileURL(require.resolve('@deepseek-ai/dsh-app-boot')));
+const exemptions = typeof readProfileCompatibility === 'function' ? readProfileCompatibility(profile).exemptions : {};
+const manifests = JSON.parse(readFileSync(manifestPath, 'utf8'));
+const results = manifests.map(m => ({
+  name: m.name,
+  known: Object.keys(m.peerDependencies ?? {}).some(k => k === '@deepseek-ai/dsh' || k.startsWith('@deepseek-ai/dsh-')),
+  issue: evaluatePluginCompatibility(m, exemptions, version) ?? null
+}));
+console.log(JSON.stringify(results));
+"#;
+
+struct TempFileGuard(PathBuf);
+
+impl Drop for TempFileGuard {
+    fn drop(&mut self) {
+        let _ = fs::remove_file(&self.0);
+    }
+}
+
+fn build_compatibility_eval_command(
+    kernel: &Kernel,
+    manifest_path: &Path,
+    profile: &Path,
+) -> Command {
+    let mut command = process::command(files::external(Path::new(&kernel.node_path)));
+    command
+        .args(["--input-type=module", "--eval", COMPATIBILITY_EVAL_SCRIPT])
+        .arg(files::external(
+            &Path::new(&kernel.path).join("package.json"),
+        ))
+        .arg(&kernel.version)
+        .arg(files::external(manifest_path))
+        .arg(files::external(profile));
+    command
+}
+
+fn command_line_char_len(command: &Command) -> usize {
+    let mut total = command.get_program().to_string_lossy().chars().count() + 2;
+    for arg in command.get_args() {
+        total += arg.to_string_lossy().chars().count() + 3;
+    }
+    total
 }
 
 pub(crate) fn required<'a>(value: &'a Value, key: &str) -> Result<&'a str> {
@@ -2727,5 +2780,131 @@ mod tests {
         engine.prune_trash().unwrap();
         let remaining = fs::read_dir(&trash).unwrap().count();
         assert!(remaining <= 20, "trash kept {remaining} entries");
+    }
+
+    // Issue #496 回归：大量大体积插件 package.json 走临时文件传参，命令行长度恒定且临时文件零残留。
+    #[test]
+    fn compatibility_evaluator_handles_large_plugin_sets_via_temp_file() {
+        let (_root, engine) = test_engine();
+        let node = discover_node().expect("Node 24+ is available on test machine");
+        let kernel_dir = engine.path("kernels/mock-0.2.1").unwrap();
+        let boot_dir = kernel_dir.join("node_modules/@deepseek-ai/dsh-app-boot");
+        fs::create_dir_all(&boot_dir).unwrap();
+        fs::write(
+            kernel_dir.join("package.json"),
+            br#"{"name":"@deepseek-ai/dsh","version":"0.2.1-rc.2"}"#,
+        )
+        .unwrap();
+        fs::write(
+            boot_dir.join("package.json"),
+            br#"{"name":"@deepseek-ai/dsh-app-boot","version":"0.2.1-rc.2","type":"module","main":"index.js"}"#,
+        )
+        .unwrap();
+        fs::write(
+            boot_dir.join("index.js"),
+            r#"
+export function readProfileCompatibility() { return { exemptions: {} }; }
+export function evaluatePluginCompatibility(manifest, _exemptions, kernelVersion) {
+  return manifest.name === 'incompatible-plugin' ? `unsupported on ${kernelVersion}` : null;
+}
+"#,
+        )
+        .unwrap();
+
+        let profile = engine.path("instances/mock-profile/web").unwrap();
+        fs::create_dir_all(&profile).unwrap();
+        let workspace = tempfile::tempdir().unwrap();
+
+        let kernel = Kernel {
+            id: new_id(),
+            version: "0.2.1-rc.2".into(),
+            path: text(&kernel_dir),
+            node_path: text(&node),
+            cli_path: text(&kernel_dir.join("bin.js")),
+            installed_at: now(),
+            source: "registered-local".into(),
+            fingerprint: None,
+        };
+
+        // 45 plugins × ~2.2 KB metadata ≈ 99 KB (> 3× Windows 32,767-char command-line ceiling).
+        let padding = "x".repeat(2048);
+        let manifests: Vec<Value> = (0..45)
+            .map(|idx| {
+                json!({
+                    "name": format!("@scope/plugin-{idx:02}"),
+                    "version": "1.2.3",
+                    "description": padding,
+                    "exports": { ".": "./lib/index.js", "./client": "./lib/client.js" },
+                    "peerDependencies": { "@deepseek-ai/dsh": "^0.2.0-rc.1" }
+                })
+            })
+            .collect();
+        let serialized_len = serde_json::to_string(&manifests).unwrap().len();
+        assert!(
+            serialized_len > 90_000,
+            "fixture must exceed Win32 CreateProcess limit, got {serialized_len}"
+        );
+
+        let sample_cmd = build_compatibility_eval_command(
+            &kernel,
+            &engine.path("cache/preflight-manifests-sample.json").unwrap(),
+            &profile,
+        );
+        let cmd_len = command_line_char_len(&sample_cmd);
+        assert!(
+            cmd_len < 2_000,
+            "command line must remain small regardless of plugin count, got {cmd_len}"
+        );
+
+        let results = engine
+            .evaluate_manifests_with_kernel(
+                &kernel,
+                &profile,
+                &manifests,
+                Duration::from_secs(30),
+                |cmd| {
+                    cmd.current_dir(files::external(workspace.path()));
+                    Ok(())
+                },
+            )
+            .expect("45-plugin preflight should succeed without os error 206");
+        assert_eq!(results.len(), 45);
+        assert!(results.iter().all(|r| r["known"] == true && r["issue"].is_null()));
+
+        let leftover_ok: Vec<_> = fs::read_dir(engine.path("cache").unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("preflight-manifests-")
+            })
+            .collect();
+        assert!(leftover_ok.is_empty(), "temp manifest must be cleaned up on success");
+
+        // Failure path cleanup: broken kernel path causes Node evaluator to fail, temp file still removed.
+        let broken_kernel = Kernel {
+            path: text(&engine.path("kernels/missing-kernel").unwrap()),
+            ..kernel
+        };
+        assert!(engine
+            .evaluate_manifests_with_kernel(
+                &broken_kernel,
+                &profile,
+                &manifests,
+                Duration::from_secs(15),
+                |_| Ok(()),
+            )
+            .is_err());
+        let leftover_err: Vec<_> = fs::read_dir(engine.path("cache").unwrap())
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.file_name()
+                    .to_string_lossy()
+                    .starts_with("preflight-manifests-")
+            })
+            .collect();
+        assert!(leftover_err.is_empty(), "temp manifest must be cleaned up on failure");
     }
 }
