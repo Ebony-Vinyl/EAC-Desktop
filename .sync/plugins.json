@@ -616,6 +616,44 @@
         "reviewOnChange": true
       },
       "owner": "desktop-plugins"
+    },
+    {
+      "id": "mojobox-manager",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-mojobox",
+      "packageName": "dsh-plugin-mojobox",
+      "class": "follow-upstream",
+      "source": {
+        "kind": "github",
+        "name": "lanyun077/Mojobox-Installer",
+        "repository": "https://github.com/lanyun077/Mojobox-Installer"
+      },
+      "request": {
+        "mode": "exact",
+        "version": "0.0.1-p3.1",
+        "commit": "26d775a3a45cebeb4841e33073f20c71c9576881"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "lib/index.js",
+          "lib/client.js"
+        ],
+        "commands": []
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
     }
   ],
   "skins": [],

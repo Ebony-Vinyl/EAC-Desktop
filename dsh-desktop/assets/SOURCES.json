@@ -2867,7 +2867,7 @@
       }
     },
     {
-      "id": "C119",
+      "id": "C123",
       "line": "main",
       "name": "dsh-plugin-wallpaper-engine",
       "type": "plugin",
@@ -2916,7 +2916,6 @@
       "origin": "upstream",
       "version": "2.5.2",
       "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
-      "pathBaseline": "pr#487@8dd0c805e5d702e21e62a4c6d0239bcd555bce2a",
       "registryStatus": "注册表默认启用",
       "audit": {
         "verdict": "catalog-miss",

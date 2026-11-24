@@ -1,7 +1,7 @@
 {
   "generatedRegistry": "dsh-desktop/lib/desktop/plugin-sync-registry.ts",
   "manifest": ".sync/plugins.json",
-  "manifestRevision": "8c148032d0c895dbf518b54f466f163a500d13a2d6258d78f0ea635a5bb4464c",
+  "manifestRevision": "293355dc950ddd0d8b58e0fc8d17d6b97cafea8974e7bc687c98d67ccf8e5091",
   "plugins": {
     "client-file-changes": {
       "compatibility": {},
@@ -283,6 +283,37 @@
         "version": "0.1.0"
       },
       "sourceCommit": null
+    },
+    "mojobox-manager": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/index.js",
+          "lib/client.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 8,
+        "license": "MIT",
+        "packageName": "dsh-plugin-mojobox",
+        "packageVersion": "0.0.1-p3.1",
+        "path": "dsh-desktop/assets/plugins/dsh-plugin-mojobox",
+        "treeSha256": "1814a9e59c56ce8680491d687867d72b72034ece14161d1a69caa02af02135a2"
+      },
+      "manifestEntrySha256": "f60305a5ca89639686b87a7816a9daf518fbe3432dfa51921f905cdca8fbf62c",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "0.0.1-p3.1",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "commit": "26d775a3a45cebeb4841e33073f20c71c9576881",
+        "kind": "github",
+        "name": "lanyun077/Mojobox-Installer",
+        "repository": "https://github.com/lanyun077/Mojobox-Installer",
+        "sha256": "1814a9e59c56ce8680491d687867d72b72034ece14161d1a69caa02af02135a2",
+        "version": "0.0.1-p3.1"
+      },
+      "sourceCommit": "26d775a3a45cebeb4841e33073f20c71c9576881"
     },
     "our-free-model": {
       "compatibility": {},

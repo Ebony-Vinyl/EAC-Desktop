@@ -2,8 +2,8 @@
   "formatVersion": 1,
   "id": "dev.dsh-eac.desktop-recommended",
   "name": "DSH Desktop Recommended Plugins",
-  "version": "0.0.0-draft",
-  "description": "Draft manifest for the DSH Desktop recommended plugin set. Not publishable until every intended member has an immutable verified source.",
+  "version": "0.0.0-frozen",
+  "description": "[FROZEN] Frozen draft manifest for the DSH Desktop recommended plugin set. Publication is suspended while all 15 intended members remain source-pending and bundled Mojobox integration boundaries are being finalized; retained solely as the canonical recommended-tier ID list.",
   "license": "MIT",
   "requires": {
     "dsh": "0.1.3-alpha.1"
@@ -31,5 +31,6 @@
       "soul-md"
     ],
     "conflictsPending": true
-  }
+  },
+  "changelog": "2026-11-24: Explicitly frozen as 0.0.0-frozen. All 15 intended plugins remain source-pending in .sync/plugin-distribution.json; kept for recommended-tier ledger validation until immutable upstream sources and Mojobox pack ownership are resolved."
 }

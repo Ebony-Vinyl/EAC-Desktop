@@ -3,23 +3,15 @@
 日期：2026-09-16
 状态：已接受
 
-> **计数批注（2026-09-30，控制包 `工程控制/EAC-ISOLATION-SYNC-02`，ISO-001 初记，ISO-004 复核更新）**
+> **唯一事实来源规则（2026-11-24 收敛更新）**
 >
-> 本文声明的分发集合 `16 builtin / 14 recommended / 19 external = 49` 已随账本收敛
-> 不再权威。经 ISO-004 收敛后，`.sync/plugin-distribution.json` 实测为
-> **10 builtin / 15 recommended / 20 external = 45**：4 个插件退役（`dsh-skin-switch`、
-> `dsh-plugin-manager`、`dsh-terminal`、`dsh-file-drop-eac`），且 `balance` 由
-> builtin 改归 recommended、`plugin-wizard` 由 builtin 改归 external。**分发集合以账本
-> `.sync/plugin-distribution.json` 为准**（`plugin-sync.mjs validate` 强校验）。
+> 分发集合的实时条目与各层计数**唯一以账本 `.sync/plugin-distribution.json`（及 `.sync/policies.json` 中的 `pluginDistribution.expectedCounts`）为准**，由 `node dsh-desktop/scripts/plugin-sync.mjs validate` 与自动化门禁测试强校验零漂移。本 ADR 仅定义分层语义与迁移门禁，不再手写随版本演进的静态数字（早期基线与退役记录保留于 `.sync/plugin-inventory-history.json`）。
 
 ## 背景
 
-当前 `.sync/plugins.json` 是仓库随包资产的库存账本，覆盖 49 个插件、10 个皮肤和
-1 个 SDK fixture。它描述源码如何维护及当前实际存在的资产，不能同时充当迁移后仍
-保留 external 条目的生态目录。
+`.sync/plugins.json` 是仓库当前随包资产的库存账本（精确对应 `dsh-desktop/assets/plugins` 下的实物目录），描述源码如何维护及当前实际随包的资产，不能同时充当物理剥离后仍保留 `external` 条目的生态目录。
 
-Task 2.1 需要把 49 个现有插件划分为 16 个内置插件、14 个推荐包成员和 19 个外部
-按需插件，同时避免在独立发布源、安装通道和回滚能力就绪前丢失 EAC 补丁。
+因此需要将生态与配套插件按交付边界划分为 `builtin`（随包内置）、`recommended`（推荐包候选）与 `external`（外部按需安装）三层，同时避免在独立发布源、安装通道和回滚能力就绪前丢失 EAC 补丁。
 
 ## 决策
 
@@ -28,20 +20,19 @@ Task 2.1 需要把 49 个现有插件划分为 16 个内置插件、14 个推荐
 - `maintenanceClass` 回答源码怎样维护，继续由 `.sync/plugins.json.class` 表达。
 - `distributionClass` 回答插件怎样交付，值为 `builtin`、`recommended` 或
   `external`，由 `.sync/plugin-distribution.json` 表达。
-- `category/conflicts/impact` 回答插件做什么及与谁冲突，由 Task 2.2 定义。
+- `category/conflicts/impact` 回答插件做什么及与谁冲突，由冲突审计定义。
 
 来源类型、维护方式和功能类别都不能推导分发类别。
 
-### 2. 分发集合固定为 16/14/19
+### 2. 分发集合以账本为唯一事实源
 
-`plugin-distribution.json` 必须完整覆盖本次固定的 49 个 plugin id，且无重复、无未知项：
+`.sync/plugin-distribution.json` 必须完整覆盖所有受管 plugin id，且无重复、无未知项，计数与 `.sync/policies.json` 的 `expectedCounts` 严格一致：
 
-- 16 个 `builtin` 随安装包交付，默认可离线恢复。
-- 14 个 `recommended` 属于官方推荐包
-  `dev.dsh-eac.desktop-recommended`，但不是本体资产的第二份副本。
-- 19 个 `external` 通过市场、独立 `.dshpack`、GitHub 或 npm 按需安装。
+- `builtin`：随安装包交付，默认启用且核心锁定、可离线恢复。
+- `recommended`：归属官方推荐包候选集 `dev.dsh-eac.desktop-recommended`（与该草案的 `x-eac.intendedPluginIds` 严格一致），不是本体资产的第二份副本。
+- `external`：通过市场、独立 `.dshpack`、GitHub 或 npm 按需安装，首次引入默认禁用。
 
-皮肤、SDK fixture 和宿主融合能力不参与本次三分法。
+皮肤、SDK fixture 和宿主融合能力不参与该三分法。
 
 ### 3. 推荐包只引用独立发布源
 
@@ -74,7 +65,7 @@ SHA-256。推荐包禁止使用 `builtin:` 或 `latest`，也不得在首次启�
 `package.json` 校验。validator 通过资产路径连接两份账本，避免复制审计结论。
 
 `.sync/plugins.json` 在物理迁移发生前继续精确对应资产目录；不得向其中加入已经不在
-仓库的 external 占位行。`.sync/plugin-inventory-history.json` 保存本次 49 个插件的
+仓库的 external 占位行。`.sync/plugin-inventory-history.json` 保存全部受管与已退役插件的
 稳定 `id/path/patched` 基线；资产移出当前 inventory 后不得删除对应历史行。validator
 要求每个 distribution id 存在于历史账本且历史路径能唯一连接 `SOURCES.json`，并要求
 当前 inventory 覆盖所有尚未迁移的条目。只有 `migration.state=migrated/retired` 且
@@ -89,7 +80,6 @@ Task 3.1 可以先剥离当前本体，但必须保留本 ADR 和分发账本作
 ## 后果
 
 - 分发目标可独立演进，不污染 bundled inventory 的一一对应语义。
-- 当前阶段不会减少安装包体积；33 个非内置插件仍保留在仓库中。
-- 推荐包在 14 个成员全部拥有可验证源之前只能是草案，不能发布到市场快照。
-- 后续迁移必须同时更新分发状态、inventory/lock/registry 和消费端，保留历史账本条目，
-  并重新运行交叉校验。
+- 非内置插件只有在满足 §4 全部门禁后才从仓库移除；否则保持 `source-pending`。
+- 推荐包在全部 `recommended` 成员拥有不可变可验证源之前保持冻结草案态（`draft`），不得发布到市场快照。
+- 后续增删或迁移插件必须同步更新 `SOURCES.json`、`.sync/` 账本并重新生成 `plugins.lock.json` 与 `plugin-sync-registry.ts`，通过交叉校验门禁。

@@ -279,6 +279,11 @@
       "id": "our-free-model",
       "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
       "patched": false
+    },
+    {
+      "id": "mojobox-manager",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-mojobox",
+      "patched": false
     }
   ]
 }
