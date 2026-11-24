@@ -157,9 +157,9 @@ EAC 使用 **DPX 独立环境**组织桌面数据，桌面 profile 为 `web-desk
     └── workspace/                # 环境工作目录
 ```
 
-Windows 默认产品数据根为 `%LOCALAPPDATA%\Deepseek Harness EAC`；其他平台按系统数据目录推导。宿主 `~/.dsh` 仅做检测与提示，不自动迁移、删除或覆盖。
+Windows 默认产品数据根为 `%LOCALAPPDATA%\Deepseek Harness EAC`；其他平台按系统数据目录推导。**便携版（exe 同级存在 `.dsh-portable`）改用 `<便携目录>\data` 作为产品数据根**，并把 WebView2 profile、窗口状态、语言态与 guest profile 一并收进该目录，产品数据、配置、日志与浏览器 profile 不再位于 C 盘。便携目录换路径后首次启动会提示「就地搬迁 / 新建空数据」；在已安装 EAC 的机器上首次运行便携版时，会询问是否把已有数据复制导入（源数据保留）。宿主 `~/.dsh` 仅做检测与提示，不自动迁移、删除或覆盖。
 
-备份时先退出应用，保存实际产品数据根与单独的项目目录。便携包描述的是程序分发方式，数据位置由环境配置决定。
+备份时先退出应用，保存实际产品数据根与单独的项目目录。便携版的数据跟随 `data\` 目录；更新程序文件不会改动它，移动便携目录必须使用启动时的搬迁提示，不能只搬 `data\` 或只替换 exe。
 
 DPX 收容默认路径与环境变量，**不提供文件系统沙箱隔离**；进程对显式绝对路径的访问仍由操作系统权限控制。实现细节见 [environment.ts](dsh-desktop/lib/desktop/environment.ts)。
 

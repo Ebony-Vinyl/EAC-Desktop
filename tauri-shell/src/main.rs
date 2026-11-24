@@ -885,8 +885,353 @@ fn eac_data_root_with(
     base.join(EAC_PRODUCT_NAME)
 }
 
-static SHELL_NOTIFY: OnceLock<broadcast::Sender<Value>> = OnceLock::new();
-static WEB_URL: OnceLock<RwLock<String>> = OnceLock::new();
+// ---------------------------------------------------------------------------
+// 便携数据根（issue #477）
+//
+// 便携包在 exe 同级放 `.dsh-portable` 标记，但旧实现只让更新器用它选资产，
+// 数据根仍按安装版规则推导到 %LOCALAPPDATA%。这里把「便携 = 数据在
+// <exe>\data」补齐，并把 WebView2 profile / 窗口状态 / 语言态 / guest
+// profile 一起收进该根（否则 C 盘仍会留下缓存与配置）。
+//
+// L1 只做：读标记/所有权记录/指针、显示原生选择框、写环境变量。复制与搬迁
+// 全部由 L2（portable-data.ts）完成。
+// ---------------------------------------------------------------------------
+
+const PORTABLE_MARKER_FILE: &str = ".dsh-portable";
+const PORTABLE_DATA_DIR: &str = "data";
+const PORTABLE_OWNER_FILE: &str = "eac-data-owner.json";
+const PORTABLE_POINTER_FILE: &str = ".dsh-portable-data.json";
+const PORTABLE_FLAG_ENV: &str = "DSH_EAC_PORTABLE";
+const PORTABLE_MODE_ENV: &str = "DSH_EAC_PORTABLE_MODE";
+const PORTABLE_SOURCE_ENV: &str = "DSH_EAC_PORTABLE_SOURCE";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum PortablePlan {
+    NotPortable,
+    /// 外部显式注入（测试/端到端/高级用户），原样采用；handoff 表示由更新
+    /// 助手拉起，需要把当前根记为指针，保证下一次冷启动连续。
+    Explicit { root: std::path::PathBuf, handoff: bool },
+    /// 已记录「继续使用旧位置」（C 盘或其它绝对路径）。
+    Pointer { root: std::path::PathBuf },
+    /// <exe>\data 由本便携目录拥有。
+    Owned { root: std::path::PathBuf },
+    /// 数据存在但不是本目录创建的（移动/复制/旧版本首次升级）：必须先问用户。
+    Reconcile { root: std::path::PathBuf },
+    /// 本机 C 盘存在旧产品数据（可能属于安装版或旧便携版）：默认不认领。
+    ImportLegacy { root: std::path::PathBuf, legacy: std::path::PathBuf },
+    Fresh { root: std::path::PathBuf },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PortableStartupChoice {
+    Import,
+    Relocate,
+    Reset,
+    Exit,
+}
+
+fn portable_data_path(exe_dir: &std::path::Path) -> std::path::PathBuf {
+    exe_dir.join(PORTABLE_DATA_DIR)
+}
+
+/// Windows 路径比较：去 verbatim 前缀、尾分隔符，大小写不敏感。
+fn same_abs_path(left: &std::path::Path, right: &std::path::Path) -> bool {
+    fn normalize(path: &std::path::Path) -> String {
+        let text = path.to_string_lossy();
+        let text = text.strip_prefix("\\\\?\\").unwrap_or(text.as_ref());
+        text.trim_end_matches(|c| c == '\\' || c == '/')
+            .replace('/', "\\")
+            .to_lowercase()
+    }
+    normalize(left) == normalize(right)
+}
+
+fn read_json_file(path: &std::path::Path) -> Option<serde_json::Value> {
+    let raw = std::fs::read_to_string(path).ok()?;
+    // 用户/脚本可能用带 BOM 的 UTF-8 保存记录；serde_json 不接受 BOM。
+    let raw = raw.strip_prefix('\u{feff}').unwrap_or(&raw);
+    serde_json::from_str(raw).ok()
+}
+
+fn owner_data_root(data_root: &std::path::Path) -> Option<std::path::PathBuf> {
+    let value = read_json_file(&data_root.join(PORTABLE_OWNER_FILE))?;
+    if value.get("schemaVersion").and_then(Value::as_u64) != Some(1)
+        || value.get("product").and_then(Value::as_str) != Some("eac-desktop")
+        || value.get("installKind").and_then(Value::as_str) != Some("portable")
+    {
+        return None;
+    }
+    let root = value.get("dataRoot").and_then(Value::as_str)?;
+    let path = std::path::PathBuf::from(root);
+    path.is_absolute().then_some(path)
+}
+
+fn pointer_data_root(exe_dir: &std::path::Path) -> Option<std::path::PathBuf> {
+    let value = read_json_file(&exe_dir.join(PORTABLE_POINTER_FILE))?;
+    if value.get("schemaVersion").and_then(Value::as_u64) != Some(1)
+        || value.get("product").and_then(Value::as_str) != Some("eac-desktop")
+    {
+        return None;
+    }
+    let path = std::path::PathBuf::from(value.get("dataRoot").and_then(Value::as_str)?);
+    // 指针目标必须是已存在的绝对目录，且不能就是程序目录本身。
+    (path.is_absolute() && path.is_dir() && !same_abs_path(&path, exe_dir)).then_some(path)
+}
+
+fn has_environment_data(root: &std::path::Path) -> bool {
+    root.join("dpx").join("dsh-environments").is_dir() || root.join("eac-data-binding.json").is_file()
+}
+
+/// 安装版规则下的默认产品数据根（不含便携分支）。
+fn default_product_root_without_portable() -> std::path::PathBuf {
+    eac_data_root_with(
+        None,
+        std::env::var("USERPROFILE").ok().as_deref(),
+        std::env::var("HOME").ok().as_deref(),
+        std::env::var("LOCALAPPDATA").ok().as_deref(),
+        std::env::var("XDG_DATA_HOME").ok().as_deref(),
+        std::env::temp_dir(),
+    )
+}
+
+/// 纯决策：输入是已读出的磁盘事实，便于单测，不读全局状态。
+#[allow(clippy::too_many_arguments)]
+fn plan_portable_data(
+    portable: bool,
+    explicit: Option<&std::path::Path>,
+    update_handoff: bool,
+    data: &std::path::Path,
+    owner_root: Option<&std::path::Path>,
+    pointer_root: Option<&std::path::Path>,
+    legacy: &std::path::Path,
+    legacy_has_data: bool,
+) -> PortablePlan {
+    if !portable {
+        return PortablePlan::NotPortable;
+    }
+    if let Some(root) = explicit {
+        // 原地更新时注入的正是 <exe>\data：按「自有数据根」处理，写入所有权
+        // 记录，避免下一次冷启动把它误判成来路不明的数据。
+        if same_abs_path(root, data) {
+            return PortablePlan::Owned { root: data.to_path_buf() };
+        }
+        return PortablePlan::Explicit { root: root.to_path_buf(), handoff: update_handoff };
+    }
+    if let Some(root) = pointer_root {
+        return PortablePlan::Pointer { root: root.to_path_buf() };
+    }
+    if data.exists() {
+        if let Some(root) = owner_root {
+            return if same_abs_path(root, data) {
+                PortablePlan::Owned { root: data.to_path_buf() }
+            } else {
+                PortablePlan::Reconcile { root: data.to_path_buf() }
+            };
+        }
+        return if has_environment_data(data) {
+            PortablePlan::Reconcile { root: data.to_path_buf() }
+        } else {
+            PortablePlan::Owned { root: data.to_path_buf() }
+        };
+    }
+    if legacy_has_data {
+        PortablePlan::ImportLegacy { root: data.to_path_buf(), legacy: legacy.to_path_buf() }
+    } else {
+        PortablePlan::Fresh { root: data.to_path_buf() }
+    }
+}
+
+fn portable_choice_override() -> Option<String> {
+    std::env::var("DSH_EAC_PORTABLE_CHOICE")
+        .ok()
+        .map(|value| value.trim().to_ascii_lowercase())
+        .filter(|value| !value.is_empty())
+}
+
+#[cfg(windows)]
+fn portable_message_box(title: &str, body: &str, flags: u32) -> i32 {
+    use windows_sys::Win32::UI::WindowsAndMessaging::MessageBoxW;
+    let wide = |value: &str| value.encode_utf16().chain(std::iter::once(0)).collect::<Vec<u16>>();
+    let title = wide(title);
+    let body = wide(body);
+    unsafe { MessageBoxW(std::ptr::null_mut(), body.as_ptr(), title.as_ptr(), flags) }
+}
+
+#[cfg(windows)]
+fn show_portable_error(message: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONERROR, MB_OK, MB_SETFOREGROUND};
+    portable_message_box("Deepseek Harness EAC 便携版", message, MB_OK | MB_ICONERROR | MB_SETFOREGROUND);
+}
+
+#[cfg_attr(not(windows), allow(unused_variables))]
+fn ask_reconcile(data: &std::path::Path) -> PortableStartupChoice {
+    if let Some(value) = portable_choice_override() {
+        match value.as_str() {
+            "relocate" => return PortableStartupChoice::Relocate,
+            "reset" | "new" => return PortableStartupChoice::Reset,
+            "exit" => return PortableStartupChoice::Exit,
+            _ => {}
+        }
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONWARNING, MB_SETFOREGROUND, MB_YESNOCANCEL};
+        let body = if use_chinese_ui() {
+            format!(
+                "便携目录似乎已被移动或复制。\n\n当前数据位置：{}\n\n[是] 就地搬迁到当前位置（复制环境内容，旧元数据保留为 dpx.stale-*）\n[否] 新建空数据（旧数据保留）\n[取消] 退出",
+                data.display()
+            )
+        } else {
+            format!(
+                "This portable folder appears to have been moved or copied.\n\nCurrent data: {}\n\n[Yes] Relocate it here (copy the environment; keep old metadata as dpx.stale-*)\n[No] Start with empty data (old data is kept)\n[Cancel] Exit",
+                data.display()
+            )
+        };
+        let selected = portable_message_box("Deepseek Harness EAC", &body, MB_YESNOCANCEL | MB_ICONWARNING | MB_SETFOREGROUND);
+        return match selected {
+            6 => PortableStartupChoice::Relocate,
+            7 => PortableStartupChoice::Reset,
+            _ => PortableStartupChoice::Exit,
+        };
+    }
+    #[cfg(not(windows))]
+    {
+        PortableStartupChoice::Exit
+    }
+}
+
+#[cfg_attr(not(windows), allow(unused_variables))]
+fn ask_import(legacy: &std::path::Path) -> PortableStartupChoice {
+    if let Some(value) = portable_choice_override() {
+        match value.as_str() {
+            "import" => return PortableStartupChoice::Import,
+            "reset" | "new" => return PortableStartupChoice::Reset,
+            "exit" => return PortableStartupChoice::Exit,
+            _ => {}
+        }
+    }
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::UI::WindowsAndMessaging::{MB_ICONQUESTION, MB_SETFOREGROUND, MB_YESNOCANCEL};
+        let body = if use_chinese_ui() {
+            format!(
+                "检测到本机已有 EAC 数据（可能来自安装版或旧便携版）：\n{}\n\n[是] 复制导入到本便携目录（源数据原样保留）\n[否] 新建空数据（不读取旧数据）\n[取消] 退出",
+                legacy.display()
+            )
+        } else {
+            format!(
+                "Existing EAC data was found on this machine (it may belong to an installed copy or an older portable one):\n{}\n\n[Yes] Copy it into this portable folder (the source is left untouched)\n[No] Start with empty data\n[Cancel] Exit",
+                legacy.display()
+            )
+        };
+        let selected = portable_message_box("Deepseek Harness EAC", &body, MB_YESNOCANCEL | MB_ICONQUESTION | MB_SETFOREGROUND);
+        return match selected {
+            6 => PortableStartupChoice::Import,
+            7 => PortableStartupChoice::Reset,
+            _ => PortableStartupChoice::Exit,
+        };
+    }
+    #[cfg(not(windows))]
+    {
+        PortableStartupChoice::Exit
+    }
+}
+
+fn ensure_data_root_writable(root: &std::path::Path) -> Result<(), String> {
+    std::fs::create_dir_all(root).map_err(|error| format!("便携数据目录无法创建：{}（{error}）", root.display()))?;
+    let probe = root.join(format!(".eac-write-probe-{}", std::process::id()));
+    std::fs::write(&probe, b"1").map_err(|error| format!("便携数据目录不可写：{}（{error}）。请解压到可写目录，或设置 DSH_EAC_DATA_ROOT", root.display()))?;
+    let _ = std::fs::remove_file(&probe);
+    Ok(())
+}
+
+/// 便携启动：在读取任何业务路径之前确定数据根与辅助目录。
+///
+/// 失败必须阻止启动（fail closed），不能静默退回 %LOCALAPPDATA% —— 那会让
+/// 「便携」再次把数据写回 C 盘。
+fn apply_portable_startup() -> Result<(), String> {
+    let exe = std::env::current_exe().map_err(|error| format!("无法定位程序路径：{error}"))?;
+    let Some(exe_dir) = exe.parent() else { return Ok(()); };
+    if !exe_dir.join(PORTABLE_MARKER_FILE).is_file() {
+        return Ok(());
+    }
+    let explicit = std::env::var("DSH_EAC_DATA_ROOT")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .map(std::path::PathBuf::from);
+    let data = portable_data_path(exe_dir);
+    // 只有「更新助手把旧位置传进来」才算交接；正常原地更新时注入的就是
+    // <exe>\data 本身，不能把它误记成旧位置指针。
+    let update_handoff = std::env::var_os("DSH_EAC_UPDATE_TRANSACTION_DIR").is_some()
+        && explicit.as_deref().is_some_and(|root| !same_abs_path(root, &data));
+    let owner = owner_data_root(&data);
+    let pointer = pointer_data_root(exe_dir);
+    let legacy = default_product_root_without_portable();
+    let legacy_has = has_environment_data(&legacy);
+    let plan = plan_portable_data(
+        true,
+        explicit.as_deref(),
+        update_handoff,
+        &data,
+        owner.as_deref(),
+        pointer.as_deref(),
+        &legacy,
+        legacy_has,
+    );
+    let (root, mode, source) = match plan {
+        PortablePlan::NotPortable => return Ok(()),
+        PortablePlan::Explicit { root, handoff } => (root, if handoff { "handoff" } else { "explicit" }, None),
+        PortablePlan::Pointer { root } => (root, "pointer", None),
+        PortablePlan::Owned { root } | PortablePlan::Fresh { root } => (root, "owned", None),
+        PortablePlan::Reconcile { root } => match ask_reconcile(&root) {
+            PortableStartupChoice::Relocate => (root, "relocate", None),
+            PortableStartupChoice::Reset => (root, "reset", None),
+            PortableStartupChoice::Exit => std::process::exit(0),
+            PortableStartupChoice::Import => (root, "relocate", None),
+        },
+        PortablePlan::ImportLegacy { root, legacy } => match ask_import(&legacy) {
+            PortableStartupChoice::Import => (root, "import", Some(legacy)),
+            PortableStartupChoice::Reset => (root, "reset", None),
+            PortableStartupChoice::Exit => std::process::exit(0),
+            PortableStartupChoice::Relocate => (root, "import", Some(legacy)),
+        },
+    };
+    ensure_data_root_writable(&root)?;
+    // 临时目录也收进便携数据根：WebView2/Chromium 与壳进程的临时文件不再落
+    // %TEMP%（C 盘）。sidecar 应用 dpx runtime 后会把 TEMP 指到环境内 tmp，
+    // 这里覆盖的是壳进程与 WebView2 的继承值。
+    let tmp = root.join("tmp");
+    let _ = std::fs::create_dir_all(&tmp);
+    std::env::set_var("TEMP", &tmp);
+    std::env::set_var("TMP", &tmp);
+    #[cfg(not(windows))]
+    std::env::set_var("TMPDIR", &tmp);
+    std::env::set_var(PORTABLE_FLAG_ENV, "1");
+    std::env::set_var("DSH_EAC_DATA_ROOT", &root);
+    std::env::set_var(PORTABLE_MODE_ENV, mode);
+    if let Some(source) = source.as_ref() {
+        std::env::set_var(PORTABLE_SOURCE_ENV, source);
+    }
+    for (key, sub) in [
+        ("DSH_EAC_WEBVIEW_DATA_DIR", "webview"),
+        ("DSH_EAC_SHELL_CONFIG_DIR", "config"),
+        ("DSH_EAC_GUEST_DATA_DIR", "browser-guests"),
+    ] {
+        if std::env::var_os(key).is_none() {
+            std::env::set_var(key, root.join(sub));
+        }
+    }
+    eprintln!(
+        "[portable] root={} mode={}{}",
+        root.display(),
+        mode,
+        if source.is_some() { "（导入源见 DSH_EAC_PORTABLE_SOURCE）" } else { "" }
+    );
+    Ok(())
+}
+
+static SHELL_NOTIFY: OnceLock<broadcast::Sender<Value>> = OnceLock::new();static WEB_URL: OnceLock<RwLock<String>> = OnceLock::new();
 // A restored maximized window may precede the first resize observation.
 static LAST_MAXIMIZED: std::sync::Mutex<Option<bool>> = std::sync::Mutex::new(None);
 
@@ -1370,6 +1715,11 @@ fn throttle_save_window_state(app: &tauri::AppHandle) {
 
 /// 壳设置目录（= sidecar platform.ts userDataDir() 的 Rust 镜像）。
 fn shell_settings_dir() -> std::path::PathBuf {
+    // 便携模式把语言态与窗口状态一起收进 <data>\config；安装版不设该变量，
+    // 行为保持原样（%APPDATA%\Deepseek Harness EAC）。
+    if let Some(root) = explicit_storage_dir("DSH_EAC_SHELL_CONFIG_DIR") {
+        return root;
+    }
     #[cfg(windows)]
     {
         let base = std::env::var_os("APPDATA")
@@ -4988,6 +5338,14 @@ fn handle_sidecar_notify(app: &tauri::AppHandle, v: &Value) {
 }
 
 fn main() {
+    // 便携形态的数据根与辅助目录必须先于任何业务路径解析完成；失败 fail closed，
+    // 不静默回退 %LOCALAPPDATA%。
+    if let Err(error) = apply_portable_startup() {
+        eprintln!("[portable] {error}");
+        #[cfg(windows)]
+        show_portable_error(&error);
+        std::process::exit(1);
+    }
     for name in ["DSH_EAC_SHELL_CONFIG_DIR", "DSH_EAC_GUEST_DATA_DIR", "DSH_EAC_WEBVIEW_DATA_DIR"] {
         if let Err(error) = validated_storage_override(std::env::var_os(name).map(PathBuf::from)) {eprintln!("[update] {error}");std::process::exit(1);}
     }
@@ -5594,6 +5952,184 @@ mod eac_channel_tests {
                 "非 Windows 推导应基于 XDG_DATA_HOME：{derived:?}"
             );
         }
+    }
+}
+
+#[cfg(test)]
+mod portable_data_tests {
+    use super::{
+        plan_portable_data, same_abs_path, PortablePlan,
+    };
+    use std::path::{Path, PathBuf};
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let root = std::env::temp_dir().join(format!(
+            "eac-portable-plan-{}-{}",
+            std::process::id(),
+            name
+        ));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("temp dir");
+        root
+    }
+
+    fn data_root(parent: &Path) -> PathBuf {
+        parent.join("data")
+    }
+
+    #[test]
+    fn keeps_non_portable_installs_on_the_install_rule() {
+        let base = temp_dir("not-portable");
+        let plan = plan_portable_data(
+            false,
+            None,
+            false,
+            &data_root(&base),
+            None,
+            None,
+            &base.join("legacy"),
+            true,
+        );
+        assert_eq!(plan, PortablePlan::NotPortable);
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn explicit_root_wins_and_marks_update_handoff() {
+        let base = temp_dir("explicit");
+        let plan = plan_portable_data(
+            true,
+            Some(Path::new(r"D:\eac data")),
+            true,
+            &data_root(&base),
+            Some(&data_root(&base)),
+            Some(Path::new(r"E:\pointer")),
+            &base.join("legacy"),
+            true,
+        );
+        match plan {
+            PortablePlan::Explicit { root, handoff } => {
+                assert_eq!(root, PathBuf::from(r"D:\eac data"));
+                assert!(handoff, "update handoff must be recorded so the next cold start stays continuous");
+            }
+            other => panic!("unexpected plan: {other:?}"),
+        }
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn in_place_update_explicit_root_is_owned_not_a_legacy_pointer() {
+        let base = temp_dir("in-place");
+        let data = data_root(&base);
+        std::fs::create_dir_all(&data).expect("data dir");
+        // 原地更新时助手注入的就是 <exe>\data；它不能被写成「旧位置」。
+        let plan = plan_portable_data(
+            true,
+            Some(&data),
+            true,
+            &data,
+            Some(&data),
+            None,
+            &base.join("legacy"),
+            true,
+        );
+        assert_eq!(plan, PortablePlan::Owned { root: data.clone() });
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn pointer_is_used_before_default_portable_data() {
+        let base = temp_dir("pointer");
+        let pointer = base.join("legacy-root");
+        std::fs::create_dir_all(&pointer).expect("pointer dir");
+        let plan = plan_portable_data(
+            true,
+            None,
+            false,
+            &data_root(&base),
+            None,
+            Some(&pointer),
+            &base.join("legacy"),
+            true,
+        );
+        assert_eq!(plan, PortablePlan::Pointer { root: pointer });
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn matching_owner_marker_keeps_the_data_root() {
+        let base = temp_dir("owned");
+        let data = data_root(&base);
+        std::fs::create_dir_all(&data).expect("data dir");
+        let plan = plan_portable_data(
+            true,
+            None,
+            false,
+            &data,
+            Some(&data),
+            None,
+            &base.join("legacy"),
+            true,
+        );
+        assert_eq!(plan, PortablePlan::Owned { root: data.clone() });
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn moved_or_unowned_data_is_never_claimed_silently() {
+        let base = temp_dir("moved");
+        let data = data_root(&base);
+        std::fs::create_dir_all(&data).expect("data dir");
+        // 记录的数据根是别处 → 目录被移动/复制。
+        let moved = plan_portable_data(
+            true,
+            None,
+            false,
+            &data,
+            Some(Path::new(r"Z:\old\data")),
+            None,
+            &base.join("legacy"),
+            false,
+        );
+        assert_eq!(moved, PortablePlan::Reconcile { root: data.clone() });
+        // 没有所有权记录但已存在 dpx 数据 → 同样先问，不认领。
+        std::fs::create_dir_all(data.join("dpx").join("dsh-environments")).expect("env dir");
+        let unowned = plan_portable_data(true, None, false, &data, None, None, &base.join("legacy"), false);
+        assert_eq!(unowned, PortablePlan::Reconcile { root: data.clone() });
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn legacy_data_is_imported_only_when_portable_data_is_absent() {
+        let base = temp_dir("legacy");
+        let legacy = base.join("legacy");
+        let plan = plan_portable_data(true, None, false, &data_root(&base), None, None, &legacy, true);
+        assert_eq!(
+            plan,
+            PortablePlan::ImportLegacy { root: data_root(&base), legacy: legacy.clone() }
+        );
+        // 便携目录已经存在时绝不再去碰 C 盘旧数据。
+        let data = data_root(&base);
+        std::fs::create_dir_all(&data).expect("data dir");
+        std::fs::create_dir_all(data.join("dpx").join("dsh-environments")).expect("env dir");
+        let existing = plan_portable_data(true, None, false, &data, None, None, &legacy, true);
+        assert_eq!(existing, PortablePlan::Reconcile { root: data.clone() });
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn fresh_when_no_data_exists_anywhere() {
+        let base = temp_dir("fresh");
+        let plan = plan_portable_data(true, None, false, &data_root(&base), None, None, &base.join("legacy"), false);
+        assert_eq!(plan, PortablePlan::Fresh { root: data_root(&base) });
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn path_comparison_is_case_and_separator_insensitive() {
+        assert!(same_abs_path(Path::new(r"C:\Users\U\AppData\Local\EAC"), Path::new(r"c:/users/u/appdata/local/eac/")));
+        assert!(same_abs_path(Path::new(r"\\?\C:\EAC"), Path::new(r"C:\EAC")));
+        assert!(!same_abs_path(Path::new(r"C:\EAC"), Path::new(r"C:\EAC-old")));
     }
 }
 

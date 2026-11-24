@@ -46,6 +46,33 @@ export async function assertInstallBoundary(installPath: string, protectedRoots:
     if (pathsOverlap(install, protectedPath)) throw new Error('update-install-data-overlap');
   }
 }
+
+function within(parent: string, candidate: string): boolean {
+  const relative = path.relative(parent, candidate);
+  return relative === '' || (!relative.startsWith('..' + path.sep) && relative !== '..' && !path.isAbsolute(relative));
+}
+
+/**
+ * 便携版的边界不是「整个安装树」，而是**真正会被整树交换的顶层项**。
+ *
+ * 便携数据放在 `<install>/data` 时它仍在安装树内，但不在 `PORTABLE_ITEMS` 里，
+ * 交换过程从不 rename 它。这里只拒绝两种真正危险的布局：
+ *   1. 保护根等于/包含安装树（整树都可能被换掉）；
+ *   2. 保护根与任一交换项路径重叠（数据会随程序目录被 rename/覆盖）。
+ * 安装树内的非交换顶层目录（如 `data/`）允许作为数据根。
+ */
+export async function assertExchangeBoundary(installRoot: string, protectedRoots: string[], exchangeNames: readonly string[]): Promise<void> {
+  const install = await plainPath(installRoot);
+  const items = exchangeNames.map(name => path.join(install, name));
+  for (const root of protectedRoots) {
+    if (!root) continue;
+    const protectedPath = await plainPath(root, true);
+    if (within(protectedPath, install)) throw new Error('update-install-data-overlap');
+    for (const item of items) {
+      if (pathsOverlap(protectedPath, item)) throw new Error('update-install-data-overlap');
+    }
+  }
+}
 export async function writeDurableJson(file: string, value: unknown): Promise<void> {
   await plainPath(path.dirname(file), true);
   await fsp.mkdir(path.dirname(file), {recursive: true, mode: 0o700});

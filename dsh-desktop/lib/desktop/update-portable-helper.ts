@@ -4,8 +4,8 @@ import path = require('node:path');
 import cp = require('node:child_process');
 import crypto = require('node:crypto');
 import {createInterface} from 'node:readline';
-import {plainPath, pathsOverlap, writeDurableJson, captureBackup} from './update-backup';
-import {hashFile, verifyReleaseTree} from './update-package';
+import {plainPath, writeDurableJson, captureBackup, assertExchangeBoundary} from './update-backup';
+import {hashFile, verifyReleaseTree, PORTABLE_ITEMS} from './update-package';
 import {readPortableJournal, exchangePortable} from './update-portable';
 import {withPortableLock} from './update-portable-lock';
 import {captureProcessOwners} from './update-process-owners';
@@ -66,9 +66,12 @@ async function validatePortableHandoff(file: string, recovery = false): Promise<
   for(const [index,relative] of expected.entries()){
     const item=owned.files[index];if(item?.path!==relative||await hashFile(await plainPath(path.join(journal.transactionDir,'helper',relative)))!==item.sha256)throw new Error('update-helper-files-invalid');
   }
-  for(const root of [request.binding.environmentRoot,request.binding.dshHome,request.binding.userDataDir,request.binding.registryHome,request.binding.webviewRoot,request.binding.configRoot,request.binding.guestRoot]){
-    if(typeof root!=='string'||!path.isAbsolute(root)||pathsOverlap(journal.installRoot,await plainPath(root,true)))throw new Error('update-helper-binding-invalid');
+  const bindingRoots=[request.binding.environmentRoot,request.binding.dshHome,request.binding.userDataDir,request.binding.registryHome,request.binding.webviewRoot,request.binding.configRoot,request.binding.guestRoot];
+  for(const root of bindingRoots){
+    if(typeof root!=='string'||!path.isAbsolute(root))throw new Error('update-helper-binding-invalid');
   }
+  // 便携数据允许位于安装树内（如 <install>/data），但不能与交换项重叠。
+  await assertExchangeBoundary(journal.installRoot,bindingRoots,PORTABLE_ITEMS);
   if (!Number.isInteger(request.binding.webPort) || request.binding.webPort<1 || request.binding.webPort>65535 || typeof request.binding.profile!=='string' || !request.binding.profile || !['stable','beta'].includes(request.binding.channel)) throw new Error('update-helper-binding-invalid');
   if(!request.launchEnv||typeof request.launchEnv!=='object'||Object.entries(request.launchEnv).some(([key,value])=>!['DSH_EAC_DATA_ROOT','DSH_EAC_CHANNEL','DSH_EAC_WEBVIEW_DATA_DIR','DSH_EAC_SHELL_CONFIG_DIR','DSH_EAC_GUEST_DATA_DIR','DPX_HOME'].includes(key)||typeof value!=='string'||value.includes('\0')))throw new Error('update-helper-environment-invalid');
   return {request,journal};

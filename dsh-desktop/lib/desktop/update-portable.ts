@@ -1,7 +1,7 @@
 import fs = require('node:fs');
 import fsp = require('node:fs/promises');
 import path = require('node:path');
-import {plainPath, assertInstallBoundary, writeDurableJson} from './update-backup';
+import {plainPath, assertExchangeBoundary, writeDurableJson} from './update-backup';
 import {PORTABLE_ITEMS, parseReleaseFiles, verifyReleaseTree, treeFiles, treeEmptyDirectories, hashFile, safeRelative} from './update-package';
 import type {ReleaseFile, ReleaseFiles} from './update-package';
 import {compareVersion} from './update-sources';
@@ -75,11 +75,34 @@ async function copyDurable(source: string, target: string): Promise<void> {
   await fsp.copyFile(source, target, fs.constants.COPYFILE_EXCL);
   const handle = await fsp.open(target, 'r+'); try {await handle.sync();} finally {await handle.close();}
 }
-async function preparePortableLocked(options: {installRoot: string; stageRoot: string; transactionId: string; version: string; target: string; dataBinding: unknown; protectedRoots: string[]; signal?: AbortSignal}): Promise<PortableJournal> {
+/**
+ * 便携数据目录在安装树内的顶层名；不在安装树内（安装版/旧行为）返回 null。
+ *
+ * 只接受安装树的**一级**子目录，且不能是交换项或事务目录：数据若落进
+ * `dpx/` 之类会被整树 rename/覆盖的项，宁可拒绝更新也不冒数据风险。
+ */
+export function portableDataTopLevel(installRoot: string, dataRoot: string | undefined): string | null {
+  if (!dataRoot) return null;
+  const install = path.resolve(installRoot); const data = path.resolve(dataRoot);
+  const relative = path.relative(install, data);
+  if (relative === '') throw new Error('update-portable-data-root-invalid');
+  if (relative.startsWith('..' + path.sep) || relative === '..' || path.isAbsolute(relative)) return null;
+  const parts = relative.split(path.sep).filter(Boolean);
+  if (parts.length !== 1) throw new Error('update-portable-data-root-invalid');
+  const name = parts[0]!;
+  if ((PORTABLE_ITEMS as readonly string[]).includes(name) || name.startsWith('.eac-update-') || name === 'eac-release-files.json') throw new Error('update-portable-data-root-invalid');
+  return name;
+}
+
+async function preparePortableLocked(options: {installRoot: string; stageRoot: string; transactionId: string; version: string; target: string; dataBinding: unknown; protectedRoots: string[]; dataRoot?: string; signal?: AbortSignal}): Promise<PortableJournal> {
   options.signal?.throwIfAborted();
   if (!UUID.test(options.transactionId)) throw new Error('update-transaction-id-invalid');
   const installRoot = await plainPath(options.installRoot); const stageRoot = await plainPath(options.stageRoot);
-  await assertInstallBoundary(installRoot, [...options.protectedRoots, stageRoot]);
+  // 便携数据目录不参与交换；它在 prepare 的整树遍历里必须被跳过，
+  // 否则每次更新都会哈希/复制 GB 级用户数据，junction 还会触发 tree-link。
+  const dataTopLevel = portableDataTopLevel(installRoot, options.dataRoot);
+  const skipTopLevel = dataTopLevel ? [dataTopLevel] : [];
+  await assertExchangeBoundary(installRoot, [...options.protectedRoots, stageRoot], PORTABLE_ITEMS);
   if (await exists(path.join(installRoot, POINTER))) throw new Error('update-recovery-required');
   const next = parseReleaseFiles(JSON.parse(await fsp.readFile(path.join(stageRoot, 'eac-release-files.json'), 'utf8')), options.version, options.target);
   await verifyReleaseTree(stageRoot, next,[],options.signal);
@@ -95,7 +118,7 @@ async function preparePortableLocked(options: {installRoot: string; stageRoot: s
   const transactionDir = path.join(path.dirname(installRoot), '.eac-update-' + options.transactionId);
   await plainPath(transactionDir, true);
   if (await exists(transactionDir)) throw new Error('update-transaction-directory-exists');
-  const oldFiles = await treeFiles(installRoot,options.signal);
+  const oldFiles = await treeFiles(installRoot,options.signal,skipTopLevel);
   const previousFiles = new Set(previous.files.map(file => file.path.toLowerCase()));
   previousFiles.add('eac-release-files.json');
   const nextFiles = new Set(next.files.map(file => file.path.toLowerCase())); nextFiles.add('eac-release-files.json');
@@ -108,7 +131,7 @@ async function preparePortableLocked(options: {installRoot: string; stageRoot: s
     if (nextFiles.has(file.path.toLowerCase())) throw new Error('update-user-file-conflict');
     preserved.push({...file, sha256: await hashFile(path.join(installRoot, ...file.path.split('/')),options.signal)});
   }
-  const preservedDirectories = (await treeEmptyDirectories(installRoot)).filter(relative => controlled.has(relative.split('/')[0]!));
+  const preservedDirectories = (await treeEmptyDirectories(installRoot,skipTopLevel)).filter(relative => controlled.has(relative.split('/')[0]!));
   for (const relative of [...preserved.map(file => file.path),...preservedDirectories]) {
     const parts = relative.toLowerCase().split('/');
     for (let i=1;i<=parts.length;i++) if (nextFiles.has(parts.slice(0,i).join('/'))) throw new Error('update-user-file-conflict');
