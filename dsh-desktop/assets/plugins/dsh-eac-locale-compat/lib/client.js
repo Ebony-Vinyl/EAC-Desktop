@@ -521,15 +521,43 @@ window.__ModuleLoader__.load({
       return /[\u3400-\u9fff]/u.test(value)
     }
 
+    const EXACT_PHRASES = new Map()
+    for (const [source, target] of ENGLISH_PHRASES) {
+      if (!EXACT_PHRASES.has(source)) {
+        const normalized = target.replace(/ {2,}/g, ' ')
+        EXACT_PHRASES.set(source, hasChinese(normalized) ? source : normalized)
+      }
+    }
+    const TRANSLATION_CACHE_LIMIT = 512
+    const translationCache = new Map()
+
+    function rememberTranslation(source, result) {
+      if (translationCache.size >= TRANSLATION_CACHE_LIMIT) {
+        const oldestKey = translationCache.keys().next().value
+        if (oldestKey !== undefined) translationCache.delete(oldestKey)
+      }
+      translationCache.set(source, result)
+      return result
+    }
+
     function translateText(value) {
       if (!hasChinese(value)) return value
+      const exact = EXACT_PHRASES.get(value)
+      if (exact !== undefined) return exact
+      const cached = translationCache.get(value)
+      if (cached !== undefined) return cached
       let translated = value
-      for (const [source, target] of ENGLISH_PHRASES) translated = translated.split(source).join(target)
+      for (const [source, target] of ENGLISH_PHRASES) {
+        if (!translated.includes(source)) continue
+        translated = translated.split(source).join(target)
+        if (!hasChinese(translated)) break
+      }
       translated = translated.replace(/ {2,}/g, ' ')
       // Never expose a half-translated sentence. Older plugins are added to the
       // compatibility dictionary as complete UI phrases; unknown text is safer
       // left intact until its owning plugin supplies a reviewed translation.
-      return hasChinese(translated) ? value : translated
+      const resolved = hasChinese(translated) ? value : translated
+      return rememberTranslation(value, resolved)
     }
 
     function isExcluded(node) {
@@ -538,46 +566,56 @@ window.__ModuleLoader__.load({
       return parent.closest(EXCLUDED_SELECTOR) !== null
     }
 
+    function translateElementAttributes(node) {
+      if (node.nodeType !== Node.ELEMENT_NODE || isExcluded(node)) return
+      let original = node[ORIGINAL_ATTRIBUTES]
+      let rendered = node[TRANSLATED_ATTRIBUTES]
+      for (const name of TRANSLATABLE_ATTRIBUTES) {
+        const value = node.getAttribute(name)
+        if (original !== undefined && original[name] !== undefined) {
+          if (value === rendered?.[name]) continue
+          if (value !== null && hasChinese(value)) {
+            original[name] = value
+          } else {
+            delete original[name]
+            if (rendered !== undefined) delete rendered[name]
+            continue
+          }
+        } else {
+          if (value === null || !hasChinese(value)) continue
+          if (original === undefined) original = node[ORIGINAL_ATTRIBUTES] = Object.create(null)
+          if (rendered === undefined) rendered = node[TRANSLATED_ATTRIBUTES] = Object.create(null)
+          original[name] = value
+        }
+        const translated = translateText(original[name])
+        rendered[name] = translated
+        if (value !== translated) node.setAttribute(name, translated)
+      }
+    }
+
     function translateNode(node) {
       if (node.nodeType === Node.TEXT_NODE) {
         if (isExcluded(node)) return
         const value = node.nodeValue || ''
-        if (node[ORIGINAL_TEXT] !== undefined && value !== node[TRANSLATED_TEXT]) {
+        if (node[ORIGINAL_TEXT] !== undefined) {
+          if (value === node[TRANSLATED_TEXT]) return
           if (hasChinese(value)) node[ORIGINAL_TEXT] = value
           else {
             delete node[ORIGINAL_TEXT]
             delete node[TRANSLATED_TEXT]
             return
           }
-        } else if (node[ORIGINAL_TEXT] === undefined && hasChinese(value)) {
+        } else {
+          if (!hasChinese(value)) return
           node[ORIGINAL_TEXT] = value
         }
-        if (node[ORIGINAL_TEXT] === undefined) return
         const translated = translateText(node[ORIGINAL_TEXT])
         node[TRANSLATED_TEXT] = translated
         if (value !== translated) node.nodeValue = translated
         return
       }
       if (node.nodeType !== Node.ELEMENT_NODE || isExcluded(node)) return
-      const original = node[ORIGINAL_ATTRIBUTES] || (node[ORIGINAL_ATTRIBUTES] = Object.create(null))
-      const rendered = node[TRANSLATED_ATTRIBUTES] || (node[TRANSLATED_ATTRIBUTES] = Object.create(null))
-      for (const name of TRANSLATABLE_ATTRIBUTES) {
-        const value = node.getAttribute(name)
-        if (original[name] !== undefined && value !== rendered[name]) {
-          if (value !== null && hasChinese(value)) original[name] = value
-          else {
-            delete original[name]
-            delete rendered[name]
-            continue
-          }
-        } else if (original[name] === undefined && value !== null && hasChinese(value)) {
-          original[name] = value
-        }
-        if (original[name] === undefined) continue
-        const translated = translateText(original[name])
-        rendered[name] = translated
-        if (value !== translated) node.setAttribute(name, translated)
-      }
+      translateElementAttributes(node)
       for (const child of node.childNodes) translateNode(child)
     }
 
@@ -603,28 +641,196 @@ window.__ModuleLoader__.load({
       for (const child of node.childNodes) restoreNode(child)
     }
 
+    function isWithinRoot(root, node) {
+      return node === root || (typeof root.contains === 'function' && root.contains(node))
+    }
+
+    function hasDirtyAncestor(node, dirtySet, root) {
+      let current = node.parentNode
+      while (current) {
+        if (dirtySet.has(current)) return true
+        if (current === root) break
+        current = current.parentNode
+      }
+      return false
+    }
+
+    const OBSERVER_OPTIONS = {
+      attributes: true,
+      attributeFilter: TRANSLATABLE_ATTRIBUTES,
+      characterData: true,
+      childList: true,
+      subtree: true,
+    }
+
     function createCompatibilityRuntime(root, locale) {
       let english = locale.getLocale().active === 'en'
-      let queued = false
-      const sync = () => {
-        queued = false
-        if (english) translateNode(root)
-        else restoreNode(root)
+      let disposed = false
+      let observing = false
+      let needsFullScan = false
+      let needsRestore = false
+      let scheduledKind = null
+      let scheduledHandle = null
+      const dirtySubtrees = new Set()
+      const dirtyAttrElements = new Set()
+
+      const getView = () => root.ownerDocument && root.ownerDocument.defaultView
+
+      const cancelScheduled = () => {
+        if (scheduledKind === null) return
+        const view = getView()
+        if (scheduledKind === 'raf' && view && typeof view.cancelAnimationFrame === 'function') {
+          view.cancelAnimationFrame(scheduledHandle)
+        } else {
+          clearTimeout(scheduledHandle)
+        }
+        scheduledKind = null
+        scheduledHandle = null
       }
-      const queueSync = () => {
-        if (queued) return
-        queued = true
-        queueMicrotask(sync)
+
+      const ingestRecords = (records) => {
+        let addedWork = false
+        for (const record of records) {
+          if (record.type === 'childList') {
+            for (const added of record.addedNodes) {
+              if (added.nodeType !== Node.ELEMENT_NODE && added.nodeType !== Node.TEXT_NODE) continue
+              if (isExcluded(added)) continue
+              dirtySubtrees.add(added)
+              addedWork = true
+            }
+          } else if (record.type === 'characterData') {
+            const target = record.target
+            const currentText = target.nodeValue || ''
+            if (currentText === target[TRANSLATED_TEXT]) continue
+            if (target[ORIGINAL_TEXT] === undefined && !hasChinese(currentText)) continue
+            if (isExcluded(target)) continue
+            dirtySubtrees.add(target)
+            addedWork = true
+          } else if (record.type === 'attributes') {
+            const target = record.target
+            const name = record.attributeName
+            if (!name || target.nodeType !== Node.ELEMENT_NODE) continue
+            const currentValue = target.getAttribute(name)
+            const rendered = target[TRANSLATED_ATTRIBUTES]
+            if (rendered !== undefined && currentValue === rendered[name]) continue
+            const original = target[ORIGINAL_ATTRIBUTES]
+            const hadOriginal = original !== undefined && original[name] !== undefined
+            if (!hadOriginal && (currentValue === null || !hasChinese(currentValue))) continue
+            if (isExcluded(target)) continue
+            dirtyAttrElements.add(target)
+            addedWork = true
+          }
+        }
+        return addedWork
       }
-      const observer = new MutationObserver(queueSync)
-      observer.observe(root, { attributes: true, attributeFilter: TRANSLATABLE_ATTRIBUTES, characterData: true, childList: true, subtree: true })
-      const unsubscribe = locale.subscribe(() => {
-        english = locale.getLocale().active === 'en'
-        queueSync()
+
+      const flush = () => {
+        scheduledKind = null
+        scheduledHandle = null
+        if (disposed) return
+        if (!english) {
+          dirtySubtrees.clear()
+          dirtyAttrElements.clear()
+          if (needsRestore) {
+            needsRestore = false
+            restoreNode(root)
+          }
+          return
+        }
+        if (needsFullScan) {
+          needsFullScan = false
+          dirtySubtrees.clear()
+          dirtyAttrElements.clear()
+          translateNode(root)
+        } else {
+          const subtrees = Array.from(dirtySubtrees)
+          const attrElements = Array.from(dirtyAttrElements)
+          dirtySubtrees.clear()
+          dirtyAttrElements.clear()
+          const processedSubtrees = new Set(subtrees)
+          for (const node of subtrees) {
+            if (!isWithinRoot(root, node)) continue
+            if (hasDirtyAncestor(node, processedSubtrees, root)) continue
+            translateNode(node)
+          }
+          for (const element of attrElements) {
+            if (!isWithinRoot(root, element)) continue
+            if (processedSubtrees.has(element) || hasDirtyAncestor(element, processedSubtrees, root)) continue
+            translateElementAttributes(element)
+          }
+        }
+        if (observing) {
+          const trailing = observer.takeRecords()
+          if (trailing.length > 0 && ingestRecords(trailing)) {
+            scheduleFlush()
+          }
+        }
+      }
+
+      const scheduleFlush = () => {
+        if (disposed || scheduledKind !== null) return
+        const doc = root.ownerDocument
+        const view = doc && doc.defaultView
+        if (view && typeof view.requestAnimationFrame === 'function' && doc.visibilityState !== 'hidden') {
+          scheduledKind = 'raf'
+          scheduledHandle = view.requestAnimationFrame(flush)
+        } else {
+          scheduledKind = 'timeout'
+          scheduledHandle = setTimeout(flush, 16)
+        }
+      }
+
+      const observer = new MutationObserver((records) => {
+        if (disposed || !english) return
+        if (needsFullScan || ingestRecords(records)) {
+          scheduleFlush()
+        }
       })
-      sync()
-      return () => {
+
+      const startObserving = () => {
+        if (observing || disposed) return
+        observer.observe(root, OBSERVER_OPTIONS)
+        observing = true
+      }
+
+      const stopObserving = () => {
+        if (!observing) return
         observer.disconnect()
+        observing = false
+      }
+
+      const unsubscribe = locale.subscribe(() => {
+        if (disposed) return
+        const nextEnglish = locale.getLocale().active === 'en'
+        if (nextEnglish === english) return
+        english = nextEnglish
+        dirtySubtrees.clear()
+        dirtyAttrElements.clear()
+        if (english) {
+          needsRestore = false
+          needsFullScan = true
+          startObserving()
+          scheduleFlush()
+        } else {
+          needsFullScan = false
+          needsRestore = true
+          stopObserving()
+          scheduleFlush()
+        }
+      })
+
+      if (english) {
+        translateNode(root)
+        startObserving()
+      }
+
+      return () => {
+        if (disposed) return
+        disposed = true
+        cancelScheduled()
+        stopObserving()
+        dirtySubtrees.clear()
+        dirtyAttrElements.clear()
         unsubscribe()
         restoreNode(root)
       }
