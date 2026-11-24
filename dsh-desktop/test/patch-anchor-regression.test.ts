@@ -9,6 +9,7 @@ const require = createRequire(import.meta.url);
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const {
   patchSettingsWriteFailureSource,
+  patchPermissionPresetSelectSource,
   patchThemeWriteConvergeSource,
   patchConfigEditorEditShortCircuitSource,
   patchAppBootReconcileGateSource,
@@ -39,6 +40,35 @@ const SETTINGS_MUTATE = [
   '\t\t\t\t\t} else this.pendingRevision = response.value.revision;',
   '\t\t\t\t\treturn true;',
   '\t\t\t\t});',
+  '\t\t\t}',
+].join('\n');
+
+const PERMISSION_PRESET_SELECT = [
+  '\t\t\tasync select(preset) {',
+  '\t\t\t\tconst state = this.store.getSnapshot();',
+  '\t\t\t\tconst view = this.describeFace.getSnapshot().view?.namespaces.find((entry) => entry.ns === PERMISSION_SETTINGS_NS);',
+  '\t\t\t\tif (view === void 0 || !state.writable || this.saving) return;',
+  '\t\t\t\tthis.saving = true;',
+  '\t\t\t\tthis.store.update((draft) => {',
+  '\t\t\t\t\tdraft.status = "saving";',
+  '\t\t\t\t\tdraft.error = null;',
+  '\t\t\t\t});',
+  '\t\t\t\tlet response;',
+  '\t\t\t\ttry {',
+  '\t\t\t\t\tresponse = await this.ctx.remote.settings.mutate(PERMISSION_SETTINGS_NS, [{',
+  '\t\t\t\t\t\top: "set",',
+  '\t\t\t\t\t\tpath: ["defaultPreset"],',
+  '\t\t\t\t\t\tvalue: preset',
+  '\t\t\t\t\t}], view.revision);',
+  '\t\t\t\t} finally {',
+  '\t\t\t\t\tthis.saving = false;',
+  '\t\t\t\t}',
+  '\t\t\t\tif (this.disposed) return;',
+  '\t\t\t\tif (!response.ok) {',
+  '\t\t\t\t\tthis.fail(response.error);',
+  '\t\t\t\t\treturn;',
+  '\t\t\t\t}',
+  '\t\t\t\tthis.describeFace.acceptView(response.value);',
   '\t\t\t}',
 ].join('\n');
 
@@ -104,6 +134,13 @@ test('anchor/settings: mutate 失败分支锚点唯一且命中', () => {
   assert.ok(patchSettingsWriteFailureSource(`before\n${SETTINGS_MUTATE}\nafter`));
 });
 
+test('anchor/permission-preset: select 冲突恢复锚点命中且幂等（#479）', () => {
+  const patched = patchPermissionPresetSelectSource(`before\n${PERMISSION_PRESET_SELECT}\nafter`);
+  assert.ok(patched);
+  assert.match(patched, /dsh-desktop-permission-preset-retry/);
+  assert.equal(patchPermissionPresetSelectSource(patched), patched);
+});
+
 test('anchor/theme: setTheme/setFontSize/adopt 三锚点命中且互不重叠', () => {
   const patched = patchThemeWriteConvergeSource(
     [THEME_SET_THEME, THEME_SET_FONT, THEME_ADOPT].join('\n'),
@@ -161,6 +198,7 @@ test('transform/app-boot: 幂等', () => {
 
 test('transform/settings: 未知上游形态显式失败（拒绝静默跳过的哑弹补丁）', () => {
   assert.equal(patchSettingsWriteFailureSource('const upstreamChanged = true;'), undefined);
+  assert.equal(patchPermissionPresetSelectSource('const upstreamChanged = true;'), undefined);
   assert.equal(patchThemeWriteConvergeSource('const upstreamChanged = true;'), undefined);
   assert.equal(patchConfigEditorEditShortCircuitSource('const upstreamChanged = true;'), undefined);
   assert.equal(patchAppBootReconcileGateSource('const upstreamChanged = true;'), undefined);
@@ -171,6 +209,7 @@ test('transform/settings: 未知上游形态显式失败（拒绝静默跳过的
 const INSTALLED_TRIPWIRE: Array<[string, string, RegExp]> = [
   ['model-select-contrast', 'dsh-client-ui-settings-models/lib/client.js', /dsh-desktop-select-contrast/],
   ['settings-write-retry', 'dsh-client-ui-settings/lib/client.js', /dsh-desktop-settings-write-retry/],
+  ['permission-preset-retry', 'dsh-client-ui-permission-presets/lib/client.js', /dsh-desktop-permission-preset-retry/],
   ['theme-write-converge', 'dsh-client-ui-theme/lib/client.js', /dsh-desktop-theme-write-converge/],
   ['config-edit-skip', 'dsh-config-editor/lib/index.js', /dsh-desktop-config-edit-reconcile-skip/],
   ['reconcile-gate', 'dsh-app-boot/lib/index.js', /dsh-desktop-reconcile-gate/],

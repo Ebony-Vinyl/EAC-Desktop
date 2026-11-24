@@ -128,32 +128,136 @@ function waitForGroupExit(pid: number, timeoutMs: number): Promise<boolean> {
 // mtime 刻度（Windows 文件时间粒度粗，实测两个新建临时目录逐位相同），
 // 只比 mtime 会把上一个 home 的判定串到当前 home（可能把 workspace-write
 // 误判为 danger-full-access）。
-const presetCache: { at: number; file: string | null; mtimeMs: number | null; value: 'danger-full-access' | null } = {
-  at: 0, file: null, mtimeMs: null, value: null,
+// 0.2.x 起 SettingsForms.importLegacyDocument() 在启动时将 settings.yaml 迁入
+// 活跃 profile 的 cordis.patch.yml 并把原文件改名为 settings.yaml.imported
+//（issue #479）。因此按内核真实覆盖序依次查找显式 permission.defaultPreset：
+//   1. <DSH_HOME>/cordis.patch.yml（home 层覆盖，优先级最高）
+//   2. <DSH_HOME>/profiles/<desktopProfile>/cordis.patch.yml（UI 设置落盘处）
+//   3. <DSH_HOME>/settings.yaml（尚未完成首次迁移的旧版配置；不读已退役的
+//      .imported，防止用户在 UI 改回 workspace-write 删掉 patch 行后被旧备份反向抬权）
+// 记忆化键包含全部候选路径与各自 mtimeMs，避免跨 DSH_HOME 或单文件变更串缓存。
+const presetCache: { at: number; signature: string | null; value: 'danger-full-access' | null } = {
+  at: 0, signature: null, value: null,
 };
+const YAML_JS_TAG = {
+  tag: 'tag:yaml.org,2002:js',
+  resolve: (value: unknown): unknown => value,
+};
+function extractPresetFromPatchRows(rows: unknown): string | undefined {
+  if (!Array.isArray(rows)) return undefined;
+  let found: string | undefined;
+  for (const item of rows) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const row = item as Record<string, unknown>;
+    if (row.disabled === true) continue;
+    if (Array.isArray(row.insert)) {
+      const nested = extractPresetFromPatchRows(row.insert);
+      if (nested !== undefined) found = nested;
+    }
+    if (row.group === true && Array.isArray(row.config)) {
+      const grouped = extractPresetFromPatchRows(row.config);
+      if (grouped !== undefined) found = grouped;
+    }
+    if (row.id === 'permission' && row.config && typeof row.config === 'object' && !Array.isArray(row.config)) {
+      const preset = (row.config as Record<string, unknown>).defaultPreset;
+      if (typeof preset === 'string' && preset.length > 0) {
+        found = preset;
+      }
+    }
+  }
+  return found;
+}
+function extractPresetFromSettingsDoc(doc: unknown): string | undefined {
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) return undefined;
+  const permission = (doc as Record<string, unknown>).permission;
+  if (!permission || typeof permission !== 'object' || Array.isArray(permission)) return undefined;
+  const preset = (permission as Record<string, unknown>).defaultPreset;
+  return typeof preset === 'string' && preset.length > 0 ? preset : undefined;
+}
 function userDefaultPreset(): 'danger-full-access' | null {
   try {
     const home = ctx.getDshHome();
     if (!home) return null;
-    const file = path.join(home, 'settings.yaml');
-    let mtimeMs: number | null = null;
-    try { mtimeMs = fs.statSync(file).mtimeMs; } catch { /* 不存在 */ }
+    const desktopProfile = ctx.getDesktopProfile();
+    const candidates: Array<{ file: string; kind: 'patch' | 'settings' }> = [
+      { file: path.join(home, 'cordis.patch.yml'), kind: 'patch' },
+      ...(desktopProfile
+        ? [{ file: path.join(home, 'profiles', desktopProfile, 'cordis.patch.yml'), kind: 'patch' as const }]
+        : []),
+      { file: path.join(home, 'settings.yaml'), kind: 'settings' },
+    ];
+    const stats: Array<{ file: string; kind: 'patch' | 'settings'; mtimeMs: number | null; size: number | null }> = [];
+    for (const entry of candidates) {
+      try {
+        const st = fs.statSync(entry.file);
+        stats.push({ ...entry, mtimeMs: st.mtimeMs, size: st.size });
+      } catch (err) {
+        // 仅明确 ENOENT 视作文件缺失；ACL 拒绝（EACCES/EPERM）、临时 I/O 错误（EIO/EBUSY）等
+        // 一律按 fail-closed 保持内核默认权限，绝不跳过高优先级候选向低优先级回退抬权。
+        if ((err as NodeJS.ErrnoException)?.code === 'ENOENT') {
+          stats.push({ ...entry, mtimeMs: null, size: null });
+          continue;
+        }
+        presetCache.signature = null;
+        const code = (err as NodeJS.ErrnoException)?.code;
+        const msg = err instanceof Error ? err.message : String(err);
+        ctx.log('warn', `检查权限配置状态失败（${code ?? 'UNKNOWN'}），按 fail-closed 保持默认权限（不向下回退）: ${entry.file} (${msg})`);
+        return null;
+      }
+    }
+    const signature = stats
+      .map((entry) => `${entry.file}:${entry.mtimeMs === null ? 'missing' : `${entry.mtimeMs}:${entry.size}`}`)
+      .join('|');
     const now = Date.now();
-    if (file === presetCache.file && mtimeMs === presetCache.mtimeMs && now - presetCache.at < 5000) return presetCache.value;
-    if (mtimeMs === null) return null;
-    const text = fs.readFileSync(file, 'utf8');
-    // yaml 随 dsh-settings-file 进入内置依赖树；解析失败宁可返回空
-    // （不注入，保持内核默认 workspace-write），也绝不误判成完全访问。
+    if (signature === presetCache.signature && now - presetCache.at < 5000) return presetCache.value;
+    // yaml 随 dsh-settings-file 进入内置依赖树；高优先级候选文件只要存在但读/解析失败
+    // 或顶层结构损坏，必须失败关闭（fail-closed 返回 null，保持内核默认 workspace-write），
+    // 绝不向下回退到低优先级文件（避免高优先级收紧配置损坏时意外落回旧的 danger-full-access 导致抬权）。
     const yaml = require('yaml');
-    const doc = ((yaml.parse && yaml.parse(text)) ?? null) as Record<string, unknown> | null;
-    const permission = doc && typeof doc.permission === 'object' ? doc.permission as Record<string, unknown> : null;
-    const value = permission && permission.defaultPreset === 'danger-full-access' ? 'danger-full-access' : null;
+    let resolvedPreset: string | undefined;
+    for (const entry of stats) {
+      if (entry.mtimeMs === null) continue;
+      try {
+        const text = fs.readFileSync(entry.file, 'utf8');
+        if (typeof yaml.parse !== 'function') {
+          presetCache.signature = null;
+          ctx.log('warn', `权限配置解析器未就绪，按 fail-closed 关闭完全访问注入: ${entry.file}`);
+          return null;
+        }
+        const doc = yaml.parse(text, { customTags: [YAML_JS_TAG] });
+        if (doc !== null && doc !== undefined) {
+          const validShape = entry.kind === 'patch'
+            ? Array.isArray(doc)
+            : (typeof doc === 'object' && !Array.isArray(doc));
+          if (!validShape) {
+            presetCache.signature = null;
+            ctx.log('warn', `权限配置结构异常，按 fail-closed 保持默认权限（不向下回退）: ${entry.file}`);
+            return null;
+          }
+        }
+        const preset = entry.kind === 'patch'
+          ? extractPresetFromPatchRows(doc)
+          : extractPresetFromSettingsDoc(doc);
+        if (preset !== undefined) {
+          resolvedPreset = preset;
+          break;
+        }
+      } catch (err) {
+        presetCache.signature = null;
+        const msg = err instanceof Error ? err.message : String(err);
+        ctx.log('warn', `读取或解析权限配置失败，按 fail-closed 保持默认权限（不向下回退）: ${entry.file} (${msg})`);
+        return null;
+      }
+    }
+    const value = resolvedPreset === 'danger-full-access' ? 'danger-full-access' : null;
     presetCache.at = now;
-    presetCache.file = file;
-    presetCache.mtimeMs = mtimeMs;
+    presetCache.signature = signature;
     presetCache.value = value;
     return value;
-  } catch {
+  } catch (err) {
+    presetCache.signature = null;
+    const msg = err instanceof Error ? err.message : String(err);
+    ctx.log('warn', `解析默认权限预设异常，按 fail-closed 保持默认权限: ${msg}`);
     return null;
   }
 }

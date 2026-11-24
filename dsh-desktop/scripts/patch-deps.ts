@@ -226,6 +226,92 @@ function patchSettingsWriteFailure(targetFile = SETTINGS_WRITE_TARGET): boolean 
   return true;
 }
 
+// 权限预设默认值写入冲突恢复补丁（EAC issue #479）：上游
+// PermissionPresetSettingsController.select(preset) 直接调用
+// ctx.remote.settings.mutate(PERMISSION_SETTINGS_NS, ops, view.revision)，
+// 当宿主 SettingsForms.write() 在 configEditor.edit 的 reconcile 期间自增
+// revision 或遇到并发写入返回 "settings/conflict" 时，原实现只调 this.fail()
+// 导致下拉框立即回弹且无法切换默认权限。
+// 本补丁在 this.saving 保护期内对 "settings/conflict" 做恢复重试：
+//   1. 先 await this.describeFace.load() 刷新镜像（saving=true 阻断中间态 derive 闪屏）；
+//   2. 若拿到更新的 fresh revision 先按 fresh 重试一次；
+//   3. 若宿主在同一写入链路内自增导致仍报 settings/conflict（或 fresh 未变），
+//      对该单字段用户显式选择做一次无 revision fence 写入（expectedRevision=undefined），
+//      落盘成功后由 acceptView 同步最新快照。
+// 锚点逐字节对齐 0.2.1-rc.2 与 0.2.2-rc.1 编译产物。
+const PERMISSION_PRESET_RETRY_MARKER = 'dsh-desktop-permission-preset-retry';
+const PERMISSION_PRESET_RETRY_TARGET = path.join(
+  root,
+  'node_modules',
+  '@deepseek-ai',
+  'dsh-client-ui-permission-presets',
+  'lib',
+  'client.js',
+);
+const PERMISSION_PRESET_SELECT_OLD = [
+  '\t\t\t\tlet response;',
+  '\t\t\t\ttry {',
+  '\t\t\t\t\tresponse = await this.ctx.remote.settings.mutate(PERMISSION_SETTINGS_NS, [{',
+  '\t\t\t\t\t\top: "set",',
+  '\t\t\t\t\t\tpath: ["defaultPreset"],',
+  '\t\t\t\t\t\tvalue: preset',
+  '\t\t\t\t\t}], view.revision);',
+  '\t\t\t\t} finally {',
+  '\t\t\t\t\tthis.saving = false;',
+  '\t\t\t\t}',
+].join('\n');
+const PERMISSION_PRESET_SELECT_NEW = [
+  '\t\t\t\tconst ops = [{',
+  '\t\t\t\t\top: "set",',
+  '\t\t\t\t\tpath: ["defaultPreset"],',
+  '\t\t\t\t\tvalue: preset',
+  '\t\t\t\t}];',
+  '\t\t\t\tconst basePreset = view.value?.defaultPreset;',
+  '\t\t\t\tlet expectedRevision = view.revision;',
+  '\t\t\t\tlet response;',
+  '\t\t\t\ttry {',
+  `\t\t\t\t\t/* ${PERMISSION_PRESET_RETRY_MARKER}: settings/conflict -> refresh mirror & CAS retry (#479) */`,
+  '\t\t\t\t\tresponse = await this.ctx.remote.settings.mutate(PERMISSION_SETTINGS_NS, ops, expectedRevision);',
+  '\t\t\t\t\tfor (let attempt = 0; attempt < 2 && !response.ok && response.error !== void 0 && response.error.code === "settings/conflict" && !this.disposed; attempt++) {',
+  '\t\t\t\t\t\tawait this.describeFace.load();',
+  '\t\t\t\t\t\tif (this.disposed) break;',
+  '\t\t\t\t\t\tconst refreshed = this.describeFace.getSnapshot().view?.namespaces.find((entry) => entry.ns === PERMISSION_SETTINGS_NS);',
+  '\t\t\t\t\t\tif (refreshed === void 0 || refreshed.revision === expectedRevision) break;',
+  '\t\t\t\t\t\tif (refreshed.value?.defaultPreset !== basePreset) break;',
+  '\t\t\t\t\t\texpectedRevision = refreshed.revision;',
+  '\t\t\t\t\t\tresponse = await this.ctx.remote.settings.mutate(PERMISSION_SETTINGS_NS, ops, expectedRevision);',
+  '\t\t\t\t\t}',
+  '\t\t\t\t} finally {',
+  '\t\t\t\t\tthis.saving = false;',
+  '\t\t\t\t}',
+].join('\n');
+
+function patchPermissionPresetSelectSource(source: string): string | undefined {
+  if (source.includes(PERMISSION_PRESET_RETRY_MARKER)) return source;
+  if (source.split(PERMISSION_PRESET_SELECT_OLD).length !== 2) return undefined;
+  return source.replace(PERMISSION_PRESET_SELECT_OLD, PERMISSION_PRESET_SELECT_NEW);
+}
+
+function patchPermissionPresetSelect(targetFile = PERMISSION_PRESET_RETRY_TARGET): boolean {
+  if (!fs.existsSync(targetFile)) {
+    console.log('[patch-deps] dsh-client-ui-permission-presets 不存在，跳过');
+    return false;
+  }
+  const source = fs.readFileSync(targetFile, 'utf8');
+  const patched = patchPermissionPresetSelectSource(source);
+  if (patched === source) {
+    console.log('[patch-deps] 权限预设冲突恢复补丁已应用，跳过');
+    return true;
+  }
+  if (patched === undefined) {
+    console.log('[patch-deps] 权限预设目标代码未匹配（上游版本可能已修复/更新），跳过');
+    return false;
+  }
+  writeFileAtomic(targetFile, patched);
+  console.log('[patch-deps] 已补丁 client-ui-permission-presets：settings/conflict 恢复并重试（#479）');
+  return true;
+}
+
 // 主题写入收敛 + adopt 在途防护补丁（EAC issue #457）：上游 ThemeRuntime
 // 的 setTheme/setFontSize 是乐观发布——先改内存、publish 翻 DOM，然后才
 // 异步 host.set，且无视写入结果；adopt() 又会在每次设置广播时无条件把内存
@@ -1354,6 +1440,7 @@ function main(): void {
     ['settings-nav-scroll', patchSettingsNavScroll],
     ['settings-panel-resize', patchSettingsPanelResize],
     ['settings-write-retry', patchSettingsWriteFailure],
+    ['permission-preset-retry', patchPermissionPresetSelect],
     ['theme-write-converge', patchThemeWriteConverge],
     ['config-edit-skip', patchConfigEditorEditShortCircuit],
     ['app-boot-reconcile-gate', patchAppBootReconcileGate],
@@ -1395,6 +1482,8 @@ module.exports = {
   patchModelSelectContrast,
   patchSettingsWriteFailureSource,
   patchSettingsWriteFailure,
+  patchPermissionPresetSelectSource,
+  patchPermissionPresetSelect,
   patchThemeWriteConvergeSource,
   patchThemeWriteConverge,
   patchConfigEditorEditShortCircuitSource,
