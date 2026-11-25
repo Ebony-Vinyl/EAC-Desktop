@@ -9,7 +9,7 @@
 [![Stars](https://img.shields.io/github/stars/Ebony-Vinyl/EAC-Desktop?style=for-the-badge&label=Star&color=4b6fff)](https://github.com/Ebony-Vinyl/EAC-Desktop)
 [![MIT License](https://img.shields.io/badge/license-MIT-2ea44f?style=for-the-badge)](LICENSE)
 
-[![QQ](https://img.shields.io/badge/QQ-1083832019-blue?logo=qq)](https://qm.qq.com/q/vqXxQQ3rmo)
+[![QQ](https://img.shields.io/badge/QQ-521373108-blue?logo=qq)](https://qm.qq.com/q/fWtvVCPk08)
 [![Discord](https://img.shields.io/badge/Discord-DSH--EAC-5865f2?logo=discord)](https://discord.com/invite/kY48Ah8h)
 
 [![Trendshift daily](https://trendshift.io/api/badge/trendshift/repositories/158075/daily?language=JavaScript)](https://trendshift.io/repositories/158075)
@@ -146,6 +146,8 @@ Rust と Node は **stdio の JSON-RPC** で通信し、プロトコルの出力
 
 プラグインは **builtin / recommended / external** に分類されます。組み立てのマニフェストが同梱する機能を定義し、パッケージのメタデータが推奨のコレクションと外部の拡張機能を定義します。拡張機能はその機能で選び、入手元、バージョンの制約、ライセンスで管理してください。
 
+**Lite 版と Full 版の構成の違い**：`Lite` 版はデスクトップの最小コアシェル、同梱の Node/npm/pnpm ランタイム、組み込みのコンパニオンプラグイン、5 つの標準スキンのみを収録し、他プラットフォーム向けのネイティブバイナリやデバッグマップを除外しています。`Full` 版はそれに加えて全スキンセットとオフラインの `EAC-Pack`（`eac-plugin-suite`）拡張パッケージ一式を同梱しており、サイズ差は設定の有効／無効ではなく物理的な同梱ペイロードの差によるものです。
+
 [配布の仕様](docs/adr/0008-plugin-distribution-boundary.md)、[プラグインの台帳](.sync/plugin-distribution.json)、[入手元の記録](dsh-desktop/assets/SOURCES.json)を見てください。
 
 ### スキンの契約
@@ -272,9 +274,9 @@ node scripts/plugin-sync.mjs validate
 
 | QQ | Discord | Issue トラッカー |
 | :---: | :---: | :---: |
-| [1083832019](https://qm.qq.com/q/vqXxQQ3rmo) | [DSH-EAC](https://discord.com/invite/kY48Ah8h) | [GitHub Issues](https://github.com/Ebony-Vinyl/EAC-Desktop/issues) |
+| [521373108](https://qm.qq.com/q/fWtvVCPk08) | [DSH-EAC](https://discord.com/invite/kY48Ah8h) | [GitHub Issues](https://github.com/Ebony-Vinyl/EAC-Desktop/issues) |
 
-<table><tr><td align="center"><img src="docs/qq-group-qrcode.jpg" alt="QQ グループの QR コード" width="260" /></td><td align="center"><img src="docs/wechat-group-qrcode.jpg" alt="WeChat グループの QR コード" width="260" /></td></tr><tr><td align="center">QQ · 1083832019</td><td align="center">WeChat グループ</td></tr></table>
+<table><tr><td align="center"><img src="docs/qq-group-qrcode.jpg" alt="QQ グループの QR コード" width="260" /></td></tr><tr><td align="center">QQ · 521373108</td></tr></table>
 
 ## コントリビューターと謝辞
 

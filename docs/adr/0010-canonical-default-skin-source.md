@@ -2,6 +2,7 @@
 
 Date: 2026-09-21
 Status: Accepted for v6 stage 7
+Related: ADR 0012 (`0012-ui-skin-manager-integration.md`, renumbered from duplicate ADR 0010; stage-0 UI skin manager integration boundary)
 Owner: DSH-Desktop-EAC maintainers (host profile and assembly)
 
 ## Decision

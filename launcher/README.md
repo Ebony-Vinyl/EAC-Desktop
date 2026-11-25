@@ -2,7 +2,6 @@
 
 面向 DeepSeek Harness 的独立启动器，位于 EAC Desktop 仓库的 `launcher/`。
 采用 Tauri 2 + React / TypeScript + Rust，与现有桌面端分别构建和分发。
-本次没有提交、推送、创建 GitHub Release 或上传构建产物。
 
 ## 运行
 
