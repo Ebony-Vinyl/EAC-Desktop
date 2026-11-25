@@ -109,9 +109,33 @@ function platformPath(platform: NodeJS.Platform): typeof path.win32 {
 }
 
 /**
+ * 便携版同卷兄弟存储基目录推导（issue #477，与 Rust L1 `portable_storage_base_from` 对齐）。
+ *
+ * 当 Windows 可执行文件同级存在 `.dsh-portable` 且安装目录非盘符根时，返回
+ * `<parent>/<installDirName>-data`：既避免向 C 盘 `%LOCALAPPDATA%` 写数据，又与
+ * `installRoot` 互不重叠以通过客户端自更新的 `assertInstallBoundary`。
+ */
+export function portableStorageBaseForExe(
+  exePath: string | undefined,
+  platform: NodeJS.Platform = process.platform,
+  markerExists: (markerFile: string) => boolean = fs.existsSync,
+): string | null {
+  if (platform !== 'win32') return null;
+  const trimmed = exePath?.trim();
+  if (!trimmed || !path.win32.isAbsolute(trimmed)) return null;
+  const installDir = path.win32.dirname(path.win32.resolve(trimmed));
+  const parentDir = path.win32.dirname(installDir);
+  const dirName = path.win32.basename(installDir).trim();
+  if (!dirName || parentDir.toLowerCase() === installDir.toLowerCase()) return null;
+  if (!markerExists(path.win32.join(installDir, '.dsh-portable'))) return null;
+  return path.win32.join(parentDir, `${dirName}-data`);
+}
+
+/**
  * 产品数据根。
  *
- * Windows：`%LOCALAPPDATA%\Deepseek Harness EAC`；非 Windows 在产品数据根下同样布局。
+ * Windows：常规安装为 `%LOCALAPPDATA%\Deepseek Harness EAC`，便携版为同卷兄弟目录
+ * `<parent>/<installDirName>-data\data`；非 Windows 在产品数据根下同样布局。
  * Rust L1 只传这个根（`DSH_EAC_DATA_ROOT`）和通道，其余推导都在本模块完成。
  *
  * `DSH_EAC_DATA_ROOT` 是**权威值**：壳已经算好并显式告知，就不能再拿
@@ -121,10 +145,13 @@ function platformPath(platform: NodeJS.Platform): typeof path.win32 {
 export function environmentProductRoot(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
+  markerExists?: (markerFile: string) => boolean,
 ): string {
   const api = platformPath(platform);
   const declared = env.DSH_EAC_DATA_ROOT?.trim();
   if (declared) return api.resolve(declared);
+  const portableBase = portableStorageBaseForExe(env.DSH_SHELL_EXE, platform, markerExists);
+  if (portableBase) return api.join(portableBase, 'data');
   const home = env.USERPROFILE || env.HOME || os.homedir();
   const base = platform === 'win32'
     ? (env.LOCALAPPDATA || api.join(home, 'AppData', 'Local'))
@@ -136,15 +163,17 @@ export function environmentProductRoot(
 export function environmentStorageRoot(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
+  markerExists?: (markerFile: string) => boolean,
 ): string {
   const api = platformPath(platform);
   const explicit = env.DSH_EAC_DPX_ROOT?.trim();
   if (explicit) return api.resolve(explicit);
+  const productRoot = environmentProductRoot(env, platform, markerExists);
   if (platform === process.platform) {
-    const binding = readEnvironmentBinding(environmentProductRoot(env, platform));
+    const binding = readEnvironmentBinding(productRoot);
     if (binding) return binding.storageRoot;
   }
-  return api.join(environmentProductRoot(env, platform), 'dpx');
+  return api.join(productRoot, 'dpx');
 }
 
 /**
@@ -157,13 +186,19 @@ export function environmentStorageRoot(
 export function environmentRegistryHome(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
+  markerExists?: (markerFile: string) => boolean,
 ): string {
   const api = platformPath(platform);
   const explicit = env.DSH_EAC_DPX_REGISTRY_HOME?.trim();
   if (explicit) return api.resolve(explicit);
+  const productRoot = environmentProductRoot(env, platform, markerExists);
   if (platform === process.platform) {
-    const binding = readEnvironmentBinding(environmentProductRoot(env, platform), environmentStorageRoot(env, platform));
+    const binding = readEnvironmentBinding(productRoot, environmentStorageRoot(env, platform, markerExists));
     if (binding) return binding.registryHome;
+  }
+  const portableBase = portableStorageBaseForExe(env.DSH_SHELL_EXE, platform, markerExists);
+  if (portableBase && productRoot.toLowerCase() === api.join(portableBase, 'data').toLowerCase()) {
+    return api.join(productRoot, 'dpx', 'registry');
   }
   const home = env.USERPROFILE || env.HOME || os.homedir();
   if (platform === 'win32') {
@@ -181,9 +216,10 @@ export function environmentRegistryHome(
 export function environmentRoot(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
+  markerExists?: (markerFile: string) => boolean,
 ): string {
   const api = platformPath(platform);
-  return api.join(environmentStorageRoot(env, platform), 'dsh-environments', environmentName(env, platform));
+  return api.join(environmentStorageRoot(env, platform, markerExists), 'dsh-environments', environmentName(env, platform));
 }
 
 /** 当前生效的隔离根（优先 dpx 注入的身份变量），供 UI/诊断展示。 */

@@ -813,14 +813,88 @@ fn eac_channel() -> String {
 // 重算一遍，就会把环境建到与调用方预期不同的位置（L2 侧却把该变量当权威，
 // 两侧语义正好相反），实测表现为「隔离根建在别处」。因此显式给定时一律采用。
 fn eac_data_root() -> std::path::PathBuf {
-    eac_data_root_with(
+    eac_data_root_for(
         std::env::var("DSH_EAC_DATA_ROOT").ok().as_deref(),
+        portable_storage_base().as_deref(),
         std::env::var("USERPROFILE").ok().as_deref(),
         std::env::var("HOME").ok().as_deref(),
         std::env::var("LOCALAPPDATA").ok().as_deref(),
         std::env::var("XDG_DATA_HOME").ok().as_deref(),
         std::env::temp_dir(),
     )
+}
+
+/// 从可执行文件路径与 `.dsh-portable` 标记推导便携版同卷兄弟存储基目录（issue #477）。
+///
+/// 约束：`assertInstallBoundary`（`update-backup.ts` / `update-portable-helper.ts`）严禁
+/// 任何受保护数据目录位于便携安装目录 `installRoot` 内部（否则应用内自更新必抛
+/// `update-install-data-overlap`），且便携更新事务目录同样采用同卷兄弟目录约定。
+/// 因此便携版将全部运行时数据收敛到 `<parent>/<installDirName>-data/` 下（子目录
+/// `data` / `config` / `webview` / `guests` 互不嵌套），既保证 100% 落在便携盘、
+/// 零写 C 盘，又满足自更新边界契约与 Windows MAX_PATH 预算。
+fn portable_storage_base_from(
+    exe_path: Option<&std::path::Path>,
+    has_portable_marker: bool,
+) -> Option<std::path::PathBuf> {
+    if !has_portable_marker {
+        return None;
+    }
+    let install_dir = exe_path?.parent()?;
+    let parent_dir = install_dir.parent()?;
+    if parent_dir == install_dir {
+        return None;
+    }
+    let dir_name = install_dir.file_name()?.to_str()?.trim();
+    if dir_name.is_empty() {
+        return None;
+    }
+    Some(parent_dir.join(format!("{dir_name}-data")))
+}
+
+fn portable_storage_base() -> Option<std::path::PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    let has_marker = exe
+        .parent()
+        .is_some_and(|dir| dir.join(".dsh-portable").is_file());
+    portable_storage_base_from(Some(exe.as_path()), has_marker)
+}
+
+/// 当前进程实际启用便携兄弟存储时的基目录。
+///
+/// 若外部显式注入了异处的 `DSH_EAC_DATA_ROOT`（例如测试隔离，或旧版 6.0.1 自更新
+/// helper 在健康检查阶段经 `launchEnv` 传入旧版 C 盘数据根），则不启用便携默认派生，
+/// 保持 `webview`/`config`/`guests` 与旧版 `request.binding` 一致。
+fn same_storage_path(left: &std::path::Path, right: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    {
+        let norm = |p: &std::path::Path| {
+            p.to_string_lossy()
+                .replace('/', "\\")
+                .trim_end_matches('\\')
+                .to_ascii_lowercase()
+        };
+        norm(left) == norm(right)
+    }
+    #[cfg(not(windows))]
+    {
+        left == right
+    }
+}
+
+fn active_portable_storage_base() -> Option<std::path::PathBuf> {
+    let base = portable_storage_base()?;
+    if let Ok(declared) = std::env::var("DSH_EAC_DATA_ROOT") {
+        let trimmed = declared.trim();
+        if !trimmed.is_empty() && !same_storage_path(std::path::Path::new(trimmed), &base.join("data")) {
+            return None;
+        }
+    }
+    Some(base)
+}
+
+fn custom_webview_data_dir() -> Option<std::path::PathBuf> {
+    explicit_storage_dir("DSH_EAC_WEBVIEW_DATA_DIR")
+        .or_else(|| active_portable_storage_base().map(|base| base.join("webview")))
 }
 
 /// sidecar stderr 的落盘目标（2026-10-24 缺陷修复）。
@@ -854,8 +928,9 @@ fn sidecar_stderr_sink(data_root: &std::path::Path) -> Stdio {
 /// 其它测试读到被污染的 `DSH_EAC_DATA_ROOT`（实测出现过一次性失败）。纯函数
 /// 版本既覆盖同一逻辑，又不引入跨测试干扰。
 #[allow(clippy::too_many_arguments)]
-fn eac_data_root_with(
+fn eac_data_root_for(
     declared: Option<&str>,
+    portable_base: Option<&std::path::Path>,
     userprofile: Option<&str>,
     home_var: Option<&str>,
     localappdata: Option<&str>,
@@ -867,6 +942,9 @@ fn eac_data_root_with(
         if !value.trim().is_empty() {
             return std::path::PathBuf::from(value.trim());
         }
+    }
+    if let Some(portable) = portable_base {
+        return portable.join("data");
     }
     let home = userprofile
         .or(home_var)
@@ -882,6 +960,26 @@ fn eac_data_root_with(
             .unwrap_or_else(|| home.join(".local").join("share"))
     };
     base.join(EAC_PRODUCT_NAME)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn eac_data_root_with(
+    declared: Option<&str>,
+    userprofile: Option<&str>,
+    home_var: Option<&str>,
+    localappdata: Option<&str>,
+    xdg_data_home: Option<&str>,
+    fallback_temp: std::path::PathBuf,
+) -> std::path::PathBuf {
+    eac_data_root_for(
+        declared,
+        None,
+        userprofile,
+        home_var,
+        localappdata,
+        xdg_data_home,
+        fallback_temp,
+    )
 }
 
 static SHELL_NOTIFY: OnceLock<broadcast::Sender<Value>> = OnceLock::new();
@@ -1019,6 +1117,9 @@ fn window_state_path(app: &tauri::AppHandle) -> Option<PathBuf> {
             original, dir
         ));
         return Some(dir.join("window-state.json"));
+    }
+    if let Some(base) = active_portable_storage_base() {
+        return Some(base.join("config").join("window-state.json"));
     }
     original.ok().map(|dir| dir.join("window-state.json"))
 }
@@ -1367,8 +1468,17 @@ fn throttle_save_window_state(app: &tauri::AppHandle) {
 // null（官方语义：自动选择，回退 OS 语言检测）。
 // ---------------------------------------------------------------------------
 
-/// 壳设置目录（= sidecar platform.ts userDataDir() 的 Rust 镜像）。
+/// 壳设置目录（= sidecar platform.ts userDataDir() 的 Rust 镜像，便携版收敛至兄弟 desktop/）。
 fn shell_settings_dir() -> std::path::PathBuf {
+    if let Some(root) = explicit_storage_dir("DSH_DESKTOP_USER_DATA_DIR") {
+        return root;
+    }
+    if let Some(root) = explicit_storage_dir("DSH_EAC_SHELL_CONFIG_DIR") {
+        return root;
+    }
+    if let Some(base) = active_portable_storage_base() {
+        return base.join("desktop");
+    }
     #[cfg(windows)]
     {
         let base = std::env::var_os("APPDATA")
@@ -2222,8 +2332,7 @@ impl Sidecar {
         // L2 resolves the persisted binding and dpx's existing beta identity first.
         if let Some(app) = app {
             use tauri::Manager;
-            let webview = std::env::var_os("DSH_EAC_WEBVIEW_DATA_DIR")
-                .map(PathBuf::from)
+            let webview = custom_webview_data_dir()
                 .or_else(|| app.path().app_local_data_dir().ok());
             if let Some(root) = webview {
                 cmd.env("DSH_SHELL_WEBVIEW_ROOT", root);
@@ -2697,6 +2806,9 @@ fn browser_guest_root(app: &tauri::AppHandle) -> Option<PathBuf> {
     if let Some(base) = window_state_audit_dir() {
         return Some(base.join("browser-guests"));
     }
+    if let Some(base) = active_portable_storage_base() {
+        return Some(base.join("guests"));
+    }
     app.path()
         .app_data_dir()
         .ok()
@@ -3020,8 +3132,8 @@ async fn handle_shell_method(
             .inner_size(760.0, 740.0)
             .min_inner_size(520.0, 500.0)
             .initialization_script(&update_bridge_init_script());
-            if let Some(directory) = std::env::var_os("DSH_EAC_WEBVIEW_DATA_DIR") {
-                builder = builder.data_directory(PathBuf::from(directory));
+            if let Some(directory) = custom_webview_data_dir() {
+                builder = builder.data_directory(directory);
             }
             let result = builder.build();
             Ok(Some(match result {
@@ -4742,15 +4854,28 @@ fn run_environment_action(action: &str, purge: bool) -> Result<Value, String> {
         args.push("--purge".to_string());
     }
 
-    let output = std::process::Command::new(&node)
-        .args(&args)
-        // 脚本自身需要真实用户环境（产品数据根/注册表位置都由它推导）。
+    let data_root = eac_data_root();
+    let mut cmd = std::process::Command::new(&node);
+    cmd.args(&args)
+        // 脚本自身需要真实用户环境（产品数据根/注册表位置与 Sidecar::spawn 对齐）。
         .stdin(std::process::Stdio::null())
         // 关键：必须注入资源根。打包态 dpx payload 位于 <resources>/dpx/src/index.js，
         // 适配层只能经 DSH_RESOURCE_ROOT 定位它；不传就会退化成开发态相对路径查找
         //（安装树上不存在）→ 诊断/清理在真实安装包里全部失效（实测踩中）。
         .env("DSH_RESOURCE_ROOT", resource_root())
-        // 阻塞式取输出：诊断/清理都是短命的一次性进程。
+        .env("DSH_EAC_DATA_ROOT", &data_root)
+        .env("DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL", eac_channel())
+        .env("DSH_EAC_DPX_REGISTRY_HOME", data_root.join("dpx").join("registry"));
+    if let Ok(exe) = std::env::current_exe() {
+        cmd.env("DSH_SHELL_EXE", exe);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x0800_0000);
+    }
+    // 阻塞式取输出：诊断/清理都是短命的一次性进程。
+    let output = cmd
         .output()
         .map_err(|e| format!("无法启动环境诊断（node={node}）：{e}"))?;
 
@@ -5124,7 +5249,7 @@ fn main() {
                                     if std::env::var_os("DSH_EAC_UPDATE_HEALTH_TOKEN").is_some() {
                                         builder = builder.initialization_script(&format!("{}(null);", include_str!("update-boot-ui.js")));
                                     }
-                                    if let Some(directory) = std::env::var_os("DSH_EAC_WEBVIEW_DATA_DIR") {builder = builder.data_directory(PathBuf::from(directory));}
+                                    if let Some(directory) = custom_webview_data_dir() {builder = builder.data_directory(directory);}
                                     if let Some((px, py)) = sim_pos {
                                         builder = builder.position(px, py);
                                     }
@@ -5228,7 +5353,7 @@ fn main() {
                                         if let Some((px, py)) = sim_pos {
                                             builder = builder.position(px, py);
                                         }
-                                        if let Some(directory) = std::env::var_os("DSH_EAC_WEBVIEW_DATA_DIR") {builder = builder.data_directory(PathBuf::from(directory));}
+                                        if let Some(directory) = custom_webview_data_dir() {builder = builder.data_directory(directory);}
                                         match builder.build() {
                                             Ok(win) => {
                                                 apply_window_icon(&win, &app_died);
@@ -5604,5 +5729,53 @@ mod eac_channel_tests {
         assert_eq!(validated_storage_override(Some(absolute.clone())).unwrap(),Some(absolute));
         assert!(validated_storage_override(Some(PathBuf::from("relative-profile"))).is_err());
         assert!(validated_storage_override(Some(PathBuf::new())).is_err());
+    }
+
+    #[test]
+    fn portable_sibling_storage_isolates_from_c_drive_and_install_root() {
+        let exe = if cfg!(windows) {
+            PathBuf::from(r"Z:\PortableApps\Deepseek-Harness-EAC\dsh-eac-shell.exe")
+        } else {
+            PathBuf::from("/mnt/usb/Deepseek-Harness-EAC/dsh-eac-shell")
+        };
+        let base = portable_storage_base_from(Some(exe.as_path()), true)
+            .expect("portable marker should derive sibling storage base");
+        let expected_base = if cfg!(windows) {
+            PathBuf::from(r"Z:\PortableApps\Deepseek-Harness-EAC-data")
+        } else {
+            PathBuf::from("/mnt/usb/Deepseek-Harness-EAC-data")
+        };
+        assert_eq!(base, expected_base);
+        // 非便携模式（无 .dsh-portable）不得启用兄弟目录。
+        assert_eq!(portable_storage_base_from(Some(exe.as_path()), false), None);
+
+        // 便携模式且未显式注入 DSH_EAC_DATA_ROOT：落到同卷兄弟目录 data/，不落 C 盘 LOCALAPPDATA。
+        let temp = std::env::temp_dir();
+        let data_root = eac_data_root_for(
+            None,
+            Some(base.as_path()),
+            Some(r"C:\Users\User"),
+            None,
+            Some(r"C:\Users\User\AppData\Local"),
+            Some("/home/user/.local/share"),
+            temp.clone(),
+        );
+        assert_eq!(data_root, expected_base.join("data"));
+        assert!(!data_root.starts_with(exe.parent().unwrap()));
+
+        // 显式注入 DSH_EAC_DATA_ROOT 仍拥有最高优先级。
+        let explicit = if cfg!(windows) { r"E:\CustomRoot" } else { "/tmp/custom-root" };
+        assert_eq!(
+            eac_data_root_for(
+                Some(explicit),
+                Some(base.as_path()),
+                None,
+                None,
+                Some(r"C:\Users\User\AppData\Local"),
+                None,
+                temp,
+            ),
+            PathBuf::from(explicit)
+        );
     }
 }

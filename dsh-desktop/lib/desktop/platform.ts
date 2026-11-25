@@ -2,6 +2,7 @@
 
 import fs = require('node:fs');
 import path = require('node:path');
+import { portableStorageBaseForExe } from './environment';
 
 export interface DesktopCapabilities {
   clipboard: 'supported' | 'external-dependency' | 'unavailable';
@@ -56,6 +57,7 @@ export interface DesktopPlatformOptions {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   commandExists?: (file: string) => boolean;
+  markerExists?: (markerFile: string) => boolean;
 }
 
 export function nodeExecutableName(platform: NodeJS.Platform = process.platform): string {
@@ -87,7 +89,23 @@ export function createDesktopPlatform(options: DesktopPlatformOptions = {}): Des
   const commandExists = options.commandExists ?? ((file: string) => defaultCommandExists(file, platform, env));
 
   const userDataDir = (): string => {
+    const explicitUserData = env.DSH_DESKTOP_USER_DATA_DIR?.trim();
+    if (explicitUserData) {
+      const api = platform === 'win32' ? path.win32 : path.posix;
+      if (api.isAbsolute(explicitUserData)) return api.resolve(explicitUserData);
+    }
     if (platform === 'win32') {
+      const portableBase = portableStorageBaseForExe(env.DSH_SHELL_EXE, platform, options.markerExists);
+      if (portableBase) {
+        const declaredDataRoot = env.DSH_EAC_DATA_ROOT?.trim();
+        const expectedDataRoot = path.win32.join(portableBase, 'data');
+        if (
+          !declaredDataRoot
+          || path.win32.resolve(declaredDataRoot).toLowerCase() === path.win32.resolve(expectedDataRoot).toLowerCase()
+        ) {
+          return path.win32.join(portableBase, 'desktop');
+        }
+      }
       const appData = env.APPDATA || path.win32.join(homeDir, 'AppData', 'Roaming');
       return path.win32.join(appData, 'Deepseek Harness EAC');
     }
