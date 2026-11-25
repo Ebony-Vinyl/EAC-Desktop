@@ -109,8 +109,8 @@ test('offline ledgers no longer carry skin-switch (history keeps a retired basel
   const builtinCount = distribution.plugins.filter((p) => p.distributionClass === 'builtin').length;
   assert.equal(policies.pluginDistribution.expectedCounts.builtin, builtinCount,
     'policies.expectedCounts.builtin 必须与 plugin-distribution 的 builtin 数一致');
-  assert.equal(builtinCount, 17,
-    '原 10 个内置插件加上开机动画、微信渠道、远程访问、外链修复、OFM 和两个视觉核心；skin-switch 保持退役');
+  assert.equal(builtinCount, 18,
+    '原 10 个内置插件加上开机动画、微信渠道、远程访问、外链修复、OFM、Mojobox 管理器和两个视觉核心；skin-switch 保持退役');
   // lock 的 manifestRevision 与被编辑后的 .sync/plugins.json 逐字节对应
   //（与 scripts/plugin-sync.mjs buildLock 的 sha256File 口径一致）。
   const lock = json<{ manifestRevision: string }>('.sync', 'plugins.lock.json');

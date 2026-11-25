@@ -525,6 +525,16 @@
         "target": "bundled",
         "state": "migrated"
       }
+    },
+    {
+      "id": "mojobox-manager",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
     }
   ]
 }

@@ -197,7 +197,7 @@
         @{
             Name = 'plugin-source-ledger'
             Domain = 'plugins'
-            Pattern = '^dsh-desktop/assets/SOURCES\.json$|^\.sync/(?:plugin-distribution|plugin-inventory-history|plugins(?:\.lock)?|policies)\.json$'
+            Pattern = '^dsh-desktop/assets/SOURCES\.json$|^\.sync/(?:plugin-distribution|plugin-inventory-history|plugins(?:\.lock)?|policies)\.json$|^\.sync/packs/.*\.json$'
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
             Tests = @('test/minimal-core-boundary.test.ts', 'test/issue-415-skin-switch-retirement.test.ts')
