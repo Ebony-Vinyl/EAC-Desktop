@@ -52,6 +52,16 @@ dpx 的 registry/环境清单和 `eac-data-binding.json` 都记录绝对路径�
 
 全程不手写 dpx 注册表/环境清单；代价是搬迁需要一次数据复制。上游若提供 `relocateEnvironment()`，应替换为 O(1) 搬迁。
 
+### 搬迁/重建失败后的可重试性
+
+搬迁或重建在「隔离旧 `dpx` → 建新环境 → 复制内容」之间失败时，会留下半成品 `dpx/` 与更早的完整 `dpx.stale-*`。重试不能只看最新目录：
+
+- 扫描 data 根下所有 `dpx` / `dpx.stale-*`，选**最近一个含 `.dpx-environment.json` 的完整环境**作为来源；
+- 当前 `dpx` 已不存在（上次已隔离）时也能继续；
+- 旧 `eac-data-binding.json` 移入来源 stale 容器，避免下一次启动读到旧 `storageRoot`。
+
+`/died` 页的环境诊断由 L1 直接 spawn，不经过 sidecar 的 `cmd.env`；因此 L1 必须把 `DSH_EAC_DPX_REGISTRY_HOME` 写进自身进程环境，否则诊断会读全局 `%LOCALAPPDATA%\DSH\DPX`，把正常便携环境误报成「未登记」。
+
 启动选择框可用环境变量 `DSH_EAC_PORTABLE_CHOICE=import|relocate|new|exit` 跳过（仅本地验收/自动化使用；非法值仍走原生对话框）。
 
 ### 4. 更新链边界

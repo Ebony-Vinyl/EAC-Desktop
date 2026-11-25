@@ -276,6 +276,29 @@ function quarantine(dataRoot: string, name: string): string {
   return target;
 }
 
+/** 产品数据根下所有 dpx 元数据容器（当前 + 历次隔离），新的在前。 */
+function dataContainers(dataRoot: string): string[] {
+  return fs.readdirSync(dataRoot, {withFileTypes: true})
+    .filter(entry => entry.isDirectory() && (entry.name === 'dpx' || entry.name.startsWith('dpx.stale-')))
+    .map(entry => ({name: entry.name, mtime: fs.statSync(path.join(dataRoot, entry.name)).mtimeMs}))
+    .sort((left, right) => right.mtime - left.mtime)
+    .map(entry => path.join(dataRoot, entry.name));
+}
+
+/**
+ * 在 data 根里找**最近一个完整**环境。
+ *
+ * 搬迁/重建中途失败会留下一个不完整的 `dpx/` 与更早的完整 `dpx.stale-*`；
+ * 重试时不能只盯着最新目录（那正是半成品），否则永远报 environment-missing。
+ */
+function findLatestEnvironment(dataRoot: string): {root: string; channel: string; container: string} | null {
+  for (const container of dataContainers(dataRoot)) {
+    const found = findEnvironmentRoot(container);
+    if (found && exists(path.join(found.root, '.dpx-environment.json'))) return {...found, container};
+  }
+  return null;
+}
+
 function ensureTarget(dataRoot: string, channel: string, ensure?: (env: NodeJS.ProcessEnv) => EnsuredEnvironment): EnsuredEnvironment {
   const env = {...process.env, DSH_EAC_DATA_ROOT: dataRoot, DSH_EAC_CHANNEL: channel};
   return (ensure || ((value: NodeJS.ProcessEnv) => ensureEacEnvironment(value, process.platform)))(env);
@@ -313,30 +336,35 @@ function copyAuxiliaryData(sourceRoot: string, dataRoot: string, log?: (tag: str
 }
 
 function prepareRelocate(options: PrepareOptions, dataRoot: string): PortableRuntime {
-  const stale = quarantine(dataRoot, 'dpx');
-  if (!stale) throw new Error('portable-relocate-source-missing');
   const binding = path.join(dataRoot, 'eac-data-binding.json');
+  const bindingChannel = channelFromBinding(dataRoot);
+  // 先隔离当前 dpx（可能只是上次失败留下的半成品），再从所有 stale 中挑
+  // 最近一个**完整**环境。只认最新目录会在重试时选中半成品并永久失败。
+  quarantine(dataRoot, 'dpx');
+  const source = findLatestEnvironment(dataRoot);
+  if (!source) throw new Error('portable-relocate-environment-missing');
   if (exists(binding)) {
-    try {fs.renameSync(binding, path.join(stale, 'eac-data-binding.json'));} catch { /* 旧绑定可有可无 */ }
+    try {fs.renameSync(binding, path.join(source.container, 'eac-data-binding.json'));} catch { /* 旧绑定可有可无 */ }
   }
-  persistRelocateLog(options.dataRoot, stale);
-  const found = findEnvironmentRoot(stale);
-  if (!found) throw new Error('portable-relocate-environment-missing');
-  const channel = options.channel && CHANNEL.test(options.channel) ? options.channel : (channelFromBinding(stale) || found.channel);
+  persistRelocateLog(options.dataRoot, source.container);
+  const channel = options.channel && CHANNEL.test(options.channel)
+    ? options.channel
+    : (bindingChannel || channelFromBinding(source.container) || source.channel);
   process.env.DSH_EAC_CHANNEL = channel;
   const ensured = ensureTarget(dataRoot, channel, options.ensure);
-  copyEnvironmentContents(found.root, ensured.paths.root, options.log);
+  copyEnvironmentContents(source.root, ensured.paths.root, options.log);
   repairHostClosure(ensured.paths.dshHome, absolute(options.programRoot, 'program'));
-  return {mode: 'relocate', dataRoot, installRoot: absolute(options.installRoot, 'install'), programRoot: absolute(options.programRoot, 'program'), channel, migrated: true, sourceEnvironmentRoot: found.root};
+  return {mode: 'relocate', dataRoot, installRoot: absolute(options.installRoot, 'install'), programRoot: absolute(options.programRoot, 'program'), channel, migrated: true, sourceEnvironmentRoot: source.root};
 }
 
 function prepareReset(options: PrepareOptions, dataRoot: string): PortableRuntime {
-  const previous = findEnvironmentRoot(dataRoot);
+  const binding = path.join(dataRoot, 'eac-data-binding.json');
+  const bindingChannel = channelFromBinding(dataRoot);
+  const previous = findLatestEnvironment(dataRoot) ?? findEnvironmentRoot(dataRoot);
   const channel = options.channel && CHANNEL.test(options.channel)
     ? options.channel
-    : (channelFromBinding(dataRoot) || previous?.channel || 'stable');
+    : (bindingChannel || previous?.channel || 'stable');
   const stale = quarantine(dataRoot, 'dpx');
-  const binding = path.join(dataRoot, 'eac-data-binding.json');
   if (exists(binding)) {
     try {fs.renameSync(binding, path.join(dataRoot, '.eac-data-binding.stale-' + secureName(now())));} catch { /* 旧绑定可有可无 */ }
   }

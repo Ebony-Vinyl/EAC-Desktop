@@ -961,6 +961,12 @@ fn owner_data_root(data_root: &std::path::Path) -> Option<std::path::PathBuf> {
     {
         return None;
     }
+    // 所有权记录还在、但 dpx 注册表缺失/被破坏：这已经是不可启动的现场。
+    // 返回 None 让上层走 Reconcile（搬迁/新建），而不是按 Owned 直接 ensure
+    // 再次 fail closed、把用户困在 /died。
+    if !data_root.join("dpx").join("registry").join("registry.json").is_file() {
+        return None;
+    }
     let root = value.get("dataRoot").and_then(Value::as_str)?;
     let path = std::path::PathBuf::from(root);
     path.is_absolute().then_some(path)
@@ -1199,7 +1205,7 @@ fn apply_portable_startup() -> Result<(), String> {
     };
     ensure_data_root_writable(&root)?;
     // 临时目录也收进便携数据根：WebView2/Chromium 与壳进程的临时文件不再落
-    // %TEMP%（C 盘）。sidecar 应用 dpx runtime 后会把 TEMP 指到环境内 tmp，
+    // %TEMP%（C 盘）。sidecar 应用 dpx 的 runtime 后会把 TEMP 指到环境内 tmp，
     // 这里覆盖的是壳进程与 WebView2 的继承值。
     let tmp = root.join("tmp");
     let _ = std::fs::create_dir_all(&tmp);
@@ -1210,6 +1216,12 @@ fn apply_portable_startup() -> Result<(), String> {
     std::env::set_var(PORTABLE_FLAG_ENV, "1");
     std::env::set_var("DSH_EAC_DATA_ROOT", &root);
     std::env::set_var(PORTABLE_MODE_ENV, mode);
+    // 注册表位置也写进壳进程环境：/died 页的 environment-diagnose 是壳直接
+    // spawn 的，不会经过 Sidecar::spawn 的 cmd.env；不写就会去读全局
+    // %LOCALAPPDATA%\DSH\DPX，把正常环境误报成「未登记」。
+    if std::env::var_os("DSH_EAC_DPX_REGISTRY_HOME").is_none() {
+        std::env::set_var("DSH_EAC_DPX_REGISTRY_HOME", root.join("dpx").join("registry"));
+    }
     if let Some(source) = source.as_ref() {
         std::env::set_var(PORTABLE_SOURCE_ENV, source);
     }
@@ -6014,6 +6026,24 @@ mod portable_data_tests {
             }
             other => panic!("unexpected plan: {other:?}"),
         }
+        let _ = std::fs::remove_dir_all(base);
+    }
+
+    #[test]
+    fn owner_marker_without_registry_falls_back_to_reconcile() {
+        let base = temp_dir("owner-registry");
+        let data = data_root(&base);
+        std::fs::create_dir_all(data.join("dpx").join("registry")).expect("registry dir");
+        let owner = serde_json::json!({
+            "schemaVersion": 1,
+            "product": "eac-desktop",
+            "installKind": "portable",
+            "dataRoot": data.to_string_lossy(),
+        });
+        std::fs::write(data.join(super::PORTABLE_OWNER_FILE), owner.to_string()).expect("owner");
+        assert!(super::owner_data_root(&data).is_none(), "缺少 dpx 注册表时必须走 Reconcile");
+        std::fs::write(data.join("dpx").join("registry").join("registry.json"), "{}").expect("registry");
+        assert_eq!(super::owner_data_root(&data), Some(data.clone()));
         let _ = std::fs::remove_dir_all(base);
     }
 

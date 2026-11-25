@@ -123,6 +123,40 @@ test('relocate quarantines old dpx metadata and rebuilds a fresh environment in 
   assert.equal(fs.readFileSync(path.join(data, stale[0]!, 'dsh-environments', 'eac-beta', 'dsh-home', 'session.jsonl'), 'utf8'), 'old session');
 });
 
+test('relocate retries against the newest complete stale when the current dpx is partial', t => {
+  const root = temporary(t); const {install, data, env} = layout(root);
+  fs.writeFileSync(path.join(env, 'dsh-home', 'session.jsonl'), 'old-but-complete');
+  // 上一次搬迁失败后的现场：完整环境在 dpx.stale-old，当前 dpx 只有半成品。
+  fs.renameSync(path.join(data, 'dpx'), path.join(data, 'dpx.stale-old'));
+  fs.mkdirSync(path.join(data, 'dpx', 'registry'), {recursive: true});
+  const binding = path.join(data, 'eac-data-binding.json');
+  fs.writeFileSync(binding, JSON.stringify({schemaVersion: 1, product: 'eac-desktop', channel: 'beta', environmentRoot: env, storageRoot: path.join(data, 'dpx'), dshHome: path.join(env, 'dsh-home'), registryHome: path.join(data, 'dpx', 'registry'), profile: 'web-desktop'}));
+  const ensure = (value: NodeJS.ProcessEnv) => {
+    const envRoot = path.join(value.DSH_EAC_DATA_ROOT!, 'dpx', 'dsh-environments', 'eac-' + value.DSH_EAC_CHANNEL);
+    fs.mkdirSync(path.join(envRoot, 'dsh-home'), {recursive: true});
+    return {paths: {root: envRoot, dshHome: path.join(envRoot, 'dsh-home')}, registryHome: path.join(value.DSH_EAC_DATA_ROOT!, 'dpx', 'registry'), channel: value.DSH_EAC_CHANNEL} as never;
+  };
+  const runtime = portable.preparePortableData({mode: 'relocate', dataRoot: data, installRoot: install, programRoot: path.join(root, 'program'), ensure});
+  assert.equal(runtime.mode, 'relocate');
+  assert.equal(fs.readFileSync(path.join(data, 'dpx', 'dsh-environments', 'eac-beta', 'dsh-home', 'session.jsonl'), 'utf8'), 'old-but-complete');
+  assert.equal(fs.existsSync(binding), false, '旧绑定必须隔离');
+  assert.ok(fs.readdirSync(data).some(name => name.startsWith('dpx.stale-')), '半成品与完整旧目录都必须保留');
+});
+
+test('relocate can resume when the current dpx was already quarantined', t => {
+  const root = temporary(t); const {install, data, env} = layout(root);
+  fs.writeFileSync(path.join(env, 'dsh-home', 'session.jsonl'), 'already-stale');
+  fs.renameSync(path.join(data, 'dpx'), path.join(data, 'dpx.stale-old'));
+  const ensure = (value: NodeJS.ProcessEnv) => {
+    const envRoot = path.join(value.DSH_EAC_DATA_ROOT!, 'dpx', 'dsh-environments', 'eac-' + value.DSH_EAC_CHANNEL);
+    fs.mkdirSync(path.join(envRoot, 'dsh-home'), {recursive: true});
+    return {paths: {root: envRoot, dshHome: path.join(envRoot, 'dsh-home')}, registryHome: path.join(value.DSH_EAC_DATA_ROOT!, 'dpx', 'registry'), channel: value.DSH_EAC_CHANNEL} as never;
+  };
+  const runtime = portable.preparePortableData({mode: 'relocate', dataRoot: data, installRoot: install, programRoot: path.join(root, 'program'), ensure});
+  assert.equal(runtime.mode, 'relocate');
+  assert.equal(fs.readFileSync(path.join(data, 'dpx', 'dsh-environments', 'eac-beta', 'dsh-home', 'session.jsonl'), 'utf8'), 'already-stale');
+});
+
 test('findEnvironmentRoot handles both a product root and a direct environment dir', t => {
   const root = temporary(t); const {env} = layout(root);
   assert.deepEqual(portable.findEnvironmentRoot(env), {root: path.resolve(env), channel: 'beta'});
