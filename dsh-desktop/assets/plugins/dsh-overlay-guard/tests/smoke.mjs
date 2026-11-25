@@ -3,12 +3,11 @@ import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import vm from 'node:vm'
 
-// 最小 DOM/localStorage 替身：只为验证守卫的注入、清洗、清理与幂等。
-function createHarness(seedStore = {}) {
-  const store = { ...seedStore }
-  const keys = Object.keys(store)
-
+// 最小 DOM 替身。这里刻意让 localStorage 的写操作直接抛错 ——
+// 插件只要碰一次持久化数据，测试就会红。
+function createHarness({ forbidStorageWrites = true } = {}) {
   const styleElements = []
+
   const document = {
     documentElement: { appendChild(element) { styleElements.push(element) } },
     head: { appendChild(element) { styleElements.push(element) } },
@@ -28,19 +27,23 @@ function createHarness(seedStore = {}) {
   }
 
   const localStorage = {
-    get length() { return keys.length },
-    key(index) { return keys[index] ?? null },
-    getItem(key) {
-      return Object.prototype.hasOwnProperty.call(store, key) ? store[key] : null
+    get length() {
+      if (forbidStorageWrites) throw new Error('plugin must not touch localStorage')
+      return 0
     },
-    setItem(key, value) {
-      if (!Object.prototype.hasOwnProperty.call(store, key)) keys.push(key)
-      store[key] = String(value)
+    key() {
+      if (forbidStorageWrites) throw new Error('plugin must not touch localStorage')
+      return null
     },
-    removeItem(key) {
-      const index = keys.indexOf(key)
-      if (index >= 0) keys.splice(index, 1)
-      delete store[key]
+    getItem() {
+      if (forbidStorageWrites) throw new Error('plugin must not touch localStorage')
+      return null
+    },
+    setItem() {
+      throw new Error('plugin must not write localStorage')
+    },
+    removeItem() {
+      throw new Error('plugin must not write localStorage')
     },
   }
 
@@ -48,9 +51,8 @@ function createHarness(seedStore = {}) {
     __ModuleLoader__: { load(definition) { window.definition = definition } },
   }
 
-  const consoleMock = { debug() {} }
-  const context = { window, document, localStorage, console: consoleMock, Symbol, Set, Map, JSON, Object }
-  return { context, window, document, store, styleElements }
+  const context = { window, document, localStorage, console: { debug() {} }, Symbol, Set, Map, JSON, Object }
+  return { context, window, styleElements }
 }
 
 const source = await readFile(resolve(import.meta.dirname, '../lib/client.js'), 'utf8')
@@ -64,83 +66,59 @@ function boot(harness) {
   return plugin
 }
 
-// 1) 全屏持久化清洗：mode:fullscreen -> push，nodes 保留
+// 1) 注入 + 不碰持久化 + 不隐藏入口
 {
-  const session = {
-    layout: {
-      mode: 'fullscreen',
-      nodes: { pane1: { kind: 'pane', id: 'pane1', host: 'dock', tabs: [] } },
-      tabs: {},
-      rootId: 'pane1',
-      floats: [],
-      activePaneId: 'pane1',
-      expanded: true,
-    },
-    minted: 3,
-  }
-  const harness = createHarness({
-    'dsh.sidebar-right.v1.abc': JSON.stringify({ bySession: { abc: session } }),
-  })
+  const harness = createHarness({ forbidStorageWrites: true })
   const plugin = boot(harness)
+
+  // localStorage 一被访问就抛错；apply 若能跑完，说明完全没碰持久化状态
   const dispose = plugin.apply()
+  assert.equal(harness.styleElements.length, 1, '应注入一个 style')
 
-  const saved = JSON.parse(harness.store['dsh.sidebar-right.v1.abc'])
-  assert.equal(saved.bySession.abc.layout.mode, 'push', 'fullscreen 应被改回 push')
-  assert.ok(saved.bySession.abc.layout.nodes.pane1, 'nodes 必须保留')
-  assert.equal(saved.bySession.abc.minted, 3, 'minted 必须保留')
-
-  // style 注入且包含三类守卫
-  assert.equal(harness.styleElements.length, 1)
   const css = harness.styleElements[0].textContent
-  assert.ok(css.includes('[data-sidebar-right-mode]'), '应隐藏全屏按钮')
-  assert.ok(css.includes('[data-sidebar-right-panel="fullscreen"]'), '应有 fullscreen 宽度兜底')
-  assert.ok(css.includes('[data-menu-material="translucent"]'), '应有菜单遮罩')
-  assert.ok(css.includes('_headerActions'), '应有标题栏裁剪')
+
+  assert.ok(
+    css.includes('[data-sidebar-right-panel="fullscreen"][data-sidebar-right-open]'),
+    'fullscreen 底色必须限定在「全屏 + 展开」状态',
+  )
+  assert.ok(css.includes('[data-menu-material="translucent"]'), '应有菜单遮罩规则')
+  assert.ok(
+    css.includes('header:has(> [data-conversation-header-leading])'),
+    '标题栏规则必须以会话 header 为锚点限定作用域',
+  )
+
+  // 全屏只补底色：不得再改写宽度（全屏仍是全屏，不降级）
+  const fullscreenRule = css.slice(css.indexOf('[data-sidebar-right-panel="fullscreen"]'))
+  const fullscreenBlock = fullscreenRule.slice(0, fullscreenRule.indexOf('}'))
+  assert.ok(fullscreenBlock.includes('background-color'), 'fullscreen 必须补底色')
+  assert.equal(/\bwidth\s*:/.test(fullscreenBlock), false, 'fullscreen 不得改写宽度')
+  assert.equal(
+    fullscreenBlock.includes('--dsh-sidebar-width'),
+    false,
+    'fullscreen 不得改写 --dsh-sidebar-width',
+  )
+
+  // 不得用 display:none 藏掉任何入口
+  assert.equal(css.includes('display: none'), false, '不得隐藏任何 UI 入口')
+
+  // 不得出现无作用域的裸类名选择器
+  assert.equal(
+    /(^|\n)\[class\*="_header"\][^\n]*\{/.test(css),
+    false,
+    '不得使用无作用域的 [class*="_header"] 选择器',
+  )
+  assert.equal(
+    /(^|\n)\[class\*="_headerActions"\]/.test(css),
+    false,
+    '动作容器选择器必须被 header 锚点限定',
+  )
 
   assert.equal(typeof dispose, 'function')
   dispose()
   assert.equal(harness.styleElements[0].parentNode, null, 'dispose 应移除 style')
 }
 
-// 2) 已是 push：不改写
-{
-  const session = {
-    layout: { mode: 'push', nodes: {}, tabs: {}, rootId: 'pane1', floats: [], activePaneId: 'pane1', expanded: true },
-    minted: 1,
-  }
-  const harness = createHarness({
-    'dsh.sidebar-right.v1.def': JSON.stringify({ bySession: { def: session } }),
-  })
-  const plugin = boot(harness)
-  plugin.apply()
-  const before = JSON.stringify(session)
-  const after = harness.store['dsh.sidebar-right.v1.def']
-  assert.equal(JSON.parse(after).bySession.def.layout.mode, 'push')
-  assert.notEqual(before, after, '格式化后内容可能变化，但语义必须保持 push')
-}
-
-// 3) 坏 JSON 不抛错
-{
-  const harness = createHarness({ 'dsh.sidebar-right.v1.broken': '{not json' })
-  const plugin = boot(harness)
-  assert.doesNotThrow(() => plugin.apply())
-}
-
-// 4) 无关 key 不受影响
-{
-  const harness = createHarness({
-    'other.key': JSON.stringify({ bySession: { a: { layout: { mode: 'fullscreen' } } } }),
-  })
-  const plugin = boot(harness)
-  plugin.apply()
-  assert.equal(
-    JSON.parse(harness.store['other.key']).bySession.a.layout.mode,
-    'fullscreen',
-    '无关 key 不得被改写',
-  )
-}
-
-// 5) 幂等：重复 apply 只保留一个 style，且第二次不抛错
+// 2) 幂等：重复 apply 只保留一个 style
 {
   const harness = createHarness()
   const plugin = boot(harness)
@@ -149,4 +127,17 @@ function boot(harness) {
   assert.equal(harness.styleElements.length, 1, '重复 apply 不应重复注入 style')
 }
 
-console.log('overlay guard: injection, persisted-state cleanup, idempotence and dispose OK')
+// 3) 二次 apply 时 style 内容跟随源码同步（升级场景）
+{
+  const harness = createHarness()
+  const plugin = boot(harness)
+  plugin.apply()
+  harness.styleElements[0].textContent = 'stale'
+  plugin.apply()
+  assert.ok(
+    harness.styleElements[0].textContent.includes('data-conversation-header-leading'),
+    '重复 apply 应把 style 内容刷新到当前版本',
+  )
+}
+
+console.log('overlay guard: scoped selectors, no persisted-state writes, idempotence and dispose OK')
