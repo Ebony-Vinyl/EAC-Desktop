@@ -390,6 +390,15 @@
             Smoke = @()
         },
         @{
+            Name = 'launcher-app'
+            Domain = 'updates-packaging'
+            Pattern = '^launcher/(?:src|src-tauri|scripts|public|resources|pack-hall)/|^launcher/(?:package(?:-lock)?\.json|tsconfig.*\.json|vite\.config\..*|index\.html)$'
+            Reference = 'references/updates-and-packaging.md'
+            Level = 'full'
+            Tests = @()
+            Smoke = @('MANUAL: run cargo test --manifest-path launcher/src-tauri/Cargo.toml --no-default-features --lib and validate launcher catalog JSON')
+        },
+        @{
             Name = 'test-files'
             Domain = 'tests-acceptance'
             Pattern = '(^|/)test/|smoke\.js$|upgrade-test'

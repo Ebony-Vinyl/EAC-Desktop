@@ -45,7 +45,7 @@
     {
       "id": "mojobox",
       "name": "DSH Mojobox",
-      "url": "https://github.com/DSH-EAC/dsh-mojobox",
+      "url": "https://github.com/lanyun077/EAC-mojobox",
       "description": "插件与整合包收录目录"
     },
     {
@@ -76180,7 +76180,7 @@
       "id": "dev.mojobox.focus-kit",
       "name": "专注工作包",
       "description": "提供会话侧栏与 Markdown 人设能力的固定组合。",
-      "source": "https://github.com/DSH-EAC/dsh-mojobox",
+      "source": "https://github.com/lanyun077/EAC-mojobox",
       "plugins": [
         {
           "ref": "https://gitee.com/flowing-shadows-like-scenes/deep-seek-harness-unity-mirror/raw/8cb646f8b4b76cde0ce32561388a17cfac3e4d31/artifacts/sha256/adca0dff7bdf9ae9f4a329cf5d787db318e151b0168758733a88ceba1ee274e6/dsh-better-sidebar-0.22.1.tgz"
@@ -76195,7 +76195,7 @@
       "id": "dev.aio.function",
       "name": "AIO 功能包",
       "description": "从 DSHEAC AIO v1.1.0 提炼的功能增强组件，不包含外观主题。（3 个组件暂无固定制品，仅安装已核实引用）",
-      "source": "https://github.com/DSH-EAC/dsh-mojobox",
+      "source": "https://github.com/lanyun077/EAC-mojobox",
       "plugins": [
         {
           "ref": "https://gitee.com/flowing-shadows-like-scenes/deep-seek-harness-unity-mirror/raw/b8a256604b39a8a32a7812214d23533ff5fd3a6b/artifacts/sha256/39fc2dfd519b53bc71c9d4fb8cb7faa678d2c14ffb77c6df38daf0eedf0b56a0/dsh-find-plugin-0.4.0.tgz"
@@ -76210,7 +76210,7 @@
       "id": "dev.aio.appearance",
       "name": "AIO 外观包",
       "description": "从 DSHEAC AIO v1.1.0 提炼的导航、壁纸和鲸鱼挂件外观组件，不包含功能包依赖。（2 个组件暂无固定制品，仅安装已核实引用）",
-      "source": "https://github.com/DSH-EAC/dsh-mojobox",
+      "source": "https://github.com/lanyun077/EAC-mojobox",
       "plugins": [
         {
           "ref": "https://gitee.com/flowing-shadows-like-scenes/deep-seek-harness-unity-mirror/raw/ccbc17fe3d106ce802a7a6361b6ca8262640d947/artifacts/sha256/b318410525b722dc30dc86b2f8d8d871c4fbb401bc918eb16f6e52b339a6aa81/dsh-whale-widget-0.3.16.tgz"
@@ -76222,7 +76222,7 @@
       "id": "dev.dsh-eac.desktop-recommended",
       "name": "EAC 推荐插件包",
       "description": "EAC 推荐插件（L2）整合包，id 与 DSH-Desktop-EAC 注册表 recommendedPackId（ADR 0008 §2 推荐包唯一 id）统一为 dev.dsh-eac.desktop-recommended。成员来自 EAC 内置统一市场的 eacRecommended 名单，且只收录已发布、摘要可验证的 npm artifact。meow-smooth 在桌面账本的分发轴为 external，不在本包内；dsh-our-free-model 尚未发布（source-pending），见 docs/eac-pack-coverage.md。",
-      "source": "https://github.com/DSH-EAC/dsh-mojobox",
+      "source": "https://github.com/lanyun077/EAC-mojobox",
       "plugins": [
         {
           "ref": "https://gitee.com/flowing-shadows-like-scenes/deep-seek-harness-unity-mirror/raw/5f9fa320f5bf545b240ea5c779d91512fadd542a/artifacts/sha256/3192afe54949da6494acea3bd2bf5113a58ea78651113b1289bcc7212130df38/tt-a1i-archify-dsh-0.1.0.tgz"
@@ -76234,7 +76234,7 @@
       "id": "dev.mojobox.windows-operator",
       "name": "Windows 操作包",
       "description": "面向 Windows 桌面操作、会话导航与并行工作流的固定测试组合。（4 个组件暂无固定制品，仅安装已核实引用）",
-      "source": "https://github.com/DSH-EAC/dsh-mojobox",
+      "source": "https://github.com/lanyun077/EAC-mojobox",
       "plugins": [
         {
           "ref": "https://gitee.com/flowing-shadows-like-scenes/deep-seek-harness-unity-mirror/raw/8cb646f8b4b76cde0ce32561388a17cfac3e4d31/artifacts/sha256/adca0dff7bdf9ae9f4a329cf5d787db318e151b0168758733a88ceba1ee274e6/dsh-better-sidebar-0.22.1.tgz"

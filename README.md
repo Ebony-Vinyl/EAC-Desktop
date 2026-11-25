@@ -131,6 +131,8 @@ Rust 与 Node 使用 **stdio JSON-RPC** 通信，协议输出与诊断日志分�
 
 插件采用 **builtin / recommended / external** 分级：随包能力由装配清单定义，推荐集合与外部插件由各自包元数据定义。按功能选择扩展，也按来源、版本约束和许可管理扩展。
 
+**Lite 与 Full 发行包的构成差异**：`Lite` 仅装配桌面核心壳、Node/npm/pnpm 运行时、内置核心配套插件与 5 款默认皮肤，并在构建期裁剪非目标平台原生预编译载荷与调试映射；`Full` 在此基础上额外打包完整皮肤集及 `EAC-Pack`（`eac-plugin-suite`）离线扩展套件与依赖闭包——两者的体积差来自物理随包载荷，而非在同一套大体积产物中仅默认禁用部分插件。
+
 开发者可通过 [分发规范](docs/adr/0008-plugin-distribution-boundary.md)、[插件账本](.sync/plugin-distribution.json) 与 [来源记录](dsh-desktop/assets/SOURCES.json) 查阅接入规则和组件归属。
 
 ### 皮肤契约

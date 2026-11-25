@@ -445,6 +445,16 @@ Assert-Fixture -Name 'exit-overlay-requires-runtime-and-browser-regression' -Con
     @($exitOverlay.data.unmatchedCodeFiles).Count -eq 0
 ) -Failure ($exitOverlay.raw)
 
+$launcherCatalog = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
+    '-RepoPath', $repoRoot,
+    '-FilesJsonBase64', (ConvertTo-FilesJsonBase64 '["launcher/scripts/sync-catalog.mjs","launcher/public/catalog.json"]')
+)
+Assert-Fixture -Name 'launcher-catalog-classification' -Condition (
+    $launcherCatalog.exitCode -eq 0 -and
+    $launcherCatalog.data.status -eq 'ready' -and
+    'launcher-app' -in @($launcherCatalog.data.matchedRules) -and
+    @($launcherCatalog.data.unmatchedCodeFiles).Count -eq 0
+) -Failure ($launcherCatalog.raw)
 $status = if ($failures.Count -gt 0) { 'blocked' } else { 'ready' }
 [ordered]@{
     schemaVersion = 1

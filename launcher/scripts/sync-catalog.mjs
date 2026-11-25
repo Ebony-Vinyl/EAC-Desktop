@@ -12,6 +12,7 @@ const repository = 'https://github.com/look-back-lysj/deep-seek-harness-Unity'
 const sourceUrl = `https://raw.githubusercontent.com/look-back-lysj/deep-seek-harness-Unity/${revision}/packages/market/data/index.json`
 const desktopRepository = 'https://github.com/Ebony-Vinyl/EAC-Desktop'
 const desktopRevision = 'dc22280beb9d0a6338d1e02d99f5e5346f72f4f0'
+const mojoboxRepository = 'https://github.com/lanyun077/EAC-mojobox'
 const catalogPackage = 'dsh-plugin-catalog'
 
 async function fetchJson(url, timeout = 30000) {
@@ -305,7 +306,7 @@ if (mojobox?.packs) {
       description: missing > 0
         ? `${metadata.description || ''}（${missing} 个组件暂无固定制品，仅安装已核实引用）`.trim()
         : metadata.description,
-      source: pack.source || 'https://github.com/DSH-EAC/dsh-mojobox',
+      source: pack.source || mojoboxRepository,
       plugins: resolved,
       mojobox: true,
     })
@@ -323,7 +324,7 @@ const catalog = {
     { id: 'awesome-dsh', name: 'Awesome DSH 插件目录', url: catalogMeta?.source || 'https://awesome-dsh-plugin.com', description: 'npm 社区插件聚合目录（dsh-plugin-catalog 包）' },
     { id: 'eac-pack', name: 'EAC Pack', url: 'https://github.com/Ebony-Vinyl/EAC-Pack', description: 'EAC / AIO 套件与官方宿主适配记录' },
     { id: 'official', name: 'DeepSeek Harness', url: 'https://github.com/deepseek-ai/deep-seek-harness', description: '官方内核与桌面端' },
-    { id: 'mojobox', name: 'DSH Mojobox', url: 'https://github.com/DSH-EAC/dsh-mojobox', description: '插件与整合包收录目录' },
+    { id: 'mojobox', name: 'DSH Mojobox', url: mojoboxRepository, description: '插件与整合包收录目录' },
     { id: 'dsh-desktop', name: 'DSH-Desktop 资产', url: desktopRepository, description: '桌面端仓库内维护的插件资产清单' },
     { id: 'tui', name: 'dsh-TUI', url: 'https://github.com/ccch1mneyyy/dsh-TUI', description: '独立终端体验与像素视觉参考' },
     { id: 'dshmarket', name: 'DSH Market', url: 'https://github.com/dsh-market/dsh-market', description: 'npm 固定版本社区市场' },

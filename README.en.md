@@ -146,6 +146,8 @@ Companion plugins use Harness host/client contracts. The [staging script](tauri-
 
 Plugins are classified as **builtin / recommended / external**. Assembly manifests define bundled capabilities; package metadata defines recommended collections and external extensions. Choose extensions for their functionality, and manage them by source, version constraints and license.
 
+**Lite vs. Full package composition**: `Lite` ships only the desktop core shell, bundled Node/npm/pnpm runtime, built-in companion plugins and five bundled skins while pruning cross-platform native prebuilds and debug maps; `Full` additionally bundles the complete skin set and the offline `EAC-Pack` (`eac-plugin-suite`) extension closure—the size difference comes from physical payload inclusion rather than merely toggling plugin enablement flags.
+
 Explore the [distribution specification](docs/adr/0008-plugin-distribution-boundary.md), [plugin ledger](.sync/plugin-distribution.json), and [source records](dsh-desktop/assets/SOURCES.json).
 
 ### Skin contracts

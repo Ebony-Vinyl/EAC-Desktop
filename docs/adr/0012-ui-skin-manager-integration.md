@@ -1,8 +1,9 @@
-# ADR 0010: UI skin manager integration boundary
+# ADR 0012: UI skin manager integration boundary
 
 Date: 2026-09-20
-Status: Accepted for v6 stage 0
+Status: Accepted for v6 stage 0 (renumbered from duplicate ADR 0010)
 Supersedes: the future-loader implications of ADR 0009; ADR 0009 remains the static package migration baseline
+Related: ADR 0010 (`0010-canonical-default-skin-source.md`, stage-7 canonical default-skin source cutover)
 Owners: DSH-Desktop-EAC maintainers (host integration); dsh-ui-skin-manager maintainers (manager contract and runtime policy)
 
 ## Context
