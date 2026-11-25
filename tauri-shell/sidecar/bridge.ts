@@ -34,6 +34,9 @@
   var isMainWindow = (window as any).__DSH_WINDOW_LABEL__ !== 'client-update';
   var BAR_ID = '__dsh_desktop_chrome__';
   var BAR_HEIGHT = 36;
+  // 当 DOM 尚未挂载 `.dch-right` 窗口三键容器时的右侧按钮区兜底估计宽度（px）；
+  // 一旦 `#__dsh_desktop_chrome__ .dch-right` 完成布局，将以实际 getBoundingClientRect().left 覆盖。
+  var FALLBACK_CAPTION_BUTTONS_WIDTH_PX = 102;
 
   // SYNC-006：页面世代号（每次文档加载唯一）。WS 就绪时经 browser.page-hello
   // 上报 L1，L1 回收世代不符的 guest（官方由 webContents destroyed 收敛页面
@@ -86,6 +89,180 @@
     root.setAttribute('data-platform', value);
   }
   markDocumentPlatform();
+
+  // ---------------------------------------------------------------------------
+  // 自绘标题栏几何暴露（Issue #435 · Window Controls Overlay 兼容面）
+  //
+  // EAC 主窗采用 decorations(false) + 页内 36px 自绘标题栏（#__dsh_desktop_chrome__，
+  // z-index: 2147483000），WebView2 原生 navigator.windowControlsOverlay 默认处于
+  // visible=false。外部插件（如 dsh-better-sidebar 的 viewport-inset / 旧版
+  // computeTitleBarStrip）与配套皮肤在模块加载期读取 navigator.windowControlsOverlay
+  // 计算顶部安全内边距；缺失时安全高度算为 0，顶边浮窗、弹出框与旧版侧栏切换按钮
+  // 会落入 0..36px 标题栏覆盖区无法点击。
+  //
+  // 若宿主未开启原生 WCO，主窗在 document-start 暴露标准兼容只读几何面，并在窗口
+  // 尺寸/最大化/全屏变化时派发 geometrychange。
+  // ---------------------------------------------------------------------------
+  var emitTitlebarGeometryChange: () => void = function () {};
+  function installWindowControlsOverlayShim(): void {
+    if (!isMainWindow || typeof navigator === 'undefined' || !navigator) return;
+    try {
+      var existing = (navigator as any).windowControlsOverlay;
+      if (existing && existing.visible === true) return;
+    } catch (e) {
+      return;
+    }
+
+    var listeners = new Set<any>();
+    var onGeometryHandler: ((ev: any) => void) | null = null;
+
+    function isOverlayVisible(): boolean {
+      var root = document && (document.documentElement as HTMLElement | null);
+      if (!root) return true;
+      if (root.classList && typeof root.classList.contains === 'function' && root.classList.contains('eac-shell')) {
+        return false;
+      }
+      if (typeof root.hasAttribute === 'function' && root.hasAttribute('data-fullscreen')) {
+        return false;
+      }
+      if (typeof document !== 'undefined' && ((document as any).fullscreenElement || (document as any).webkitFullscreenElement)) {
+        return false;
+      }
+      return true;
+    }
+
+    function measureTitlebarRect(): any {
+      var visible = isOverlayVisible();
+      var width = 0;
+      var height = 0;
+      if (visible) {
+        height = BAR_HEIGHT;
+        var vw = typeof window.innerWidth === 'number' && window.innerWidth > 0 ? window.innerWidth : 1280;
+        width = Math.max(0, vw - FALLBACK_CAPTION_BUTTONS_WIDTH_PX);
+        if (typeof document.getElementById === 'function') {
+          var barEl = document.getElementById(BAR_ID);
+          var actionsEl = barEl && typeof barEl.querySelector === 'function'
+            ? (barEl.querySelector('.dch-right') as HTMLElement | null)
+            : null;
+          if (actionsEl && typeof actionsEl.getBoundingClientRect === 'function') {
+            var actionsRect = actionsEl.getBoundingClientRect();
+            if (actionsRect.width > 0 && actionsRect.left > 0) {
+              width = Math.max(0, Math.round(actionsRect.left));
+            }
+          }
+        }
+      }
+      if (typeof DOMRect === 'function') {
+        return new DOMRect(0, 0, width, height);
+      }
+      return {
+        x: 0,
+        y: 0,
+        width: width,
+        height: height,
+        top: 0,
+        left: 0,
+        right: width,
+        bottom: height,
+        toJSON: function () {
+          return { x: 0, y: 0, width: width, height: height, top: 0, left: 0, right: width, bottom: height };
+        },
+      };
+    }
+
+    var lastGeometryKey = '';
+    function geometryKey(visible: boolean, rect: any): string {
+      return (visible ? '1' : '0') + ':' + rect.x + ',' + rect.y + ',' + rect.width + ',' + rect.height;
+    }
+
+    function dispatchGeometryChange(force?: boolean): void {
+      var visible = isOverlayVisible();
+      var titlebarAreaRect = measureTitlebarRect();
+      var nextKey = geometryKey(visible, titlebarAreaRect);
+      if (!force && nextKey === lastGeometryKey) return;
+      lastGeometryKey = nextKey;
+      var ev: any = typeof Event === 'function'
+        ? new Event('geometrychange')
+        : { type: 'geometrychange' };
+      try {
+        Object.defineProperty(ev, 'target', { value: overlay, configurable: true, enumerable: true });
+        Object.defineProperty(ev, 'currentTarget', { value: overlay, configurable: true, enumerable: true });
+        Object.defineProperty(ev, 'visible', { value: visible, configurable: true, enumerable: true });
+        Object.defineProperty(ev, 'titlebarAreaRect', { value: titlebarAreaRect, configurable: true, enumerable: true });
+      } catch (e) {
+        ev.visible = visible;
+        ev.titlebarAreaRect = titlebarAreaRect;
+      }
+      if (typeof onGeometryHandler === 'function') {
+        try { onGeometryHandler.call(overlay, ev); } catch (e) { /* 忽略订阅方异常 */ }
+      }
+      listeners.forEach(function (listener) {
+        try {
+          if (typeof listener === 'function') listener.call(overlay, ev);
+          else if (listener && typeof listener.handleEvent === 'function') listener.handleEvent(ev);
+        } catch (e) { /* 忽略订阅方异常 */ }
+      });
+    }
+
+    var overlay: any = {
+      get visible(): boolean {
+        return isOverlayVisible();
+      },
+      getTitlebarAreaRect: measureTitlebarRect,
+      get ongeometrychange() {
+        return onGeometryHandler;
+      },
+      set ongeometrychange(fn: ((ev: any) => void) | null) {
+        onGeometryHandler = typeof fn === 'function' ? fn : null;
+      },
+      addEventListener: function (type: string, listener: any): void {
+        if (type === 'geometrychange' && listener != null) listeners.add(listener);
+      },
+      removeEventListener: function (type: string, listener: any): void {
+        if (type === 'geometrychange' && listener != null) listeners.delete(listener);
+      },
+      dispatchEvent: function (event: any): boolean {
+        if (event && event.type === 'geometrychange') dispatchGeometryChange(true);
+        return true;
+      },
+    };
+
+    try {
+      Object.defineProperty(navigator, 'windowControlsOverlay', {
+        configurable: true,
+        enumerable: true,
+        get: function () { return overlay; },
+      });
+    } catch (e) {
+      return;
+    }
+
+    lastGeometryKey = geometryKey(isOverlayVisible(), measureTitlebarRect());
+    emitTitlebarGeometryChange = function () { dispatchGeometryChange(false); };
+    if (typeof window.addEventListener === 'function') {
+      window.addEventListener('resize', function () { dispatchGeometryChange(true); });
+    }
+    if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+      document.addEventListener('fullscreenchange', function () { dispatchGeometryChange(false); });
+      document.addEventListener('webkitfullscreenchange', function () { dispatchGeometryChange(false); });
+    }
+    function observeRootFullscreen(): void {
+      var root = document && document.documentElement;
+      if (!root || typeof MutationObserver !== 'function') return;
+      try {
+        new MutationObserver(function () { dispatchGeometryChange(false); }).observe(root, {
+          attributes: true,
+          attributeFilter: ['data-fullscreen', 'class'],
+        });
+      } catch (e) { /* 极简测试 DOM 忽略 */ }
+    }
+    if (document.documentElement) {
+      observeRootFullscreen();
+    } else if (typeof document.addEventListener === 'function') {
+      document.addEventListener('DOMContentLoaded', observeRootFullscreen, { once: true });
+    }
+  }
+  installWindowControlsOverlayShim();
 
   // 回环 WS JSON-RPC 客户端（单源：assets/ws-jsonrpc-client.js，Rust 壳在
   // initialization_script 序列中先注入本桥）。connect/queue/call/重连逻辑
@@ -1256,6 +1433,7 @@
     maxBtn.innerHTML = isMax ? GLYPHS.restore : GLYPHS.max;
     updateChromeLabels();
     maxBtn.setAttribute('aria-pressed', String(isMax));
+    emitTitlebarGeometryChange();
   }
 
   function injectUiSkin(): void {
@@ -1455,14 +1633,33 @@
     else start();
   }
 
+  function ensureTitlebarPanelCompatStyle(): void {
+    if (document.getElementById('__dsh_title_bar_fix__') || document.getElementById('__dsh_title_bar_panel_compat__')) {
+      return;
+    }
+    var style = document.createElement('style');
+    style.id = '__dsh_title_bar_panel_compat__';
+    style.textContent =
+      'html[data-dsh-title-bar-height]:not(.eac-shell):not([data-fullscreen]) [data-dsh-panel-host] [class$="_toggleCluster"]{top:calc(3px + max(var(--dsh-title-bar-height,36px),var(--dsh-title-bar-strip,0px)) + env(safe-area-inset-top,0px))}'
+      + 'html[data-dsh-title-bar-height]:not(.eac-shell):not([data-fullscreen]) [data-dsh-panel-host]>[class$="_panel"]{padding-top:max(var(--dsh-title-bar-height,36px),var(--dsh-title-bar-strip,0px))}'
+      + 'html[data-dsh-title-bar-height]:not(.eac-shell):not([data-fullscreen]) [data-dsh-dock-fallback][style*="top: 8px"],html[data-dsh-title-bar-height]:not(.eac-shell):not([data-fullscreen]) [data-dsh-dock-fallback][style*="top: 4px"]{top:calc(var(--dsh-title-bar-height,36px) + 8px) !important}';
+    var parent = document.head || document.documentElement;
+    if (parent && typeof parent.appendChild === 'function') parent.appendChild(style);
+  }
+
   function injectChrome(): void {
     if (!isMainWindow) return;
     if (document.getElementById(BAR_ID)) return;
     injectUiSkin();
     nameUiSkinAnchors();
 
-    // 声明壳层皮肤使用的高度；Windows 内核标记由 document-start 脚本提供。
+    // 声明壳层皮肤与顶部悬浮插件使用的高度；Windows 内核标记由 document-start 脚本提供。
     document.documentElement.setAttribute('data-dsh-title-bar-height', String(BAR_HEIGHT));
+    if (document.documentElement.style && typeof document.documentElement.style.setProperty === 'function') {
+      document.documentElement.style.setProperty('--dsh-title-bar-height', BAR_HEIGHT + 'px');
+      document.documentElement.style.setProperty('--dsh-title-bar-strip', BAR_HEIGHT + 'px');
+    }
+    ensureTitlebarPanelCompatStyle();
 
     var bar = document.createElement('div');
     bar.id = BAR_ID;
