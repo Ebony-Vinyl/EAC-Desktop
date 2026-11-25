@@ -310,7 +310,8 @@ pub fn extract_zip(archive: &Path, destination: &Path) -> Result<()> {
     let mut names = std::collections::HashSet::new();
     for index in 0..zip.len() {
         let mut entry = zip.by_index(index).map_err(|e| e.to_string())?;
-        let relative = archive_path(entry.name())?;
+        let name = entry.name().map_err(|e| format!("Invalid ZIP entry name: {e}"))?;
+        let relative = archive_path(&name)?;
         let normalized = text(&relative).to_ascii_lowercase();
         if !names.insert(normalized) {
             return Err("ZIP has duplicate or case-colliding paths".into());
