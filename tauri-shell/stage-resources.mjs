@@ -623,6 +623,11 @@ execSync('node scripts/patch-deps.js', { cwd: path.join(staged, 'dsh-desktop'), 
 // Freeze the existing runtime session patch into the owned package before hashing.
 console.log('[stage] 重放既有会话管理补丁（patch-session-manage）');
 execSync('node scripts/patch-session-manage.js', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
+console.log('[stage] 重放旧会话预设兼容补丁（legacy-preset-compat）');
+execSync(
+  'node -e "const p=require(\'./lib/desktop/runtime-patches.js\');const nm=require(\'node:path\').join(process.cwd(),\'node_modules\');p.applyLegacyAgentPresetCompatToNodeModules(nm,(m)=>console.log(\'[legacy-preset-compat] \'+m));p.assertLegacyAgentPresetCompatApplied(nm);"',
+  { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' },
+);
 
 // 受控 bash 覆盖基于官方 0.2.1-rc.2，仅保留 optional-escalation 兼容差异。
 // npm ci 会恢复 registry 文件，装配时回填已重放补丁的项目副本。
