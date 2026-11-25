@@ -386,6 +386,8 @@
 }
 :root[data-motion="reduced"] .pixel-boot, :root[data-motion="reduced"] .workspace-stage::after, :root[data-motion="reduced"] .whale-world, :root[data-motion="reduced"] .whale-tail,
 :root[data-motion="reduced"] .sonar, :root[data-motion="reduced"] .whale-spark, :root[data-motion="reduced"] .pixel-fish, :root[data-motion="reduced"] .companion-halo { animation: none !important; }
+/* 启动遮罩只靠 boot-out 动画淡出。动画被关掉后它会一直盖住界面，所以直接隐藏。 */
+:root[data-motion="reduced"] .pixel-boot { display: none; }
 
 /* TRUE PIXEL OVERRIDES */
 :root[data-skin="pixel"] {
