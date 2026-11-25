@@ -26,7 +26,6 @@ Patch status values are existing audit conclusions. `same-version-modified`, `cr
 | `dsh-navbar` | recommended | upstream `0.3.0`; README/registry attribution | `same-version-modified` | none; EAC release pending | `source-pending` |
 | `dsh-pet` | external | upstream `0.1.3`; package repository declared | `same-version-modified` | none; immutable EAC-compatible release pending | `source-pending` |
 | `dsh-pet-settings` | external | EAC-original `0.1.0`; no independent upstream proof | `no-upstream` | none; EAC release source pending | `source-pending` |
-| `dsh-phone` | external | EAC-original `0.1.0`; no independent upstream proof | `no-upstream` | none; EAC release source pending | `source-pending` |
 | `dsh-raw-html` | recommended | upstream `0.6.2`; README/registry attribution | `cross-version-diff-pending` | none; EAC-managed release preserving bundle semantics pending | `source-pending` |
 | `dsh-session-manager` | recommended | upstream `0.1.0`; README/registry attribution | `same-version-modified` | none; EAC release with host-patch dependency pending | `source-pending` |
 | `dsh-stt` | external | upstream `0.3.0`; package repository declared | `byte-identical` | none; immutable ref, archive SHA-256 and removal gates pending | `source-pending` |

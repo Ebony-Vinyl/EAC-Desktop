@@ -27,11 +27,24 @@ export function init(d: RuntimePatchesCtx): void { ctx = d; }
 
 function runtimePatchRoots(): string[] {
   const home = ctx.getDshHome() || path.join(os.homedir(), '.dsh');
-  return [
+  const roots = [
     path.join(home, 'profiles', 'node_modules'),
     path.join(APP_ROOT, 'node_modules'),
     path.join(ctx.getUserDataDir(), 'agent', 'node_modules'),
   ];
+  // 每个 profile 有自己的 node_modules（插件实际装在这里，例如
+  // dsh-session-manager）。第三方插件也要打补丁，否则它自带的删除链路
+  // 仍按旧版 persistence.list() 形状查目录。
+  try {
+    const profiles = path.join(home, 'profiles');
+    for (const name of fs.readdirSync(profiles)) {
+      const nm = path.join(profiles, name, 'node_modules');
+      if (fs.existsSync(nm)) roots.push(nm);
+    }
+  } catch {
+    /* 没有 profiles 目录（开发/极简环境）：忽略 */
+  }
+  return roots;
 }
 
 // 对话删除 / 归档管理（dsh-session-manager 插件的前置依赖）：

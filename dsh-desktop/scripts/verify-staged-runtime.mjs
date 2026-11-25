@@ -55,7 +55,6 @@ const REQUIRED_FILES = [
 ];
 
 const RETIRED_PATHS = [
-  'sidecar/phone-bridge.js',
   'sidecar/rescue-integration.js',
   'dsh-desktop/assets/recovery-center.html',
   'dsh-desktop/assets/recovery-center-preload.js',

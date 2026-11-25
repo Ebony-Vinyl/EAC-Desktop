@@ -197,7 +197,7 @@
         @{
             Name = 'plugin-source-ledger'
             Domain = 'plugins'
-            Pattern = '^dsh-desktop/assets/SOURCES\.json$|^\.sync/(?:plugin-distribution|plugin-inventory-history|plugins(?:\.lock)?|policies)\.json$'
+            Pattern = '^dsh-desktop/assets/SOURCES\.json$|^\.sync/(?:plugin-distribution|plugin-inventory-history|plugins(?:\.lock)?|policies)\.json$|^\.sync/packs/.*\.json$'
             Reference = 'references/dsh-plugins.md'
             Level = 'full'
             Tests = @('test/minimal-core-boundary.test.ts', 'test/issue-415-skin-switch-retirement.test.ts')
@@ -388,6 +388,15 @@
             Level = 'full'
             Tests = @()
             Smoke = @()
+        },
+        @{
+            Name = 'launcher-app'
+            Domain = 'updates-packaging'
+            Pattern = '^launcher/(?:src|src-tauri|scripts|public|resources|pack-hall)/|^launcher/(?:package(?:-lock)?\.json|tsconfig.*\.json|vite\.config\..*|index\.html)$'
+            Reference = 'references/updates-and-packaging.md'
+            Level = 'full'
+            Tests = @()
+            Smoke = @('MANUAL: run cargo test --manifest-path launcher/src-tauri/Cargo.toml --no-default-features --lib and validate launcher catalog JSON')
         },
         @{
             Name = 'test-files'

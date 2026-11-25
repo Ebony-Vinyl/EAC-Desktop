@@ -1,0 +1,3 @@
+- insert:
+    - id: mojobox-manager
+      name: dsh-plugin-mojobox

@@ -77,11 +77,6 @@
       "patched": false
     },
     {
-      "id": "dsh-phone",
-      "path": "dsh-desktop/assets/plugins/dsh-phone",
-      "patched": false
-    },
-    {
       "id": "dsh-raw-html",
       "path": "dsh-desktop/assets/plugins/dsh-raw-html",
       "patched": true
@@ -283,6 +278,11 @@
     {
       "id": "our-free-model",
       "path": "dsh-desktop/assets/plugins/dsh-our-free-model",
+      "patched": false
+    },
+    {
+      "id": "mojobox-manager",
+      "path": "dsh-desktop/assets/plugins/dsh-plugin-mojobox",
       "patched": false
     }
   ]

@@ -341,6 +341,10 @@ export const COMPANION_PLUGINS: CompanionPluginDef[] = [
   { id: 'ds-harness-remote', name: 'ds-harness-remote', dir: 'ds-harness-remote', config: {
     enabled: true, role: 'host', serverUrl: 'https://dsh.r2049.cn', codex: { enabled: true, binary: 'codex' },
   } },
+  // Mojobox 整合包管理插件：随包内置，host 半在设置的「Mojobox」入口提供整合包
+  // 导入/更新/单组件管理；esbuild 自包含 lib/index.js（内联 ajv/semver/tar/yauzl），
+  // client 半在 package.json dsh.client 声明（platform web）。默认启用。
+  { id: 'mojobox-manager', name: 'dsh-plugin-mojobox', dir: 'dsh-plugin-mojobox' },
   // 皮肤管理器（@smalltailqwq/dsh-client-ui-skin-deep-whale-manager）**不登记在
   // COMPANION_PLUGINS**，原因（实测 2026-10-23，踩了三次）：
   //
@@ -662,7 +666,9 @@ export const RETIRED_BUILTIN_PLUGINS = [
   // 依据：ADR 0006 最简本体（v6 Task 3.1 剥出 assets/plugins 全量资产），
   // ISO-005 以装配面 stage-resources.mjs 的 BUILTIN_PLUGIN_DIRS（9 项）为唯一
   // 基准收敛运行时清单；这 35 项改由市场按需安装（.sync/plugin-distribution.json：
-  // 15 recommended + 20 external），但老 profile（≤5.4.1 曾全部随包）里的
+  // 15 recommended + 19 external）。dsh-phone 的「连接手机」已整体移除（LAN 桥
+  // phone-bridge 早已退役，插件是空壳），条目保留只为清理老 profile 残留；
+  // 其余 34 项仍是市场可装包，但老 profile（≤5.4.1 曾全部随包）里的
   // patch 行 / node_modules 包副本 / package.json 依赖仍指向已不在包体的包 ——
   // 「行在包不在」会让 loader 找不到 entry 拖垮插件树，也会与市场安装的推荐版
   // 撞成 duplicate loader entry id。这里逐条按**精确 id + 精确包名**兜底清理

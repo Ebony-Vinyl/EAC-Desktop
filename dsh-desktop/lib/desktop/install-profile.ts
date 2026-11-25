@@ -25,7 +25,7 @@ export const PROFILE_MARKER_FILE = 'profile.txt';
  *   eac-locale-compat 界面底座 /
  *   dsh-boot-animation 开机动画 / dsh-wechat-plugin 微信渠道 /
  *   ds-harness-remote 远程访问（2026-10 集成的三项）。
- * 收敛前登记的 14 项（agent-teams / dsh-stt / dsh-phone / computer-user /
+ * 收敛前登记的 13 项（agent-teams / dsh-stt / computer-user /
  * dsh-dafeiyu / offpeak / change-review …）自 v6 Task 3.1 起已不随包（.sync
  * 分级 recommended/external，市场按需安装），不再是本清单的合法成员 —— 它们
  * 的「装完默认禁用」由 L3 外部层规划承接（plugin-manager-state）。

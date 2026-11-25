@@ -179,16 +179,6 @@
       }
     },
     {
-      "id": "dsh-phone",
-      "distributionClass": "external",
-      "delivery": "market",
-      "migration": {
-        "current": "none",
-        "target": "market",
-        "state": "source-pending"
-      }
-    },
-    {
       "id": "dsh-raw-html",
       "distributionClass": "recommended",
       "delivery": "pack",
@@ -528,6 +518,16 @@
     },
     {
       "id": "our-free-model",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
+    },
+    {
+      "id": "mojobox-manager",
       "distributionClass": "builtin",
       "delivery": "bundled",
       "migration": {

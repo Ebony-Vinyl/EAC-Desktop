@@ -59,7 +59,7 @@ Closes #366
 
 > **`ui` 口径说明**：判定问题取"**主要产出**是界面"而非"是否涉及界面"。实测 49 行中 **21 个声明了 UI 面（settings-ui 等）却未标 `ui`**——作者侧一贯执行标准即"主业为界面"，本条修正使判据与主表一致。若按"是否涉及界面"读，`ui` 将覆盖 46/49 行并连带放大统计行全部计数，且失去 review 意见 1 所要求的"解耦时保留合适插件"的筛选力。
 
-**与解耦的关系**（回应 [review 意见 1](https://github.com/DSH-EAC/DSH-Desktop-EAC/pull/388#discussion_r4023775566) 后半句"在后续解耦合时保留合适的插件"）：tag 轴同时承载**本体耦合深度**——`extension` 的判定问题问的是"拆掉它，本体功能少了吗"，答"不少"即为**解耦可去项**（dsh-pet / dsh-dafeiyu / dsh-phone / dsh-openclaw-bridge 一类）。`theme` **不构成可去判据**：`dsh-skin-switch` 是 `ui-skin-*` 激活行**在本仓库内的唯一自动写者**（`lib/index.js:59 SKIN_ROW_RE` / `:146` 匹配 `- id: ui-skin-*` 行 / `:206 writeFileSync`）——**"唯一"仅限于本仓库**：`dsh-plugin-manager` 经 `plugin-ops.ts` 的 `pluginManagerSetEnabled` 亦可写任意非核心行（含 `ui-skin-*`）；且"拆掉它是否导致 10 款皮肤全失活"取决于宿主对 home 层 `- insert:` 行的合成规则（home 行若丢失或被重同步，10 款反而全 insert→全开），该规则属**内核行为、not-tested**，故本行只断言"将失去集中式单激活切换能力"，**不断言失活**。`dsh-font-custom` 不属可去项：其 tags 为 `theme, ui`（**无 `extension`**），按本判据不成立——它与皮肤的关系是同名主题变量被**部分遮蔽**（§3 K-06），非功能可移除。其余 tag 表示该插件处在本体功能链上，解耦时需评估去向。注意 `extension` **不等于无冲突**（dsh-pet 即反例，其与 agent-teams 同槽注册，见 §3 降级登记 K-04）。**逐插件的层级归属与禁用连带另见 §7。**
+**与解耦的关系**（回应 [review 意见 1](https://github.com/DSH-EAC/DSH-Desktop-EAC/pull/388#discussion_r4023775566) 后半句"在后续解耦合时保留合适的插件"）：tag 轴同时承载**本体耦合深度**——`extension` 的判定问题问的是"拆掉它，本体功能少了吗"，答"不少"即为**解耦可去项**（dsh-pet / dsh-dafeiyu / dsh-openclaw-bridge 一类）。`theme` **不构成可去判据**：`dsh-skin-switch` 是 `ui-skin-*` 激活行**在本仓库内的唯一自动写者**（`lib/index.js:59 SKIN_ROW_RE` / `:146` 匹配 `- id: ui-skin-*` 行 / `:206 writeFileSync`）——**"唯一"仅限于本仓库**：`dsh-plugin-manager` 经 `plugin-ops.ts` 的 `pluginManagerSetEnabled` 亦可写任意非核心行（含 `ui-skin-*`）；且"拆掉它是否导致 10 款皮肤全失活"取决于宿主对 home 层 `- insert:` 行的合成规则（home 行若丢失或被重同步，10 款反而全 insert→全开），该规则属**内核行为、not-tested**，故本行只断言"将失去集中式单激活切换能力"，**不断言失活**。`dsh-font-custom` 不属可去项：其 tags 为 `theme, ui`（**无 `extension`**），按本判据不成立——它与皮肤的关系是同名主题变量被**部分遮蔽**（§3 K-06），非功能可移除。其余 tag 表示该插件处在本体功能链上，解耦时需评估去向。注意 `extension` **不等于无冲突**（dsh-pet 即反例，其与 agent-teams 同槽注册，见 §3 降级登记 K-04）。**逐插件的层级归属与禁用连带另见 §7。**
 
 **修改面（14 面）**：conversation-chat / composer-input / settings-ui / sidebar / overlay-floating / terminal / files / session-data / tools-agent / system-prompt / network-api / skins-theming / mcp-skills-config / backend-infra。每面判定 token 与可检测性见 **`docs/PHASE2-词表卡与扫描器规格.md`**（原附录A 词表卡，已迁出）。
 
@@ -98,7 +98,6 @@ Closes #366
 | dsh-openclaw-bridge | chat, extension | settings-ui:W, conversation-chat:W(通道注入) | settings.section；**网络路由不登记**：注册 6 条 `ctx.webServer.register`（`/openclaw-bridge/{v1/chat/completions,health,wechat/status,login,verify,logout}`，常量见 lib/index.js:71-76，注册点 :868/:869/:958/:963/:975/:988）但**全为插件私有前缀**，按《词表卡与扫描器规格》network-api 收录口径（私有前缀不逐条登记）不入本面 | — |
 | dsh-pet | extension | overlay-floating:W, network-api:W | [data-shell-overlay] 写 z-index!important(lib/client.js:59)；shell.overlay 槽(lib/client.js:833, order 1000)；/pet 路由 | — |
 | dsh-pet-settings | management, ui | settings-ui:W | setEnabled('dsh-pet')(:81)；dafeiyu config 端点 FISH_ENDPOINT(:20)，读 fetch(:120)/写 fetch(:147) | — |
-| dsh-phone | extension, ui? | settings-ui:W, network-api:W | settings.section；LAN 反代 | — |
 | dsh-plugin-manager | management | settings-ui:W | settings.plugins.tab；功能主体在壳进程 | — |
 | dsh-plugin-shield | management | settings-ui:W | settings.section | — |
 | dsh-plugin-wizard | management | settings-ui:W | settings.section | — |
@@ -121,13 +120,13 @@ Closes #366
 | dsh-whale-widget | billing, ui | overlay-floating:W(挂件), network-api:W | cordis.patch.yml 挂载（无 client.js）；inject webServer+credentials | — |
 | picturereader | tool | settings-ui:W, tools-agent:W(图像工具) | settings.section；skills/*.md；client.js 在插件根目录 | — |
 
-统计：多标签 32 / 单标签 17（49 行；待裁 tag 不计入多/单与频次：phone 的 ui?）@dev@`e46ebb2`@win32@功能口径；tag 频次 ui 25（另 phone 1 项待裁）/ chat 17 / management 15 / tool 5 / input 5 / automation 5 / extension 4 / billing 3 / knowledge 3 / theme 2 / notification 2；纯 W 面≥3 共 7 个（agent-teams/better-sidebar/undo-savepoint/meow-smooth/raw-html/stt/web-mobile-fix）；lite 停 14（对齐 install-profile.ts:28-43）；核心锁定 10 项（onboarding.js:14 `CORE_PLUGIN_IDS`：balance/file-changes/client-file-changes/terminal/plugin-manager/plugin-shield/plugin-wizard/eac-locale-compat/compact + dsh-market-plugin——退役旧市场 id（companion-sync.ts `RETIRED_BUILTIN_PLUGINS`），现注册表无此条目、锁定空转、无对应表行）。**层级归属、三集合交集与禁用连带详见 §7**。
+统计：多标签 32 / 单标签 17（49 行）@dev@`e46ebb2`@win32@功能口径；tag 频次 ui 25/ chat 17 / management 15 / tool 5 / input 5 / automation 5 / extension 4 / billing 3 / knowledge 3 / theme 2 / notification 2；纯 W 面≥3 共 7 个（agent-teams/better-sidebar/undo-savepoint/meow-smooth/raw-html/stt/web-mobile-fix）；lite 停 13（对齐 install-profile.ts:28-43）；核心锁定 10 项（onboarding.js:14 `CORE_PLUGIN_IDS`：balance/file-changes/client-file-changes/terminal/plugin-manager/plugin-shield/plugin-wizard/eac-locale-compat/compact + dsh-market-plugin——退役旧市场 id（companion-sync.ts `RETIRED_BUILTIN_PLUGINS`），现注册表无此条目、锁定空转、无对应表行）。**层级归属、三集合交集与禁用连带详见 §7**。
 
 表外注① think-zh 血统：根上游 baosfeng/my-dsh-plugins@0.4.8，直连 jing-hy/dsh-think-zh-expand-eac（SOURCES.json 条目 `"id":"C115"`，位于 :3017）。
 
 表外注②【人工】= 非标准机制、扫描词表外人工判定（image-paste paste 事件 / navbar 槽外浮层 / viewport-lock 文档级 CSS / locale-compat 与 think-zh 的 DOM 文本替换）。
 
-表外注③ 待裁 tag：phone 的 ui?（远程通道或 ui）。terminal 的 `tool` 已按判定问题「模型因此能多做什么动作？」**撤除**——该插件不注册任何 agent 工具（见 §3 已知局限），其终端能力面向用户 UI、归 conversation-chat 面。
+表外注③ terminal 的 `tool` 已按判定问题「模型因此能多做什么动作？」**撤除**——该插件不注册任何 agent 工具（见 §3 已知局限），其终端能力面向用户 UI、归 conversation-chat 面。
 
 表外注④ 主表冲突列只标**该行作为写者（W）** 的 K 条目归属；**已降级条目（K-01/04/05/07/08/09）与"同锚共处"组不回标主表**，去向见 §3 降级登记。**K-02 内部分层**：其 6 个写者中 order 60（stt）与 100（balance）按 §3 判定属「同槽并存、非同点」，主表仍标 K-02 系因二者在写者名单内；**真正的同点依据仅 order 90×2**（meow-smooth × message-rewind）及 90/91、91/92 相邻对。
 
@@ -261,7 +260,7 @@ flowchart LR
 
 **核心 10**：`balance` / `file-changes` / `client-file-changes` / `terminal` / `dsh-market-plugin`（**已退役 id**，现注册表无此条目 → 该锁定位空转）/ `plugin-manager` / `plugin-shield` / `plugin-wizard` / `eac-locale-compat` / `compact`。
 **推荐 16**：`skin-switch` / `easy-setup` / `picturereader` / `soul-md` / `mobile-fix` / `better-sidebar` / `composer-dynamic-island` / `message-rewind` / `dock-settings` / `change-review` / `dsh-navbar` / `dsh-session-manager` / `conversation-tweaks` / `prompt-custom` / `offpeak` / `dsh-raw-html`。
-**lite 停用 14**（含停用理由，取自代码行内注释）：`agent-teams`（高级玩法）/ `openclaw-bridge`（集成类）/ `dsh-phone`（LAN 反代）/ `computer-user`（高级玩法）/ `dsh-dafeiyu`（含 49MB helper）/ `dsh-stt`（启用需下载 ~230MB 模型）/ `dsh-pet-settings`（桌宠停用时无对象可管）/ `composer-dynamic-island` / `side-session` / `float-window` / `message-rewind` / `prompt-custom` / `dsh-webui-prompt-optimizer` / `change-review`。
+**lite 停用 13**（含停用理由，取自代码行内注释）：`agent-teams`（高级玩法）/ `openclaw-bridge`（集成类）/ `computer-user`（高级玩法）/ `dsh-dafeiyu`（含 49MB helper）/ `dsh-stt`（启用需下载 ~230MB 模型）/ `dsh-pet-settings`（桌宠停用时无对象可管）/ `composer-dynamic-island` / `side-session` / `float-window` / `message-rewind` / `prompt-custom` / `dsh-webui-prompt-optimizer` / `change-review`。
 
 **三集合交集（实测）**：核心∩推荐 = **空**；核心∩lite 停用 = **空**；**推荐∩lite 停用 = 4**（`change-review` / `composer-dynamic-island` / `message-rewind` / `prompt-custom`）——即这 4 个「全新安装默认勾选、**lite 形态下默认关**」，是唯一需要按形态区分对待的一组。
 
