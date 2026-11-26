@@ -10,14 +10,21 @@ const portable = require('../lib/desktop/portable-data.js') as {
   PORTABLE_OWNER_FILE: string;
   PORTABLE_POINTER_FILE: string;
   PORTABLE_SHARE_FILE: string;
+  PORTABLE_COPY_STATE_FILE: string;
   readOwnerRecord(dataRoot: string): {dataRoot: string; channel: string; createdAt: string} | null;
   readPointerRecord(installRoot: string): {dataRoot: string; reason: string} | null;
   writeOwnerRecord(dataRoot: string, environmentRoot: string, registryHome: string, channel: string, installRoot: string): Record<string, unknown>;
   writePointerRecord(installRoot: string, dataRoot: string, reason: 'update-handoff' | 'legacy-pointer'): void;
   removePointerRecord(installRoot: string): void;
-  findEnvironmentRoot(container: string): {root: string; channel: string} | null;
+  findEnvironmentRoot(container: string, channel?: string): {root: string; channel: string} | null;
   copyEnvironmentContents(source: string, target: string): {files: number; bytes: number};
-  preparePortableData(options: Record<string, unknown>): {mode: string; dataRoot: string; migrated?: boolean};
+  preparePortableData(options: Record<string, unknown>): {
+    mode: string;
+    dataRoot: string;
+    migrated?: boolean;
+    channel: string;
+    sourceEnvironmentRoot?: string;
+  };
   finishPortableData(options: Record<string, unknown>): void;
   ENVIRONMENT_COPY_EXCLUDES: string[];
 };
@@ -37,6 +44,59 @@ function layout(root: string): {install: string; data: string; env: string} {
   fs.writeFileSync(path.join(env, '.dpx-environment.json'), JSON.stringify({kind: 'DPXEnvironment', name: 'eac-beta', root: env}));
   fs.writeFileSync(path.join(env, 'dsh-home', 'session.jsonl'), '会话');
   return {install, data, env};
+}
+
+/** 在指定容器下造一个 `eac-<channel>` 环境根（清单 + dsh-home 内的文件）。 */
+function environment(container: string, channel: string, files: Record<string, string>): string {
+  const envRoot = path.join(container, 'dsh-environments', 'eac-' + channel);
+  fs.mkdirSync(path.join(envRoot, 'dsh-home'), {recursive: true});
+  fs.writeFileSync(path.join(envRoot, '.dpx-environment.json'), JSON.stringify({kind: 'DPXEnvironment', name: 'eac-' + channel, root: envRoot}));
+  for (const [name, text] of Object.entries(files)) fs.writeFileSync(path.join(envRoot, 'dsh-home', name), text);
+  return envRoot;
+}
+
+/** 复制中断的现场：清单已写好、内容不全，但留下 in-progress 状态。 */
+function interruptedCopy(envRoot: string, source: string): void {
+  fs.writeFileSync(path.join(envRoot, portable.PORTABLE_COPY_STATE_FILE), JSON.stringify({schemaVersion: 1, state: 'in-progress', source, updatedAt: new Date().toISOString()}));
+}
+
+/** 测试接缝：按 dpx 的真实顺序先建环境根（写清单），再由 L2 复制内容。 */
+function ensureStub(env: NodeJS.ProcessEnv) {
+  const envRoot = path.join(env.DSH_EAC_DATA_ROOT!, 'dpx', 'dsh-environments', 'eac-' + env.DSH_EAC_CHANNEL);
+  fs.mkdirSync(path.join(envRoot, 'dsh-home'), {recursive: true});
+  fs.writeFileSync(path.join(envRoot, '.dpx-environment.json'), JSON.stringify({kind: 'DPXEnvironment', name: 'eac-' + env.DSH_EAC_CHANNEL, root: envRoot}));
+  return {
+    paths: {root: envRoot, dshHome: path.join(envRoot, 'dsh-home')},
+    registryHome: path.join(env.DSH_EAC_DATA_ROOT!, 'dpx', 'registry'),
+    channel: env.DSH_EAC_CHANNEL,
+  } as never;
+}
+
+/** 在临时通道环境里运行：`build` 有值就模拟 L1 注入构建通道，`undefined` 则清空。 */
+function withChannelEnv<T>(build: string | undefined, run: () => T): T {
+  const previousBuild = process.env.DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL;
+  const previousChannel = process.env.DSH_EAC_CHANNEL;
+  if (build === undefined) delete process.env.DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL;
+  else process.env.DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL = build;
+  delete process.env.DSH_EAC_CHANNEL;
+  try {
+    return run();
+  } finally {
+    if (previousBuild === undefined) delete process.env.DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL;
+    else process.env.DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL = previousBuild;
+    if (previousChannel === undefined) delete process.env.DSH_EAC_CHANNEL;
+    else process.env.DSH_EAC_CHANNEL = previousChannel;
+  }
+}
+
+/** 模拟 beta/stable 构建：L1 通过 `DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL` 告诉 sidecar 自己是什么通道。 */
+function withBuildChannel<T>(channel: string, run: () => T): T {
+  return withChannelEnv(channel, run);
+}
+
+/** 清空通道相关环境变量：让「从源数据推断通道」的用例不受开发机环境影响。 */
+function withoutChannelEnv<T>(run: () => T): T {
+  return withChannelEnv(undefined, run);
 }
 
 test('owner and pointer records round-trip and reject foreign/relative roots', t => {
@@ -92,7 +152,7 @@ test('import copies legacy environment data without touching the source', t => {
     fs.writeFileSync(path.join(envRoot, '.dpx-environment.json'), JSON.stringify({kind: 'DPXEnvironment', name: 'eac-beta', root: envRoot}));
     return {paths: {root: envRoot, dshHome: path.join(envRoot, 'dsh-home')}, registryHome: path.join(env.DSH_EAC_DATA_ROOT!, 'dpx', 'registry'), channel: env.DSH_EAC_CHANNEL} as never;
   };
-  const runtime = portable.preparePortableData({mode: 'import', sourceRoot: source, dataRoot: data, installRoot: path.join(root, 'install'), programRoot: path.join(root, 'program'), ensure});
+  const runtime = withoutChannelEnv(() => portable.preparePortableData({mode: 'import', sourceRoot: source, dataRoot: data, installRoot: path.join(root, 'install'), programRoot: path.join(root, 'program'), ensure}));
   assert.equal(runtime.channel, 'beta');
   assert.equal(fs.readFileSync(path.join(data, 'dpx', 'dsh-environments', 'eac-beta', 'dsh-home', 'session.jsonl'), 'utf8'), 'legacy session');
   assert.equal(fs.readFileSync(path.join(sourceEnv, 'dsh-home', 'session.jsonl'), 'utf8'), 'legacy session', '导入不能修改源数据');
@@ -220,4 +280,65 @@ test('relocate rebinds host closure links to the current program tree', {skip: p
     `搬迁后闭包必须重绑到当前程序根，实际指向 ${target}`,
   );
   assert.equal(fs.readFileSync(path.join(data, 'dpx', 'dsh-environments', 'eac-beta', 'dsh-home', 'session.jsonl'), 'utf8'), 'session');
+});
+
+test('import follows the build channel instead of the stale stable environment', t => {
+  const root = temporary(t);
+  const source = path.join(root, 'legacy');
+  const storage = path.join(source, 'dpx');
+  const stableEnv = environment(storage, 'stable', {'session.jsonl': 'stable session'});
+  const betaEnv = environment(storage, 'beta', {'session.jsonl': 'beta session'});
+  fs.writeFileSync(path.join(source, 'eac-data-binding.json'), JSON.stringify({schemaVersion: 1, product: 'eac-desktop', channel: 'beta', environmentRoot: betaEnv, storageRoot: storage, dshHome: path.join(betaEnv, 'dsh-home'), registryHome: path.join(storage, 'registry'), profile: 'web-desktop'}));
+  const data = path.join(root, 'install', 'data');
+  const runtime = withBuildChannel('beta', () => portable.preparePortableData({mode: 'import', sourceRoot: source, dataRoot: data, installRoot: path.join(root, 'install'), programRoot: path.join(root, 'program'), ensure: ensureStub}));
+  assert.equal(runtime.channel, 'beta', '不得因为源里还有 stable 就把构建通道改成 stable');
+  assert.equal(runtime.sourceEnvironmentRoot, path.resolve(betaEnv), '必须先定通道再挑数据源');
+  assert.equal(fs.readFileSync(path.join(data, 'dpx', 'dsh-environments', 'eac-beta', 'dsh-home', 'session.jsonl'), 'utf8'), 'beta session');
+  assert.equal(fs.existsSync(path.join(data, 'dpx', 'dsh-environments', 'eac-stable')), false, '不能跨通道建出第二个环境');
+  assert.equal(fs.readFileSync(path.join(stableEnv, 'dsh-home', 'session.jsonl'), 'utf8'), 'stable session', '导入只复制，源数据不动');
+});
+
+test('relocate skips an interrupted copy and uses the last complete environment', t => {
+  const root = temporary(t);
+  const install = path.join(root, 'portable');
+  const data = path.join(install, 'data');
+  const stale = path.join(data, 'dpx.stale-2026-11-20T00-00-00-000Z');
+  const complete = environment(stale, 'beta', {'session-a.jsonl': 'a', 'session-b.jsonl': 'b'});
+  // 上次搬迁在「建好环境、内容没复制完」时中断：清单在、文件缺，带 in-progress。
+  const partial = environment(path.join(data, 'dpx'), 'beta', {'session-b.jsonl': 'b-partial'});
+  interruptedCopy(partial, complete);
+  const older = new Date(Date.now() - 3600 * 1000);
+  fs.utimesSync(stale, older, older);
+  const runtime = withBuildChannel('beta', () => portable.preparePortableData({mode: 'relocate', dataRoot: data, installRoot: install, programRoot: path.join(root, 'program'), ensure: ensureStub}));
+  assert.equal(runtime.channel, 'beta');
+  assert.equal(runtime.sourceEnvironmentRoot, path.resolve(complete), '必须跳过中断现场，选最近一个完整环境');
+  const target = path.join(data, 'dpx', 'dsh-environments', 'eac-beta', 'dsh-home');
+  assert.equal(fs.readFileSync(path.join(target, 'session-a.jsonl'), 'utf8'), 'a', '完整环境里的文件不能丢');
+  assert.equal(fs.readFileSync(path.join(target, 'session-b.jsonl'), 'utf8'), 'b');
+  const state = JSON.parse(fs.readFileSync(path.join(data, 'dpx', 'dsh-environments', 'eac-beta', portable.PORTABLE_COPY_STATE_FILE), 'utf8')) as {state: string; files: number};
+  assert.equal(state.state, 'complete', '复制成功后必须落完成标记，供下一次重试识别');
+  assert.ok(state.files >= 2, '完成标记要记录实际复制的文件数');
+  assert.ok(fs.readdirSync(data).filter(name => name.startsWith('dpx.stale-')).length >= 2, '半成品与完整旧目录都必须保留');
+});
+
+test('relocate fails closed when every environment is an interrupted copy', t => {
+  const root = temporary(t);
+  const install = path.join(root, 'portable');
+  const data = path.join(install, 'data');
+  const partial = environment(path.join(data, 'dpx'), 'beta', {'session-a.jsonl': 'a'});
+  interruptedCopy(partial, 'Z:\\old\\data\\dpx\\dsh-environments\\eac-beta');
+  let ensured = false;
+  const ensure = (env: NodeJS.ProcessEnv) => {
+    ensured = true;
+    return ensureStub(env);
+  };
+  assert.throws(
+    () => withBuildChannel('beta', () => portable.preparePortableData({mode: 'relocate', dataRoot: data, installRoot: install, programRoot: path.join(root, 'program'), ensure})),
+    /portable-relocate-source-incomplete/,
+  );
+  assert.equal(ensured, false, '没有完整来源时不得建新环境、不得把半成品复制成完成态');
+  const stale = fs.readdirSync(data).filter(name => name.startsWith('dpx.stale-'));
+  assert.equal(stale.length, 1, '中断现场必须保留，不能删除');
+  assert.equal(fs.readFileSync(path.join(data, stale[0]!, 'dsh-environments', 'eac-beta', 'dsh-home', 'session-a.jsonl'), 'utf8'), 'a');
+  assert.equal(fs.existsSync(path.join(data, 'eac-data-owner.json')), false, '失败时不能写所有权记录');
 });

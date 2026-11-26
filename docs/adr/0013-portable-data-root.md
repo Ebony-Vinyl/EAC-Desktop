@@ -33,6 +33,13 @@ L1（Rust 壳）在 `main()` 最前面解析便携形态，只做读取、原生
 
 三者只在便携模式写环境变量；安装版行为不变。
 
+**通道判定（先定通道，再挑数据源）**：迁移时的期望通道按
+「显式 `DSH_EAC_CHANNEL` › L1 注入的构建通道（`DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL`）› 目标数据根已有 `eac-data-binding.json`」
+判定，**不由源数据的通道决定**。源数据的通道只用于挑选同通道的环境根：先找
+`eac-<构建通道>`；找不到才退回「源绑定通道 / 唯一环境 / 最近使用的环境」。
+反过来（先看源）会让 beta 便携版在导入旧 stable 数据时把整机通道改成 stable，
+并写进 `eac-data-binding.json` 变成永久状态。
+
 ### 2. 所有权与旧数据
 
 - 便携自有数据根写 `eac-data-owner.json`（`installKind=portable`、`dataRoot`、`installRoot`、环境信息）。
@@ -56,9 +63,13 @@ dpx 的 registry/环境清单和 `eac-data-binding.json` 都记录绝对路径�
 
 搬迁或重建在「隔离旧 `dpx` → 建新环境 → 复制内容」之间失败时，会留下半成品 `dpx/` 与更早的完整 `dpx.stale-*`。重试不能只看最新目录：
 
-- 扫描 data 根下所有 `dpx` / `dpx.stale-*`，选**最近一个含 `.dpx-environment.json` 的完整环境**作为来源；
+- 复制**开始前**在目标环境根写 `.eac-copy-state.json`（`state=in-progress`），复制成功后才改写 `state=complete`（附文件数/字节数）。标记文件属于环境根自己，不参与内容复制。
+- 扫描 data 根下所有 `dpx` / `dpx.stale-*`，选**最近一个 `complete`（或无标记的原始数据）的环境**作为来源，`in-progress` 一律跳过；同一份数据里 stable/beta 并存时优先期望通道。
+- 所有环境都是 `in-progress` 时 **fail closed**（`portable-relocate-source-incomplete`），不建新环境、不写所有权记录；旧数据原样留在 `dpx.stale-*`。
 - 当前 `dpx` 已不存在（上次已隔离）时也能继续；
 - 旧 `eac-data-binding.json` 移入来源 stale 容器，避免下一次启动读到旧 `storageRoot`。
+
+**为什么不用「有 `.dpx-environment.json` 就是完整」**：清单由 `createEnvironment` 在建环境时就写好，复制 GB 级内容要几分钟；中断留下的现场清单齐全、内容却缺。按清单存在判定会把半成品当来源，重试后写出的环境「看起来已完成」但静默少文件（#528 评审 2/3）。历史数据（旧版本环境根）没有标记，按原始数据处理即可。
 
 `/died` 页的环境诊断由 L1 直接 spawn，不经过 sidecar 的 `cmd.env`；因此 L1 必须把 `DSH_EAC_DPX_REGISTRY_HOME` 写进自身进程环境，否则诊断会读全局 `%LOCALAPPDATA%\DSH\DPX`，把正常便携环境误报成「未登记」。
 
@@ -110,6 +121,8 @@ dpx 的 registry/环境清单和 `eac-data-binding.json` 都记录绝对路径�
 ## 风险与未覆盖项
 
 - 换路径搬迁是复制式，需要约 2 倍数据空间；中断后旧数据在 `.stale-*`，可重试。
+- 复制状态标记在环境根建好之后才写，中间有毫秒级窗口（建环境与写标记之间被杀）；这类残留在极端情况下仍可能被当原始数据。要彻底消除，需要在建环境之前先记录目标根，代价是给 dpx 加一层预登记。
+- 导入（从 C 盘旧数据）中断后，未完成的环境根没有 `complete` 标记：下次启动 `data\` 已存在但无所有权记录，L1 只能给出「搬迁/新建」对话框，无法自动重新导入。当前行为是 fail closed（不复制半成品），用户需删除 `<data>` 后重来；后续可在 L1 增加「重新导入」分支。
 - 内置更新备份仍要求额外空间（既有行为），小容量 U 盘可能失败。
 - 同机安装版与便携版不能同时运行（单实例按 identifier）；安装版卸载会删除 C 盘公共数据，对自包含便携版无影响，但便携仍处于「沿用旧位置」模式时会受影响。
 - WebView2 运行时安装、崩溃转储、事件日志等 OS 级写入不在「零 C 盘写入」承诺内。

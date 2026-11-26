@@ -31,6 +31,15 @@ export const PORTABLE_OWNER_FILE = 'eac-data-owner.json';
 export const PORTABLE_POINTER_FILE = '.dsh-portable-data.json';
 /** 便携版仍在共享旧数据根时留下的标记；NSIS 卸载器见到就保留数据。 */
 export const PORTABLE_SHARE_FILE = 'eac-portable-share.json';
+/**
+ * 环境根的复制状态标记（环境根内）。
+ *
+ * 复制**开始前**写 `in-progress`，写成功后才改写 `complete`；重试时只有
+ * `complete`（或完全没有标记的原始数据）才允许当数据源。只看
+ * `.dpx-environment.json` 存在会把「建好环境、内容没复制完」的半成品当成
+ * 完整数据（#528 评审 2/3）。
+ */
+export const PORTABLE_COPY_STATE_FILE = '.eac-copy-state.json';
 
 export const PORTABLE_MODES = ['owned', 'pointer', 'handoff', 'explicit', 'import', 'relocate', 'reset'] as const;
 export type PortableMode = typeof PORTABLE_MODES[number];
@@ -41,6 +50,9 @@ export const ENVIRONMENT_COPY_EXCLUDES = [
   'dsh-distribution.json',
   'AGENTS.md',
   'desktop',
+  // 迁移状态属于当前环境根自己，不能从旧环境复制过来（否则新环境会顶着
+  // 旧的 complete 标记冒充已完成）。
+  PORTABLE_COPY_STATE_FILE,
 ] as const;
 
 export interface PortableOwnerRecord {
@@ -173,21 +185,28 @@ export function writeOwnerRecord(dataRoot: string, environmentRoot: string, regi
   return record;
 }
 
-/** 在候选位置里找出一个 `eac-<channel>` 环境根（可直接是环境根，或 dpx storageRoot）。 */
-export function findEnvironmentRoot(container: string): {root: string; channel: string} | null {
+/**
+ * 在候选位置里找出一个 `eac-<channel>` 环境根（可直接是环境根，或 dpx storageRoot）。
+ *
+ * 传 `channel` 时只认该通道：判定顺序必须是「先定通道、再挑数据源」，
+ * 否则 beta 构建会把 stable 的数据复制进 beta 环境（#528 评审 1）。
+ */
+export function findEnvironmentRoot(container: string, channel?: string): {root: string; channel: string} | null {
   const directManifest = path.join(container, '.dpx-environment.json');
   if (fs.existsSync(directManifest)) {
     const manifest = readJson(directManifest);
     const name = typeof manifest?.name === 'string' ? manifest.name : '';
-    return {root: path.resolve(container), channel: name.startsWith('eac-') ? name.slice(4) : 'stable'};
+    const found = name.startsWith('eac-') ? name.slice(4) : 'stable';
+    return channel && found !== channel ? null : {root: path.resolve(container), channel: found};
   }
-  const storages = [path.join(container, 'dpx', 'dsh-environments'), path.join(container, 'dsh-environments')];
-  for (const storage of storages) {
-    if (!fs.existsSync(storage)) continue;
-    const candidates = fs.readdirSync(storage, {withFileTypes: true})
-      .filter(entry => entry.isDirectory() && /^eac-[a-z][a-z0-9-]{0,59}$/.test(entry.name))
-      .map(entry => entry.name).sort();
+  for (const storage of environmentStorages(container)) {
+    const candidates = validEnvironmentNames(storage);
     if (!candidates.length) continue;
+    if (channel) {
+      const exact = candidates.find(name => name === 'eac-' + channel);
+      if (exact) return {root: path.join(storage, exact), channel};
+      continue;
+    }
     const name = candidates.length === 1
       ? candidates[0]!
       : (candidates.includes('eac-stable') ? 'eac-stable' : candidates[0]!);
@@ -196,27 +215,106 @@ export function findEnvironmentRoot(container: string): {root: string; channel: 
   return null;
 }
 
+function environmentStorages(container: string): string[] {
+  return [path.join(container, 'dpx', 'dsh-environments'), path.join(container, 'dsh-environments')];
+}
+
+function validEnvironmentNames(storage: string): string[] {
+  if (!fs.existsSync(storage)) return [];
+  return fs.readdirSync(storage, {withFileTypes: true})
+    .filter(entry => entry.isDirectory() && /^eac-[a-z][a-z0-9-]{0,59}$/.test(entry.name))
+    .map(entry => entry.name).sort();
+}
+
+/** 容器里的全部 `eac-*` 环境（不挑通道，用于通道匹配失败后的兜底）。 */
+function listEnvironments(container: string): Array<{root: string; channel: string}> {
+  if (fs.existsSync(path.join(container, '.dpx-environment.json'))) {
+    const direct = findEnvironmentRoot(container);
+    return direct ? [direct] : [];
+  }
+  const out: Array<{root: string; channel: string}> = [];
+  for (const storage of environmentStorages(container)) {
+    for (const name of validEnvironmentNames(storage)) out.push({root: path.join(storage, name), channel: name.slice(4)});
+  }
+  return out;
+}
+
 function channelFromBinding(container: string): string | null {
   const value = readJson(path.join(container, 'eac-data-binding.json'));
   const channel = typeof value?.channel === 'string' ? value.channel : '';
   return CHANNEL.test(channel) ? channel : null;
 }
 
-function treeStats(root: string): {files: number; bytes: number} {
-  const stats = {files: 0, bytes: 0};
-  const walk = (current: string): void => {
-    for (const entry of fs.readdirSync(current, {withFileTypes: true})) {
-      if (entry.isSymbolicLink()) continue;
-      const location = path.join(current, entry.name);
-      if (entry.isDirectory()) walk(location);
-      else if (entry.isFile()) {const stat = fs.statSync(location); stats.files += 1; stats.bytes += stat.size;}
-    }
-  };
-  walk(root);
-  return stats;
+function normalizeChannel(value: string | undefined): string | null {
+  const raw = String(value ?? '').trim().toLowerCase().replace(/-+$/, '');
+  return CHANNEL.test(raw) ? raw : null;
 }
 
-function copyEntry(source: string, target: string): void {
+interface ChannelPreference {
+  channel: string;
+  /** 通道来自显式注入/构建通道/目标根绑定，而不是从源数据推断。 */
+  authoritative: boolean;
+}
+
+/**
+ * 期望通道：显式注入 > L1 注入的构建通道 > 目标根已有绑定。
+ *
+ * 源数据的通道**不参与**这里的判定：它只用来选择数据源。反过来（先看源绑定）
+ * 会让 beta 便携版导入 stable 旧数据时把整机通道改成 stable，并落进
+ * `eac-data-binding.json` 变成永久状态（#528 评审 1）。
+ */
+function channelPreference(options: PrepareOptions, dataRoot: string): ChannelPreference {
+  const explicit = normalizeChannel(options.channel);
+  if (explicit) return {channel: explicit, authoritative: true};
+  const build = normalizeChannel(process.env.DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL);
+  if (build) return {channel: build, authoritative: true};
+  const bound = normalizeChannel(channelFromBinding(dataRoot) ?? undefined);
+  if (bound) return {channel: bound, authoritative: true};
+  return {channel: 'stable', authoritative: false};
+}
+
+/**
+ * 让同一 sidecar 后续的 `ensureEacEnvironment()`（不带参数、读 process.env）
+ * 沿用本次判定的通道。只有完全没有构建通道信息（测试/开发态）时才采用
+ * 从源数据推断出来的通道，避免覆盖 L1 的构建通道。
+ */
+function adoptChannel(channel: string): void {
+  const build = normalizeChannel(process.env.DSH_EAC_ENVIRONMENT_DEFAULT_CHANNEL);
+  if (!build || build === channel) process.env.DSH_EAC_CHANNEL = channel;
+}
+
+/** 在导入源里挑环境：先同通道，再源绑定通道，最后退回唯一/最近使用的环境。 */
+function selectSourceEnvironment(sourceRoot: string, channel: string): {root: string; channel: string} | null {
+  const same = findEnvironmentRoot(sourceRoot, channel);
+  if (same) return same;
+  const environments = listEnvironments(sourceRoot);
+  if (!environments.length) return null;
+  if (new Set(environments.map(entry => entry.channel)).size === 1) return environments[0]!;
+  const bound = channelFromBinding(sourceRoot);
+  const boundEnvironment = bound ? environments.find(entry => entry.channel === bound) : undefined;
+  if (boundEnvironment) return boundEnvironment;
+  return environments
+    .map(entry => ({entry, mtime: fs.statSync(entry.root).mtimeMs}))
+    .sort((left, right) => right.mtime - left.mtime)[0]!.entry;
+}
+
+/** 复制状态：没有标记的环境根是原始数据（视为完整）；in-progress 是中断现场。 */
+function copyState(root: string): 'complete' | 'in-progress' {
+  const value = readJson(path.join(root, PORTABLE_COPY_STATE_FILE));
+  return value && value.state === 'in-progress' ? 'in-progress' : 'complete';
+}
+
+function markCopyState(root: string, state: 'in-progress' | 'complete', source: string, stats?: {files: number; bytes: number}): void {
+  writeJsonAtomic(path.join(root, PORTABLE_COPY_STATE_FILE), {
+    schemaVersion: 1,
+    state,
+    source: path.resolve(source),
+    ...(stats ? {files: stats.files, bytes: stats.bytes} : {}),
+    updatedAt: now(),
+  });
+}
+
+function copyEntry(source: string, target: string, stats?: {files: number; bytes: number}): void {
   const stat = fs.lstatSync(source);
   if (stat.isSymbolicLink()) {
     const link = fs.readlinkSync(source);
@@ -226,12 +324,13 @@ function copyEntry(source: string, target: string): void {
   }
   if (stat.isDirectory()) {
     fs.mkdirSync(target, {recursive: true});
-    for (const name of fs.readdirSync(source)) copyEntry(path.join(source, name), path.join(target, name));
+    for (const name of fs.readdirSync(source)) copyEntry(path.join(source, name), path.join(target, name), stats);
     return;
   }
   if (stat.isFile()) {
     fs.mkdirSync(path.dirname(target), {recursive: true});
     fs.copyFileSync(source, target);
+    if (stats) {stats.files += 1; stats.bytes += stat.size;}
   }
 }
 
@@ -249,18 +348,20 @@ export function copyEnvironmentContents(sourceRoot: string, targetRoot: string, 
   const target = absolute(targetRoot, 'target');
   if (source === target) throw new Error('portable-copy-source-target-same');
   const excluded = new Set<string>(ENVIRONMENT_COPY_EXCLUDES);
-  const before = treeStats(source);
+  // 统计边复制边累加：只算真正复制过去的文件（排除 dpx 清单/迁移标记），
+  // 也省掉一次 GB 级源目录的预扫描。
+  const copied = {files: 0, bytes: 0};
   const guide = path.join(target, 'dsh-home', 'AGENTS.md');
   const guideText = fs.existsSync(guide) ? fs.readFileSync(guide, 'utf8') : null;
   for (const name of fs.readdirSync(source)) {
     if (excluded.has(name)) continue;
-    copyEntry(path.join(source, name), path.join(target, name));
+    copyEntry(path.join(source, name), path.join(target, name), copied);
   }
   // 旧环境的 dsh-home/AGENTS.md 记录的是旧环境根；新环境的指南由 dpx 生成，
   // 复制完成后恢复它，避免用户读到已失效的绝对路径。
   if (guideText !== null) fs.writeFileSync(guide, guideText);
-  log?.('portable', `复制环境内容 ${source} -> ${target}（${before.files} 文件 / ${before.bytes} 字节）`);
-  return before;
+  log?.('portable', `复制环境内容 ${source} -> ${target}（${copied.files} 文件 / ${copied.bytes} 字节）`);
+  return copied;
 }
 
 function secureName(value: string): string {
@@ -289,14 +390,28 @@ function dataContainers(dataRoot: string): string[] {
  * 在 data 根里找**最近一个完整**环境。
  *
  * 搬迁/重建中途失败会留下一个不完整的 `dpx/` 与更早的完整 `dpx.stale-*`；
- * 重试时不能只盯着最新目录（那正是半成品），否则永远报 environment-missing。
+ * 重试时不能只盯着最新目录（那正是半成品）。「完整」不是「有清单」：
+ * 建环境时清单就已经写好了，复制中断的现场同样有清单、内容却缺；只有复制
+ * 完成标记才作数（无标记的原始数据视为完整）。全都不完整时返回 null，
+ * 由调用方 fail closed，绝不拿半成品当来源。
+ *
+ * 通道优先：同一份数据可能同时有 stable/beta 两套环境，先按期望通道挑，
+ * 挑不到再退回最新的完整环境。
  */
-function findLatestEnvironment(dataRoot: string): {root: string; channel: string; container: string} | null {
+function findLatestEnvironment(dataRoot: string, channel?: string): {root: string; channel: string; container: string} | null {
+  const environments: Array<{root: string; channel: string; container: string}> = [];
   for (const container of dataContainers(dataRoot)) {
-    const found = findEnvironmentRoot(container);
-    if (found && exists(path.join(found.root, '.dpx-environment.json'))) return {...found, container};
+    for (const found of listEnvironments(container)) environments.push({...found, container});
   }
-  return null;
+  const complete = environments.filter(entry => copyState(entry.root) === 'complete');
+  if (!complete.length) return null;
+  // dataContainers 已按容器 mtime 倒序，complete 保留同样的先后顺序。
+  return (channel && complete.find(entry => entry.channel === channel)) || complete[0]!;
+}
+
+/** 数据根里是否存在环境根（不管完整与否），用于区分「没有数据」与「只有半成品」。 */
+function hasAnyEnvironment(dataRoot: string): boolean {
+  return dataContainers(dataRoot).some(container => listEnvironments(container).length > 0);
 }
 
 function ensureTarget(dataRoot: string, channel: string, ensure?: (env: NodeJS.ProcessEnv) => EnsuredEnvironment): EnsuredEnvironment {
@@ -306,14 +421,24 @@ function ensureTarget(dataRoot: string, channel: string, ensure?: (env: NodeJS.P
 
 function prepareImport(options: PrepareOptions, dataRoot: string): PortableRuntime {
   const sourceRoot = absolute(options.sourceRoot || '', 'source');
-  const found = findEnvironmentRoot(sourceRoot);
+  const preference = channelPreference(options, dataRoot);
+  // 先定通道，再在同通道内挑数据源：反过来会在 stable/beta 双份旧数据里
+  // 挑错通道，把 stable 的会话/配置复制进 beta 环境。
+  const found = selectSourceEnvironment(sourceRoot, preference.channel);
   if (!found) throw new Error('portable-import-source-environment-missing');
-  const channel = options.channel && CHANNEL.test(options.channel) ? options.channel : (channelFromBinding(sourceRoot) || found.channel);
-  // 让同一 sidecar 后续的 ensureEacEnvironment 继续使用这一通道，避免导入后
-  // 又按默认 stable 建出第二个环境。
-  process.env.DSH_EAC_CHANNEL = channel;
+  // 只有完全拿不到通道信息时，才接受源数据推断出来的通道。
+  const channel = preference.authoritative
+    ? preference.channel
+    : (channelFromBinding(sourceRoot) || found.channel || preference.channel);
+  adoptChannel(channel);
+  if (found.channel !== channel) {
+    options.log?.('portable', `导入源是 ${found.channel} 通道，当前构建通道 ${channel}；只复制内容，不改通道`);
+  }
   const ensured = ensureTarget(dataRoot, channel, options.ensure);
-  copyEnvironmentContents(found.root, ensured.paths.root, options.log);
+  // 复制前先落 in-progress：中断后重试不得把这个环境当完整来源。
+  markCopyState(ensured.paths.root, 'in-progress', found.root);
+  const stats = copyEnvironmentContents(found.root, ensured.paths.root, options.log);
+  markCopyState(ensured.paths.root, 'complete', found.root, stats);
   copyAuxiliaryData(sourceRoot, dataRoot, options.log);
   repairHostClosure(ensured.paths.dshHome, absolute(options.programRoot, 'program'));
   return {mode: 'import', dataRoot, installRoot: absolute(options.installRoot, 'install'), programRoot: absolute(options.programRoot, 'program'), channel, migrated: true, sourceEnvironmentRoot: found.root};
@@ -337,39 +462,46 @@ function copyAuxiliaryData(sourceRoot: string, dataRoot: string, log?: (tag: str
 
 function prepareRelocate(options: PrepareOptions, dataRoot: string): PortableRuntime {
   const binding = path.join(dataRoot, 'eac-data-binding.json');
-  const bindingChannel = channelFromBinding(dataRoot);
+  const preference = channelPreference(options, dataRoot);
   // 先隔离当前 dpx（可能只是上次失败留下的半成品），再从所有 stale 中挑
   // 最近一个**完整**环境。只认最新目录会在重试时选中半成品并永久失败。
   quarantine(dataRoot, 'dpx');
-  const source = findLatestEnvironment(dataRoot);
-  if (!source) throw new Error('portable-relocate-environment-missing');
+  const source = findLatestEnvironment(dataRoot, preference.channel);
+  if (!source) {
+    throw new Error(hasAnyEnvironment(dataRoot) ? 'portable-relocate-source-incomplete' : 'portable-relocate-environment-missing');
+  }
   if (exists(binding)) {
     try {fs.renameSync(binding, path.join(source.container, 'eac-data-binding.json'));} catch { /* 旧绑定可有可无 */ }
   }
   persistRelocateLog(options.dataRoot, source.container);
-  const channel = options.channel && CHANNEL.test(options.channel)
-    ? options.channel
-    : (bindingChannel || channelFromBinding(source.container) || source.channel);
-  process.env.DSH_EAC_CHANNEL = channel;
+  const channel = preference.authoritative
+    ? preference.channel
+    : (channelFromBinding(source.container) || source.channel);
+  adoptChannel(channel);
+  if (source.channel !== channel) {
+    options.log?.('portable', `搬迁源是 ${source.channel} 通道，当前构建通道 ${channel}；只复制内容，不改通道`);
+  }
   const ensured = ensureTarget(dataRoot, channel, options.ensure);
-  copyEnvironmentContents(source.root, ensured.paths.root, options.log);
+  markCopyState(ensured.paths.root, 'in-progress', source.root);
+  const stats = copyEnvironmentContents(source.root, ensured.paths.root, options.log);
+  markCopyState(ensured.paths.root, 'complete', source.root, stats);
   repairHostClosure(ensured.paths.dshHome, absolute(options.programRoot, 'program'));
   return {mode: 'relocate', dataRoot, installRoot: absolute(options.installRoot, 'install'), programRoot: absolute(options.programRoot, 'program'), channel, migrated: true, sourceEnvironmentRoot: source.root};
 }
 
 function prepareReset(options: PrepareOptions, dataRoot: string): PortableRuntime {
   const binding = path.join(dataRoot, 'eac-data-binding.json');
-  const bindingChannel = channelFromBinding(dataRoot);
+  const preference = channelPreference(options, dataRoot);
   const previous = findLatestEnvironment(dataRoot) ?? findEnvironmentRoot(dataRoot);
-  const channel = options.channel && CHANNEL.test(options.channel)
-    ? options.channel
-    : (bindingChannel || previous?.channel || 'stable');
+  // 新建空数据时保持原通道（例如 beta），不能静默退回 stable。
+  const channel = preference.authoritative
+    ? preference.channel
+    : (previous?.channel || preference.channel);
+  adoptChannel(channel);
   const stale = quarantine(dataRoot, 'dpx');
   if (exists(binding)) {
     try {fs.renameSync(binding, path.join(dataRoot, '.eac-data-binding.stale-' + secureName(now())));} catch { /* 旧绑定可有可无 */ }
   }
-  // 新建空数据时保持原通道（例如 beta），不能静默退回 stable。
-  process.env.DSH_EAC_CHANNEL = channel;
   return {mode: 'reset', dataRoot, installRoot: absolute(options.installRoot, 'install'), programRoot: absolute(options.programRoot, 'program'), channel, migrated: Boolean(stale)};
 }
 
@@ -385,7 +517,9 @@ export function preparePortableData(options: PrepareOptions): PortableRuntime {
   if (mode === 'import') return prepareImport(options, dataRoot);
   if (mode === 'relocate') return prepareRelocate(options, dataRoot);
   if (mode === 'reset') return prepareReset(options, dataRoot);
-  return {mode, dataRoot, installRoot: absolute(options.installRoot, 'install'), programRoot: absolute(options.programRoot, 'program'), channel: options.channel && CHANNEL.test(options.channel) ? options.channel : 'stable'};
+  // owned/pointer/handoff/explicit 不搬数据：只报告期望通道，交给
+  // ensureEacEnvironment 按自己的规则（绑定/构建通道）建环境。
+  return {mode, dataRoot, installRoot: absolute(options.installRoot, 'install'), programRoot: absolute(options.programRoot, 'program'), channel: channelPreference(options, dataRoot).channel};
 }
 
 /** ensureEacEnvironment 之后调用：写所有权标记 / 指针，并清理迁移请求。 */
