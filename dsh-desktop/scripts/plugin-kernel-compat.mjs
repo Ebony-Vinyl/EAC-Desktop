@@ -53,6 +53,9 @@ const RE_EXPORT_LIST = /export\s*\{([^}]*)\}/g;
 const RE_EXPORT_DECL = /export\s+(?:async\s+)?(?:function|class|const|let|var)\s+([A-Za-z_$][\w$]*)/g;
 const RE_EXPORT_STAR_AS = /export\s*\*\s*as\s+([A-Za-z_$][\w$]*)\s*from/g;
 const RE_NAMED_FROM = /(?:^|[^\w$.])(?:import|export)\s*\{([^}]*)\}\s*from\s*['"]([^'"]+)['"]/g;
+// 客户端（浏览器）bundle 的内核引用：打包产物保留 require / from / import() 形态。
+const RE_CLIENT_REQUIRE = /([A-Za-z_$][\w$]*)\s*=\s*require\(\s*['"](@deepseek-ai\/[^'"]+)['"]\s*\)/g;
+const RE_CLIENT_IMPORT_CALL = /import\(\s*['"](@deepseek-ai\/[^'"]+)['"]\s*\)/g;
 
 /** 剥除块注释与行注释（保守：字符串里的 `//` 可能被一并剥掉 → 最多漏判）。 */
 function stripComments(text) {
@@ -178,21 +181,74 @@ function clientSideExcluder(pluginDir, pkgJson) {
   };
 }
 
-/** 扫描内置插件源码里的内核具名导入（只判服务端侧，见 clientSideExcluder）。 */
+/** 从客户端 bundle 收集内核 spec 引用（require / from / import() 与命名空间属性）。 */
+function collectClientRefs(text, plugin, file, into) {
+  if (!text.includes(KERNEL_SCOPE)) return;
+  const push = (spec, symbol) => {
+    if (!spec.startsWith(KERNEL_SCOPE)) return;
+    const rest = spec.slice(KERNEL_SCOPE.length);
+    const pkg = rest.split('/')[0];
+    into.push({ plugin, file, spec, pkg, subpath: rest.slice(pkg.length), symbol: symbol || '' });
+  };
+  for (const m of text.matchAll(RE_NAMED_FROM)) {
+    if (!m[1].trim()) { push(m[2], ''); continue; }
+    for (const piece of m[1].split(',')) push(m[2], symbolOf(piece));
+  }
+  for (const m of text.matchAll(RE_CLIENT_REQUIRE)) {
+    const alias = m[1];
+    push(m[2], '');
+    const esc = alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    for (const a of text.matchAll(new RegExp('\\b' + esc + '\\s*\\.\\s*([A-Za-z_$][\\w$]*)', 'g'))) push(m[2], a[1]);
+  }
+  for (const m of text.matchAll(RE_CLIENT_IMPORT_CALL)) push(m[1], '');
+}
+
+function dedupeClientRefs(refs) {
+  const seen = new Set();
+  const out = [];
+  for (const ref of refs) {
+    const key = ref.spec + '|' + ref.symbol;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(ref);
+  }
+  return out;
+}
+
+/** 客户端引用可加载性：包存在；声明了 exports["./client"] 时其入口文件必须存在。 */
+export function clientEntryExists(kernelRoot, pkg) {
+  const dir = join(kernelRoot, pkg);
+  if (!existsSync(dir)) return { exists: false, entry: false };
+  const pkgJson = readJsonSafe(join(dir, 'package.json'));
+  const clientExport = pkgJson && pkgJson.exports && pkgJson.exports['./client'];
+  const spec = typeof clientExport === 'string'
+    ? clientExport
+    : (clientExport && (clientExport.default || clientExport.import || clientExport.require));
+  if (typeof spec === 'string' && spec) return { exists: true, entry: existsSync(join(dir, spec)) };
+  return { exists: true, entry: true };
+}
+
+/** 扫描内置插件源码里的内核引用：服务端侧判具名导出，客户端 bundle 判包与入口。 */
 export function scanPluginImports(pluginsRoot) {
   const refs = [];
+  const clientRefs = [];
   let pluginCount = 0;
   let fileCount = 0;
   let clientFileCount = 0;
   let dirs = [];
-  try { dirs = readdirSync(pluginsRoot, { withFileTypes: true }); } catch { return { refs, pluginCount, fileCount, clientFileCount }; }
+  try { dirs = readdirSync(pluginsRoot, { withFileTypes: true }); } catch { return { refs, clientRefs, pluginCount, fileCount, clientFileCount }; }
   for (const entry of dirs) {
     if (!entry.isDirectory() || entry.isSymbolicLink()) continue;
     pluginCount += 1;
     const pluginDir = join(pluginsRoot, entry.name);
     const isClientSide = clientSideExcluder(pluginDir, readJsonSafe(join(pluginDir, 'package.json')));
     for (const file of walkFiles(pluginDir)) {
-      if (isClientSide(file)) { clientFileCount += 1; continue; }
+      const rel = relative(pluginsRoot, file);
+      if (isClientSide(file)) {
+        clientFileCount += 1;
+        collectClientRefs(stripComments(readTextSafe(file)), entry.name, rel, clientRefs);
+        continue;
+      }
       fileCount += 1;
       const text = stripComments(readTextSafe(file));
       if (!text.includes(KERNEL_SCOPE)) continue;
@@ -203,12 +259,12 @@ export function scanPluginImports(pluginsRoot) {
         for (const piece of m[1].split(',')) {
           const symbol = symbolOf(piece);
           if (!symbol) continue;
-          refs.push({ plugin: entry.name, file: relative(pluginsRoot, file), spec, pkg, symbol });
+          refs.push({ plugin: entry.name, file: rel, spec, pkg, symbol });
         }
       }
     }
   }
-  return { refs, pluginCount, fileCount, clientFileCount };
+  return { refs, clientRefs: dedupeClientRefs(clientRefs), pluginCount, fileCount, clientFileCount };
 }
 
 /** 门禁主体：返回 { ok, hits, skipped, stats, kernelRoot, pluginsRoot, kernelExists }。 */
@@ -240,17 +296,40 @@ export function checkCompatibility(opts = {}) {
     }
   }
 
+  const clientRefs = scan.clientRefs || [];
+  const clientPackages = [...new Set(clientRefs.map((r) => r.pkg))].sort();
+  const clientKernel = collectKernelExports(kernelRoot, clientPackages);
+  const clientHits = [];
+  for (const ref of clientRefs) {
+    const info = clientKernel.get(ref.pkg);
+    if (info && !info.exists) {
+      clientHits.push({ ...ref, type: 'missing-package', available: [] });
+      continue;
+    }
+    if (!clientEntryExists(kernelRoot, ref.pkg).entry) {
+      clientHits.push({ ...ref, type: 'missing-client-entry', available: [] });
+      continue;
+    }
+    if (ref.symbol && !ref.subpath && info && !info.skipped && info.exists && !info.exports.has(ref.symbol)) {
+      clientHits.push({ ...ref, type: 'missing-export', available: [...info.exports].sort().slice(0, 12) });
+    }
+  }
+  const allHits = hits.concat(clientHits);
+
   return {
-    ok: hits.length === 0,
+    ok: allHits.length === 0,
     kernelRoot,
     pluginsRoot,
     kernelExists,
-    hits,
+    hits: allHits,
     skipped,
     stats: {
       pluginCount: scan.pluginCount,
       fileCount: scan.fileCount,
       clientFileCount: scan.clientFileCount,
+      clientRefCount: clientRefs.length,
+      clientCheckedPackages: clientPackages.length,
+      clientMissingCount: clientHits.length,
       referencedPackages: packages.length,
       checkedPackages,
       refCount: scan.refs.length,
@@ -262,7 +341,7 @@ export function formatReport(result) {
   const lines = ['[plugin-kernel-compat] 内置插件 ↔ 内核导出兼容校验'];
   lines.push(`  插件 ${result.stats.pluginCount} 个 / 服务端源码 ${result.stats.fileCount} 个文件 / 具名导入 ${result.stats.refCount} 处`);
   if (result.stats.clientFileCount) {
-    lines.push(`  另跳过客户端（浏览器侧）bundle ${result.stats.clientFileCount} 个文件 —— 不经 Node ESM 链接期，不在本门禁范围`);
+    lines.push(`  另静态核验客户端（浏览器侧）bundle ${result.stats.clientFileCount} 个文件 / 内核引用 ${result.stats.clientRefCount ?? 0} 处（涉及 ${result.stats.clientCheckedPackages ?? 0} 个包）`);
   }
   lines.push(`  引用内核包 ${result.stats.referencedPackages} 个（已静态解析导出 ${result.stats.checkedPackages} 个，跳过 ${result.skipped.length} 个）`);
   if (result.skipped.length) {
@@ -277,7 +356,9 @@ export function formatReport(result) {
     lines.push(`    · ${h.plugin}  ${h.file}`);
     const what = h.type === 'missing-package'
       ? `内核中不存在包 ${h.spec}`
-      : `内核 ${h.spec} 不导出 "${h.symbol}"（现有导出示例：${h.available.join(', ')}）`;
+      : h.type === 'missing-client-entry'
+        ? `内核包 ${h.spec} 的客户端入口缺失（exports["./client"] 指向的文件不存在）`
+        : `内核 ${h.spec} 不导出 "${h.symbol}"（现有导出示例：${h.available.join(', ')}）`;
     lines.push(`        import { ${h.symbol} } from '${h.spec}'  →  ${what}`);
   }
   lines.push('    修复方向：改用当前内核真实存在的 API（例如内核 0.1.3 起 settings 命名空间');

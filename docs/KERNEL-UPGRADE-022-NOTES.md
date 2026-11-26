@@ -27,11 +27,12 @@ vendor family 版本：`@deepseek-ai/cordis@4.1.0`、`cosmokit@1.9.0`、`cordis-
 | 配置重载 | 沿用上游事务式 `recompose`；0.2.2 收尾的 fiber 等待改用 `Promise.allSettled`，健康 fiber 的 dispose 失败不再中止重载、也不进 warnings（只有 `inactiveEntries` 的失败会），按世代记录两种语义 |
 | 工具执行器 | 执行器插件化：`ctx.tools.setExecutor`（`dsh-tool-executor-native` / `dsh-tool-executor-ptc`），最小组合缺执行器时 `ctx.tools.execute` 抛 `TOOL_EXECUTOR_UNAVAILABLE`；`ctx.tools.execute` 只收批次入参（`calls` + JSON 字符串 `arguments`），返回按调用顺序的 settlement |
 | Agent / 会话 | Agent 在 pre-step 前固定本步模型、`agent/request` 不再允许改路由、Session API 新增独立快照与事件流接口、Session Projection 注册 API 异步化、PTC 改用 birpc（SSH 协议 2→3）：这些面本仓库未直接调用，随上游版本走 |
-| bash 受控覆盖 | 基于官方 `dsh-tool-bash@0.2.2-rc.1`，仍只有 optional-escalation 一行兼容差异（`defaultMode === "danger-full-access"` 时不提供升级目标） |
+| bash 补丁 | 不入库 vendored 副本；optional-escalation 差异（`defaultMode === "danger-full-access"` 时不提供升级目标）由 `patch-deps` 在安装/装配期生成，安装树 marker 由 `test/tool-bash-escalation-marker.test.ts` 断言 |
 | 固定皮肤 | `deep-whale-day-night` 的主题 peer 只补入已验收的精确版本 `0.2.2-rc.1`，不放宽范围、不授予豁免；其余随包皮肤 peer 为 `>=0.1.0-rc.6` 或空，天然满足 |
+| 升级路径 | v6.0.1 的 dpx 注册表在机器级目录 `%LOCALAPPDATA%\DSH\DPX`，本分支收进产品数据根；新位置为空会让 dpx 拒绝接管已存在的环境目录（fail closed）。`lib/desktop/environment.ts` 的 `adoptLegacyRegistry()` 在调 dpx 前把旧注册表里 root 落在本数据根下的记录接管过来（幂等，只迁本数据根记录），平台默认位置推导抽成 `platformDefaultRegistryHome` 复用 |
 | 装配与契约 | `host-profile.json` 追加精确 `{"dshRange": "0.2.2-rc.1", "mapping": "eac-dsh-adapter@1"}`；`docs/archive/upgrade-test-441.js` 的内核版本断言改为 `0.2.2-rc.1` |
 
-补丁事实源仍是 `scripts/patch-deps.ts` 与 `scripts/patch-session-manage*.js`（TypeScript 构建产生运行用 JavaScript），staging 重放同一脚本并回填受控 bash 文件。未改变用户 profile、sessions、skills 或凭据的既有布局。
+补丁事实源仍是 `scripts/patch-deps.ts` 与 `scripts/patch-session-manage*.js`（TypeScript 构建产生运行用 JavaScript），staging 重放同一脚本。未改变用户 profile、sessions、skills 或凭据的既有布局。
 
 ## 会话删除链路（0.2.2 结构）
 
@@ -59,7 +60,9 @@ vendor family 版本：`@deepseek-ai/cordis@4.1.0`、`cosmokit@1.9.0`、`cordis-
 | 依赖安装 | `npm install` 从 registry 装 382 个内核 tgz + 传递依赖（需显式 `--proxy`/`--https-proxy`，`HTTP(S)_PROXY` 环境变量不被可靠采纳）；`package-lock.json` 内 `0.2.2-rc.1` 2110 处、`0.2.1-rc.2` 0 处 |
 | 构建 | `npm run build`（`tsc -p tsconfig.json`）通过 |
 | 补丁 | `patch-deps` 与 `patch-session-manage` 全部锚点命中或按上游已实现退役；被改内核文件 `node --check` 通过 |
-| 插件兼容门禁 | `plugin-kernel-compat.mjs`：17 个随包插件 / 服务端源码 76 文件 / 具名导入 1 处，未发现导入内核不存在的导出 |
+| 插件兼容门禁 | `plugin-kernel-compat.mjs`：18 个随包插件 / 服务端源码 76 文件 / 具名导入 1 处；客户端（浏览器侧）bundle 104 文件、内核引用 8 处（5 个包），全部命中存在的包与导出 |
+| 装配裁剪预演 | `stage-platform-prune.mjs --plan`：staged 树裁剪 0、本地树将裁剪 12954（source-map 3066 / zod-tests 9888），两种目标都无「无运行时载荷」的包 |
+| 升级路径 | `e2e-upgrade.js`：真实 v6.0.1 安装产物建 profile（62 deps）→ 覆盖成 6.1.0 产物 → 同数据根重启，**18/18** 断言通过（启动 / 插件树 / 权限保留 / 会话恢复 / patch 未清空 / 机器级注册表接管 / 退出） |
 | 会话删除 | `session-delete-021.test.ts` + `session-delete-022.test.ts`：11 通过 / 3 跳过（0.2.1 与 0.2.2 的客户端形状各由对应用例覆盖） |
 | 依赖安全 | MCP HTTP/stdio 与 issuer 绑定用例在实际内核上通过（执行器插件化后按批次契约调用） |
 | 装配 | `stage-resources.mjs --target=win32 --distro=lite` 通过：离线装配 675 个包、裁剪 12805 个调试映射与自测文件、bundle manifest 与 WebView2Loader.dll 就位；装配树内 `@deepseek-ai` 334 个包，除 `libreoffice-kit` / `node-addon-system` 外全部 `0.2.2-rc.1`，无 `0.2.1-rc.2` 残留 |
@@ -73,7 +76,7 @@ vendor family 版本：`@deepseek-ai/cordis@4.1.0`、`cosmokit@1.9.0`、`cordis-
 | 项 | 现状 |
 | --- | --- |
 | V4 运行时 | 装配产物的无界面启动冒烟已通过；安装版 GUI 的中文路径、浮窗、托盘、退出零孤儿仍需复验 |
-| V5 分发 | 装配与装配校验已通过；NSIS 安装包、便携 zip、真实安装/升级/故障注入未做 |
+| V5 分发 | 装配与装配校验已通过，升级路径（v6.0.1 → 本分支）已由 `e2e-upgrade.js` 实测 18/18；NSIS 安装包、便携 zip 全量安装、故障注入未做 |
 | CI | `staged-runtime-artifact.yml` 的 `NODE_VERSION` 为 `24`（setup-node 取最新 24.x，满足 ≥24.9）；首轮 CI 结果待跑 |
 
 ## 装配环境注意

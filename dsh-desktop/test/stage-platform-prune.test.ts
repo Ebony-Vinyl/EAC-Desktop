@@ -8,6 +8,7 @@ import {
   assertSupportedStageArch,
   isLinuxElfForArch,
   isMachO,
+  planPrune,
   pruneDarwinPayloads,
   pruneDevelopmentPayloads,
   pruneLinuxPayloads,
@@ -167,4 +168,32 @@ test('pruneMuslNodeAddonBinaries 在缺少 glibc 兜底时拒绝剔除', () => {
 
   assert.throws(() => pruneMuslNodeAddonBinaries(dir), /缺少 glibc\/system\.node/);
   assert.equal(fs.existsSync(path.join(linux, 'bin', 'musl', 'system.node')), true);
+});
+
+test('planPrune 只读预演：统计来源 map 并标出无运行时载荷的包', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prune-plan-'));
+  try {
+    const mk = (rel: string, content = 'x') => {
+      const file = path.join(root, rel);
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, content);
+    };
+    mk('a/package.json', '{}');
+    mk('a/index.js');
+    mk('a/index.js.map');
+    mk('b/package.json', '{}');
+    mk('b/index.js.map');
+    mk('@s/c/package.json', '{}');
+    mk('@s/c/index.js');
+
+    const plan = planPrune(root, { platform: 'win32', arch: 'x64' });
+
+    assert.equal(plan.packages, 3);
+    assert.equal(plan.removed, 2);
+    assert.deepEqual(plan.noRuntimePayload.map((p: { package: string }) => p.package), ['b']);
+    // 预演只读：文件仍在
+    assert.equal(fs.existsSync(path.join(root, 'a', 'index.js.map')), true);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 });

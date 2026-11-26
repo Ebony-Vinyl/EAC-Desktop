@@ -4,6 +4,7 @@
 // 纯函数放这里供 node:test 直接导入。
 import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** 安装版与便携版共同排除调试映射及 Zod 自测；保留运行代码与运行时检查使用的类型。 */
 export function pruneDevelopmentPayloads(nodeModules) {
@@ -163,3 +164,159 @@ export function pruneNonDarwinPrebuilds(dir) {
     }
   }
 }
+
+// ── 装配预演（只读）─────────────────────────────────────────────────────────
+// stage-resources 的裁剪是破坏性的；装配前用同一套判据做一次 dry-run，回答
+// 「哪些文件会被删、删完有没有包变成无运行时载荷」。CI 与本地都可直接跑：
+//   node tauri-shell/stage-platform-prune.mjs --plan [--root <node_modules>]
+//        [--platform win32|linux|darwin] [--arch x64|arm64] [--json]
+
+const RE_DEV_MAP = /\.(?:[cm]?js|css)\.map$/i;
+const RE_RUNTIME_FILE = /\.(?:[cm]?js|node|wasm|dll|so|dylib)$/i;
+
+/** 单个文件的裁剪判定；返回原因或 null（保留）。 */
+function pruneReason(file, platform, arch) {
+  const name = path.basename(file);
+  const posix = file.split(path.sep).join('/');
+  if (RE_DEV_MAP.test(name)) return 'source-map';
+  if (platform !== 'linux' && platform !== 'darwin') return null;
+  if (/\.(?:exe|dll)$/i.test(name)) return 'foreign-binary';
+  if (/\.node$/i.test(name)) {
+    if (platform === 'linux') {
+      if (isMuslPayloadPath(posix)) return 'musl';
+      return isLinuxElfForArch(file, arch) ? null : 'foreign-binary';
+    }
+    return isMachO(file) ? null : 'foreign-binary';
+  }
+  const prebuild = /\/prebuilds\/([^/]+)\//.exec(posix);
+  if (prebuild) {
+    const wanted = platform === 'linux' ? `linux-${arch}` : 'darwin-arm64';
+    if (prebuild[1] !== wanted) return 'foreign-prebuilds';
+  }
+  return null;
+}
+
+function walkPackage(dir, onFile, onPrunedDir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'tests' && full.split(path.sep).join('/').includes('/zod/src/')) {
+        onPrunedDir(full);
+        continue;
+      }
+      walkPackage(full, onFile, onPrunedDir);
+    } else if (entry.isFile()) {
+      onFile(full);
+    }
+  }
+}
+
+function countFiles(dir) {
+  let n = 0;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) n += countFiles(full);
+    else if (entry.isFile()) n += 1;
+  }
+  return n;
+}
+
+/** 只读裁剪预演：统计将删除的文件与裁剪后无运行时载荷的包。 */
+export function planPrune(nodeModules, options = {}) {
+  const platform = options.platform || process.platform;
+  const arch = options.arch || process.arch;
+  if ((platform === 'linux' || platform === 'darwin') && arch !== 'x64' && arch !== 'arm64') assertSupportedStageArch(arch);
+
+  const packageEntries = [];
+  for (const entry of readdirSync(nodeModules, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const full = path.join(nodeModules, entry.name);
+    if (entry.name.startsWith('@')) {
+      for (const sub of readdirSync(full, { withFileTypes: true })) {
+        if (sub.isDirectory()) packageEntries.push({ name: `${entry.name}/${sub.name}`, dir: path.join(full, sub.name) });
+      }
+    } else {
+      packageEntries.push({ name: entry.name, dir: full });
+    }
+  }
+
+  const removedByReason = {};
+  const samples = [];
+  const noRuntimePayload = [];
+  let files = 0;
+
+  for (const pkg of packageEntries) {
+    let runtime = 0;
+    const pkgRemoved = [0];
+    let prunedDirs = 0;
+    const tally = (reason, count) => {
+      removedByReason[reason] = (removedByReason[reason] || 0) + count;
+      pkgRemoved[0] += count;
+    };
+    walkPackage(pkg.dir, (file) => {
+      files += 1;
+      const reason = pruneReason(file, platform, arch);
+      if (reason) {
+        tally(reason, 1);
+        if (samples.length < 40) samples.push({ package: pkg.name, file: path.relative(nodeModules, file).split(path.sep).join('/'), reason });
+      } else if (RE_RUNTIME_FILE.test(file)) {
+        runtime += 1;
+      }
+    }, (dir) => {
+      prunedDirs += 1;
+      const n = countFiles(dir);
+      files += n;
+      tally('zod-tests', n);
+    });
+    if (pkgRemoved[0] > 0 && runtime === 0 && existsSync(path.join(pkg.dir, 'package.json'))) {
+      noRuntimePayload.push({ package: pkg.name, removed: pkgRemoved[0], prunedDirs });
+    }
+  }
+
+  const removed = Object.values(removedByReason).reduce((a, b) => a + b, 0);
+  return { platform, arch, packages: packageEntries.length, files, removed, removedByReason, samples, noRuntimePayload };
+}
+
+export function formatPlan(plan) {
+  const lines = [`[stage-prune:plan] 目标 ${plan.platform}-${plan.arch}（只读，不删文件）`];
+  lines.push(`  包 ${plan.packages} 个 / 文件 ${plan.files} 个 / 将裁剪 ${plan.removed} 个`);
+  const detail = Object.entries(plan.removedByReason).map(([k, v]) => `${k}=${v}`).join('，');
+  if (detail) lines.push(`  裁剪构成：${detail}`);
+  if (plan.samples.length) {
+    lines.push('  样本：');
+    for (const s of plan.samples.slice(0, 10)) lines.push(`    · ${s.package}  ${s.file}  (${s.reason})`);
+  }
+  if (plan.noRuntimePayload.length === 0) {
+    lines.push('  ✓ 裁剪后没有包变成「无运行时载荷」。');
+  } else {
+    lines.push(`  ✗ ${plan.noRuntimePayload.length} 个包裁剪后无运行时载荷（需人工确认判据）：`);
+    for (const p of plan.noRuntimePayload) lines.push(`    · ${p.package}  删除 ${p.removed} 个文件`);
+  }
+  return lines.join('\n');
+}
+
+function readArg(argv, name) {
+  const i = argv.indexOf(name);
+  const v = i >= 0 ? argv[i + 1] : undefined;
+  return v && !v.startsWith('--') ? v : undefined;
+}
+
+export function main(argv = process.argv.slice(2)) {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const root = path.resolve(readArg(argv, '--root') || path.join(here, '..', 'dsh-desktop', 'node_modules'));
+  if (!existsSync(root)) {
+    console.error('[stage-prune:plan] node_modules 不存在: ' + root);
+    return 2;
+  }
+  const plan = planPrune(root, {
+    platform: readArg(argv, '--platform') || process.platform,
+    arch: readArg(argv, '--arch') || process.arch,
+  });
+  if (argv.includes('--json')) process.stdout.write(JSON.stringify(plan, null, 2) + '\n');
+  else console.log(formatPlan(plan));
+  return plan.noRuntimePayload.length === 0 ? 0 : 1;
+}
+
+const invokedDirectly = process.argv[1] !== undefined
+  && pathToFileURL(process.argv[1]).href === import.meta.url;
+if (invokedDirectly) process.exitCode = main();

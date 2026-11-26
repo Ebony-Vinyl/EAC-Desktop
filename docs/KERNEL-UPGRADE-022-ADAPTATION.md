@@ -177,7 +177,7 @@ await ctx.tools.execute({ signal, callId, name, arguments: { … } });
 | `dsh-desktop/assets/skins/@dsh-external_dsh-client-ui-skin-deep-whale-day-night/package.json` | 主题 peer 追加已验收的精确版本 `0.2.2-rc.1`（`>=0.1.0-rc.5 <0.2.0 || 0.2.1-rc.2 || 0.2.2-rc.1`）；不放宽范围、不授予豁免。其余随包皮肤 peer 为 `>=0.1.0-rc.6` 或空，天然满足 |
 | `tauri-shell/host-profile.json` | `dshAdapters` 追加 `{"dshRange": "0.2.2-rc.1", "mapping": "eac-dsh-adapter@1"}` |
 | `docs/archive/upgrade-test-441.js` | 内核版本断言改为 `0.2.2-rc.1` |
-| `tauri-shell/stage-resources.mjs` | `SCRIPTS` 清单加 `patch-session-manage-022.js`（staged 树重放补丁时 `require` 要能找到）；受控 bash 覆盖的基线注释改 `0.2.2-rc.1`，差异仍只有 optional-escalation 一行 |
+| `tauri-shell/stage-resources.mjs` | `SCRIPTS` 清单加 `patch-session-manage-022.js`（staged 树重放补丁时 `require` 要能找到）；不回填 vendored bash 副本，其 optional-escalation 差异由 `patch-deps` 装配期生成 |
 | `docs/README-MAINTENANCE.md` | 内核行改 `0.2.2-rc.1`（标注 Node ≥24.9）、构建工具链行标注 Node 24（≥24.9） |
 
 ---
@@ -216,3 +216,21 @@ await ctx.tools.execute({ signal, callId, name, arguments: { … } });
 - 随包 Node 由 `scripts/fetch-node.ts` 复制 `process.execPath`；本次用 `24.18.0`，满足内核 `>=24.9.0`。
 - 隔离环境的 `HOME` 被收容到 `eac-beta\home`，`cargo` 找不到宿主机 registry，装配的 WebView2Loader.dll 前置检查会失败。装配时显式给 `CARGO_HOME` / `RUSTUP_HOME` 指向宿主机 rustup。
 - 内核变更后装配**不能**加 `--skip-npm`（该开关只允许在内核不变时复用上次依赖树）。
+
+---
+
+## 13. 升级路径：v6.0.1 机器级注册表接管
+
+v6.0.1 的 dpx 注册表固定在 `%LOCALAPPDATA%\DSH\DPX`（机器级、同机所有安装位置共用）；本版本把它收进产品数据根 `%LOCALAPPDATA%\Deepseek Harness EAC\dpx\registry`（`tauri-shell/src/main.rs:2220` 注入 `DSH_EAC_DPX_REGISTRY_HOME`）。
+
+升级时新位置是空的，环境目录 `…\dpx\dsh-environments\eac-beta` 却已经在：dpx 的 `createEnvironment` 把非空未登记目录判成「不是自己的」，抛 `Refusing to adopt non-empty environment directory`，sidecar 按 fail closed 退场（`server.js:68`），界面停在「DSH 服务已停止 / 退出码 sidecar-exited」。
+
+接管实现：`dsh-desktop/lib/desktop/environment.ts` 的 `adoptLegacyRegistry(registryHome, storageRoot, env, platform)`，在 `ensureEacEnvironment` 调 dpx 之前运行：
+
+- 新注册表已存在 → 不动（幂等）；
+- 旧注册表缺失或不可解析 → 直接返回，交给 dpx 报自己的错；
+- 只接管 `root` 落在本 `storageRoot` 下的记录 —— 旧注册表是共用的，可能还登记着别的安装位置的环境，整份复制会触发 `already registered at <旧路径>`。
+
+`environmentRegistryHome` 末尾的「平台默认位置」推导抽成 `platformDefaultRegistryHome`，接管复用它，不另写一套路径。
+
+判据：`test/eac-environment-isolation.test.ts` 的「B: 升级接管 v6.0.1 的机器级注册表」用例（旧位置建环境 → 新位置 ensure 成功、instanceId 不变、只接管一条记录），以及 `scripts/e2e-upgrade.js` 阶段 3 的真实启动断言。

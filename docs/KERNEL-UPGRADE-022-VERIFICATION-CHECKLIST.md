@@ -11,10 +11,11 @@
 | --- | --- | --- |
 | V1 定向 | 补丁锚点、`node --check`、定向用例 | 通过 |
 | V2 全量 | `836 / 788 通过 / 0 失败 / 48 跳过`（Node 24.18.0） | 通过 |
-| V2 附加 | `plugin-kernel-compat.mjs`（服务端 76 文件） | 通过（客户端 bundle 未覆盖，见 §6） |
+| V2 附加 | `plugin-kernel-compat.mjs`（服务端 76 文件 + 客户端 104 bundle） | 通过（2026-11-25 复跑，见 §6） |
 | V3 壳契约 | `check-dpx-pin` / `cargo fetch`+`cargo check --locked` / `--bridge-test` | 通过（2026-11-11） |
 | V3 壳契约 | sidecar 启停与退出清理（`/api`、web 端口就绪随 V4 验） | 通过（shutdown 后无残留） |
 | V4 运行时 | `minimal-boot-smoke`（无界面） | 通过 |
+| V4 运行时 | `e2e-upgrade.js`：v6.0.1 安装产物 → 本分支产物，同数据根升级 | 通过（18/18，2026-11-26） |
 | V4 运行时 | `e2e-v4.js`（安装版 + CDP） | **未跑**（需独占实例；脚本 `verify-k022/tools/run-c1.ps1` 就绪） |
 | V4 运行时 | 隔离实例 + 手工 16 项 + 客户端 console 采集 | **partial**（通过 8 / 部分 1 / 未覆盖 3 / 未做 3 / 未验证 1，见 §3.3.1、§6） |
 | V5 装配 | `stage-resources` + `verify-staged-runtime` | 通过（`required=44 retired=9 packages=675`） |
@@ -40,10 +41,12 @@ export CARGO_HOME=/c/Users/asus/.cargo RUSTUP_HOME=/c/Users/asus/.rustup
 | 命令 | 判据 | 结果 |
 | --- | --- | --- |
 | `cd dsh-desktop && npm test` | 0 fail | 836 / 788 / 0 / 48 |
-| `node dsh-desktop/scripts/plugin-kernel-compat.mjs` | 无缺失导出 | 17 插件 / 76 文件 / 1 具名导入 / 跳过 102 客户端文件 |
+| `node dsh-desktop/scripts/plugin-kernel-compat.mjs` | 无缺失导出 | 18 插件 / 76 文件 / 1 具名导入 / 客户端 104 文件 8 处引用 5 包 / EXIT=0 |
+| `node tauri-shell/stage-platform-prune.mjs --plan --root <staged 树>` | 无「无运行时载荷」的包 | staged 树：裁剪 0 / 无载荷包 0；本地树：将裁剪 12954（source-map 3066 + zod-tests 9888）/ 无载荷包 0 |
 | `node tauri-shell/stage-resources.mjs --target=win32 --distro=lite` | EXIT=0 且 bundle manifest 生成 | 675 包 / 裁剪 12805 / EXIT=0 |
 | `node dsh-desktop/scripts/verify-staged-runtime.mjs` | PASS | required=44 retired=9 packages=675 |
 | `node dsh-desktop/scripts/minimal-boot-smoke.mjs` | PASS 且 orphan-web=false | 303=303 ui=200 retired-rpc=2 orphan-web=false |
+| `node dsh-desktop/scripts/e2e-upgrade.js --old-install <v6.0.1 安装目录> --new-install <target/release>` | 18 项断言全过 | 升级后启动 / 插件树 / 权限 / 会话 / patch / 注册表接管 / 退出 |
 
 复核（2026-11-11，Node 24.18.0）：`minimal-boot-smoke` 重跑仍 `303=303 ui=200 retired-rpc=2 orphan-web=false`；`verify-staged-runtime` 仍 `required=44 retired=9 packages=675`。
 
@@ -161,7 +164,7 @@ export CARGO_HOME=/c/Users/asus/.cargo RUSTUP_HOME=/c/Users/asus/.rustup
 - [x] 便携包：`node make-portable.mjs` → `v6.1.0-lite-x64.zip`（319.1 MB / 334 620 319 B，40499 条目，SHA256 `6F08FFC4…`）+ `SHA256SUMS.txt`；解包到 `verify-k022\app\`（39863 文件）后内核 `0.2.2-rc.1`、产品 `6.1.0`
 - [ ] NSIS 安装包：`tauri build` 的 bundle 阶段报 `timeout: global`（拉 NSIS 工具超时），`*-setup.exe` 未产出
 - [ ] 全新用户安装：空 `DSH_HOME`/`APPDATA` → 向导可走完 → 首条消息可发
-- [ ] 升级安装：6.0.1 → 6.1.0(0.2.2)，profile 与插件保留、用户配置不丢、**数据目录哈希不变**（安装前备份 `~/.dsh`，见 §3.4）
+- [x] 升级安装：6.0.1 → 6.1.0(0.2.2)，profile 与插件保留、用户配置不丢 —— 由 `dsh-desktop/scripts/e2e-upgrade.js` 覆盖（2026-11-26，**18/18**）：用真实 v6.0.1 安装产物建 profile（62 deps）+ 写入 `permission.defaultPreset=workspace-write` + 建会话作基线，覆盖成 6.1.0 产物后在同一数据根重启，断言启动、插件树、权限、会话、patch、机器级注册表接管、退出。判据不含「数据目录哈希不变」——升级本身就要改写 profile（插件树整理、注册表迁移），哈希必变；替代判据是上面这些语义断言（见 §4.1）
 - [ ] 卸载：不留残留目录与注册项（除用户数据，按既有策略）
 - [ ] 故障注入：安装中锁定文件、断网、进程被 kill 后重试 → 可恢复且不写坏状态
 - [ ] 更新链路：`create-update-manifest.mjs` / `sim-client-update.js` / `check-manifest-drift.mjs` 全部 0 失败
@@ -177,7 +180,9 @@ export CARGO_HOME=/c/Users/asus/.cargo RUSTUP_HOME=/c/Users/asus/.rustup
 
 ## 6. 兼容性补测（客户端 bundle）
 
-`plugin-kernel-compat.mjs` 跳过 102 个客户端 bundle 文件，所以「17 个插件 + 13 款皮肤的客户端代码是否用到了被移除的内核客户端 API」目前没有静态结论。
+`plugin-kernel-compat.mjs` 现在同时静态核验客户端（浏览器侧）bundle：对每个 `lib/client.js` 收集 `require('@deepseek-ai/…')`、`import('@deepseek-ai/…')` 与具名导入，按「包存在 → 声明 `exports["./client"]` 时入口文件存在 → 符号级用包导出集合（并集当超集比）」判定。装配树实测：**104 个客户端 bundle / 8 处内核引用 / 5 个包，缺失 0**（2026-11-25）。
+
+静态核验不覆盖运行时行为，下面几条是运行时实测：
 
 - [x] 在安装版里逐款启用皮肤、逐个打开插件面板，用 CDP 收集 `console.error` 与 `pageerror`（lite 包范围：4 款皮肤 / 16 个可查看插件）
 - [x] 出现 `is not a function` / `undefined is not an object` 一类，记录包名与调用栈，回填到补丁或插件（本轮未出现）
@@ -197,6 +202,8 @@ export CARGO_HOME=/c/Users/asus/.cargo RUSTUP_HOME=/c/Users/asus/.rustup
 | 2026-11-10 | V2 | `npm test` | 通过 | 836/788/0/48 |
 | 2026-11-10 | V5 | 装配 + verify | 通过 | 675 包、44 必需文件 |
 | 2026-11-10 | V4 | `minimal-boot-smoke` | 通过 | 303=303 |
+| 2026-11-26 | V4/V5 | `e2e-upgrade.js`（v6.0.1 → 6.1.0，同数据根） | 通过 | 18/18；基线 deps=62 / 会话 1 / patch 3400B / 旧注册表 1 条 |
+| 2026-11-26 | V2 附加 | `plugin-kernel-compat.mjs`（含客户端）+ `stage-platform-prune.mjs --plan` | 通过 | 客户端 104 bundle / 8 处引用 / 5 包；无载荷包 0 |
 | 2026-11-11 | V3 | `check-dpx-pin` / `cargo fetch`+`cargo check --locked` / `cargo run -- --bridge-test` | 通过 | dpx-pin OK；cargo 1.98.1 / rustc 1.98.1；bridge 5/5、EXIT=0、shutdown 后无残留 |
 | 2026-11-11 | V4 | `e2e-v4.js` 断言修复（§3.0） | 完成 | `node --check` + 装配闭包模拟 `describe=true` |
 | 2026-11-11 | V4 | `minimal-boot-smoke` 复核 | 通过 | 303=303 ui=200 orphan-web=false；`boot.stop` 的两级停止日志不算失败 |
