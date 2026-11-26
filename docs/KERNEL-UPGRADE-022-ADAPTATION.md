@@ -204,7 +204,7 @@ await ctx.tools.execute({ signal, callId, name, arguments: { … } });
 | V2 附加 | `plugin-kernel-compat.mjs`：17 个随包插件 / 服务端 76 文件 / 具名导入 1 处，未发现导入内核不存在的导出 | 通过 |
 | V4 运行时 | `minimal-boot-smoke.mjs`：`303=303 ui=200 retired-rpc=2 orphan-web=false` | 通过（无界面） |
 | V5 装配 | `stage-resources.mjs`：675 包离线装配、裁剪 12805 个调试文件、bundle manifest 675 包 | 通过 |
-| V5 校验 | `verify-staged-runtime.mjs`：`required=44 retired=9 packages=675` | 通过 |
+| V5 校验 | `verify-staged-runtime.mjs`：`required=44 retired=8 packages=675` | 通过 |
 | V4 GUI | 安装版中文路径、浮窗、托盘、退出零孤儿 | 未做 |
 | V5 分发 | NSIS 安装包、便携 zip、真实安装/升级/故障注入、CI 首轮 | 未做 |
 

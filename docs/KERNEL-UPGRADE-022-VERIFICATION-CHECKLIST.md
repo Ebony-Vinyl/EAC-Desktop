@@ -18,7 +18,7 @@
 | V4 运行时 | `e2e-upgrade.js`：v6.0.1 安装产物 → 本分支产物，同数据根升级 | 通过（18/18，2026-11-26） |
 | V4 运行时 | `e2e-v4.js`（安装版 + CDP） | **未跑**（需独占实例；脚本 `verify-k022/tools/run-c1.ps1` 就绪） |
 | V4 运行时 | 隔离实例 + 手工 16 项 + 客户端 console 采集 | **partial**（通过 8 / 部分 1 / 未覆盖 3 / 未做 3 / 未验证 1，见 §3.3.1、§6） |
-| V5 装配 | `stage-resources` + `verify-staged-runtime` | 通过（`required=44 retired=9 packages=675`） |
+| V5 装配 | `stage-resources` + `verify-staged-runtime` | 通过（`required=44 retired=8 packages=675`） |
 | V5 分发 | NSIS、便携 zip、真实安装/升级/故障注入 | **未做** |
 | CI | `staged-runtime-artifact` 首轮 | **未跑** |
 
@@ -44,11 +44,11 @@ export CARGO_HOME=/c/Users/asus/.cargo RUSTUP_HOME=/c/Users/asus/.rustup
 | `node dsh-desktop/scripts/plugin-kernel-compat.mjs` | 无缺失导出 | 18 插件 / 76 文件 / 1 具名导入 / 客户端 104 文件 8 处引用 5 包 / EXIT=0 |
 | `node tauri-shell/stage-platform-prune.mjs --plan --root <staged 树>` | 无「无运行时载荷」的包 | staged 树：裁剪 0 / 无载荷包 0；本地树：将裁剪 12954（source-map 3066 + zod-tests 9888）/ 无载荷包 0 |
 | `node tauri-shell/stage-resources.mjs --target=win32 --distro=lite` | EXIT=0 且 bundle manifest 生成 | 675 包 / 裁剪 12805 / EXIT=0 |
-| `node dsh-desktop/scripts/verify-staged-runtime.mjs` | PASS | required=44 retired=9 packages=675 |
+| `node dsh-desktop/scripts/verify-staged-runtime.mjs` | PASS | required=44 retired=8 packages=675 |
 | `node dsh-desktop/scripts/minimal-boot-smoke.mjs` | PASS 且 orphan-web=false | 303=303 ui=200 retired-rpc=2 orphan-web=false |
 | `node dsh-desktop/scripts/e2e-upgrade.js --old-install <v6.0.1 安装目录> --new-install <target/release>` | 18 项断言全过 | 升级后启动 / 插件树 / 权限 / 会话 / patch / 注册表接管 / 退出 |
 
-复核（2026-11-11，Node 24.18.0）：`minimal-boot-smoke` 重跑仍 `303=303 ui=200 retired-rpc=2 orphan-web=false`；`verify-staged-runtime` 仍 `required=44 retired=9 packages=675`。
+复核（2026-11-11，Node 24.18.0）：`minimal-boot-smoke` 重跑仍 `303=303 ui=200 retired-rpc=2 orphan-web=false`；`verify-staged-runtime` 仍 `required=44 retired=8 packages=675`。
 
 `boot.stop` 时 stderr 稳定出现 `[service] 未确认旧服务进程退出（PID …）` 与 `[dsh] 进程退出 code=1`：那是 `dsh-desktop/lib/desktop/proc.ts:68` `killTreeAndWait` 的软杀→硬杀两级路径 —— 软杀后 1.2 s 内未确认退出即打印该行（`proc.ts:208`），随后 `/f` 硬杀并确认退出，进程以 code=1 结束属被强杀。判据看 `orphan-web=false` 与 sidecar 退出码 0，这两行不是失败信号。
 
@@ -203,6 +203,8 @@ export CARGO_HOME=/c/Users/asus/.cargo RUSTUP_HOME=/c/Users/asus/.rustup
 | 2026-11-10 | V5 | 装配 + verify | 通过 | 675 包、44 必需文件 |
 | 2026-11-10 | V4 | `minimal-boot-smoke` | 通过 | 303=303 |
 | 2026-11-26 | V4/V5 | `e2e-upgrade.js`（v6.0.1 → 6.1.0，同数据根） | 通过 | 18/18；基线 deps=62 / 会话 1 / patch 3400B / 旧注册表 1 条 |
+| 2026-11-26 | V5 | 装配重建（robocopy 镜像 `node_modules` + `--skip-npm`）→ `verify-staged-runtime` → `cargo build --release` | 通过 | 675 包 / `required=44 retired=8`；`dsh-eac-shell.exe` 13 378 048 B |
+| 2026-11-26 | V4/V5 | `e2e-upgrade.js` 用重建产物复跑 | 通过 | 18/18（现场 `v601to610d`） |
 | 2026-11-26 | V2 附加 | `plugin-kernel-compat.mjs`（含客户端）+ `stage-platform-prune.mjs --plan` | 通过 | 客户端 104 bundle / 8 处引用 / 5 包；无载荷包 0 |
 | 2026-11-11 | V3 | `check-dpx-pin` / `cargo fetch`+`cargo check --locked` / `cargo run -- --bridge-test` | 通过 | dpx-pin OK；cargo 1.98.1 / rustc 1.98.1；bridge 5/5、EXIT=0、shutdown 后无残留 |
 | 2026-11-11 | V4 | `e2e-v4.js` 断言修复（§3.0） | 完成 | `node --check` + 装配闭包模拟 `describe=true` |

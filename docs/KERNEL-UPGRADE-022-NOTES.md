@@ -62,11 +62,11 @@ vendor family 版本：`@deepseek-ai/cordis@4.1.0`、`cosmokit@1.9.0`、`cordis-
 | 补丁 | `patch-deps` 与 `patch-session-manage` 全部锚点命中或按上游已实现退役；被改内核文件 `node --check` 通过 |
 | 插件兼容门禁 | `plugin-kernel-compat.mjs`：18 个随包插件 / 服务端源码 76 文件 / 具名导入 1 处；客户端（浏览器侧）bundle 104 文件、内核引用 8 处（5 个包），全部命中存在的包与导出 |
 | 装配裁剪预演 | `stage-platform-prune.mjs --plan`：staged 树裁剪 0、本地树将裁剪 12954（source-map 3066 / zod-tests 9888），两种目标都无「无运行时载荷」的包 |
-| 升级路径 | `e2e-upgrade.js`：真实 v6.0.1 安装产物建 profile（62 deps）→ 覆盖成 6.1.0 产物 → 同数据根重启，**18/18** 断言通过（启动 / 插件树 / 权限保留 / 会话恢复 / patch 未清空 / 机器级注册表接管 / 退出） |
+| 升级路径 | `e2e-upgrade.js`：真实 v6.0.1 安装产物建 profile（62 deps）→ 覆盖成 6.1.0 产物 → 同数据根重启，**18/18** 断言通过（启动 / 插件树 / 权限保留 / 会话恢复 / patch 未清空 / 机器级注册表接管 / 退出）；装配重建出的正式产物复跑同样 18/18 |
 | 会话删除 | `session-delete-021.test.ts` + `session-delete-022.test.ts`：11 通过 / 3 跳过（0.2.1 与 0.2.2 的客户端形状各由对应用例覆盖） |
 | 依赖安全 | MCP HTTP/stdio 与 issuer 绑定用例在实际内核上通过（执行器插件化后按批次契约调用） |
 | 装配 | `stage-resources.mjs --target=win32 --distro=lite` 通过：离线装配 675 个包、裁剪 12805 个调试映射与自测文件、bundle manifest 与 WebView2Loader.dll 就位；装配树内 `@deepseek-ai` 334 个包，除 `libreoffice-kit` / `node-addon-system` 外全部 `0.2.2-rc.1`，无 `0.2.1-rc.2` 残留 |
-| 装配校验 | `verify-staged-runtime.mjs`：PASS required=44 retired=9 packages=675 |
+| 装配校验 | `verify-staged-runtime.mjs`：PASS required=44 retired=8 packages=675 |
 | 启动冒烟 | `minimal-boot-smoke.mjs`：PASS 303=303 ui=200 retired-rpc=2 orphan-web=false |
 
 **本机 PATH 上的 Node `26.13.0` 不能用来跑本仓库测试**：项目测试用 `stripTypeScriptTypes(..., { mode: 'transform' })`，Node 26 只接受 `mode: 'strip'`，会统一报 `ERR_INVALID_ARG_VALUE`，与内核无关。跑测试前把随包 Node 放到 PATH 首位。随包运行时需 ≥24.9（内核 `engines`）。
@@ -83,3 +83,5 @@ vendor family 版本：`@deepseek-ai/cordis@4.1.0`、`cosmokit@1.9.0`、`cordis-
 
 - 隔离环境的 `HOME` 被收容到 `eac-beta\home`，`cargo` 默认找不到宿主机 registry。装配前显式给出 `CARGO_HOME` / `RUSTUP_HOME` 指向宿主机 rustup（WebView2Loader.dll 前置检查按 `process.env.CARGO_HOME` 定位）。
 - 随包 Node 由 `scripts/fetch-node.ts` 复制当前 `process.execPath`；本次装配用 `24.18.0`，满足内核 `>=24.9.0`。
+- `CARGO_HOME` / `RUSTUP_HOME` 要给 Windows 原生路径（`C:/Users/<user>/.cargo`）。在 MSYS bash 里写成 `/c/Users/…` 会被拼成 `\c\Users\…`，WebView2Loader.dll 前置检查直接报 `Cargo registry source is missing`。
+- 生产 node_modules 的离线装配用单线程 `cpSync`：在机械盘上实测 10–20 秒/个包（710 个包接近 2 小时），表现为长时间无输出、CPU 空闲。内核未变的重建可先用多线程 robocopy 镜像 `dsh-desktop/node_modules`、剔掉 lock 里 `dev: true` 的包与 `.bin`/`.cache`，写平台戳 `.node-modules-platform`（`win32-x64`）后用 `--skip-npm` 复用，装配结果与全量装配一致（`verify-staged-runtime` 仍 PASS）。
