@@ -16,7 +16,7 @@
 import path = require('node:path');
 import fs = require('node:fs');
 import os = require('node:os');
-import { updCtx, APP_ROOT } from './runtime-paths';
+import { updCtx } from './runtime-paths';
 import { seedFullProfile, adoptFullProfile, bindFullHostClosure, repairHostClosure } from './full-composition';
 // updater.js 尚未类型化（Wave 3 收编），先以窄签名消费。
 const updater = require('../../updater') as {
@@ -87,8 +87,20 @@ export function ensureDesktopProfileInit() {
     const home = ctx.getDshHome() || path.join(os.homedir(), '.dsh');
     const dir = desktopProfileDir();
     if (desktopProfile() === 'web') return; // 共享模式走官方模板
+    // 先修共享闭包，再补 profile。否则 bind 遇到悬空 junction 会抛 EEXIST，
+    // 被外层 catch 吞掉，后面的 repair 永远执行不到（卸载/换目录后正是这种状态）。
+    try {
+      const closure = repairHostClosure(home);
+      if (closure.relinked || closure.pruned) {
+        ctx.log('boot', `已修复 profile 共享闭包：重链 ${closure.relinked}、清理 ${closure.pruned}`);
+      }
+    } catch (err) {
+      ctx.log('boot', '修复 profile 共享闭包失败，继续初始化: ' + (err as Error).message);
+    }
     if (seedFullProfile(dir)) {
-      bindFullHostClosure(home);
+      try { bindFullHostClosure(home); } catch (err) {
+        ctx.log('boot', '宿主闭包补链失败（repair 已先跑）: ' + (err as Error).message);
+      }
       ctx.log('boot', '已从随包完整离线种子初始化 profile: ' + dir);
     } else {
       // issue #464：旧版最简本体（不带 full-pack）建出的隔离环境里，profile 只有
@@ -98,16 +110,12 @@ export function ensureDesktopProfileInit() {
       // 新增包所需的宿主闭包。
       const adopted = adoptFullProfile(dir);
       if (adopted) {
-        bindFullHostClosure(home);
+        try { bindFullHostClosure(home); } catch (err) {
+          ctx.log('boot', '宿主闭包补链失败（repair 已先跑）: ' + (err as Error).message);
+        }
         ctx.log('boot', '已将既有 profile 补齐到随包完整清单: '
           + `新增 ${adopted.adopted.length}、刷新 ${adopted.refreshed.length}、保留用户包 ${adopted.kept.length}`);
       }
-    }
-    // 每次启动都修一遍共享闭包：安装目录被卸载/换版本后，旧 junction 会整棵悬空
-    // （实测 383 条），这里重链到当前安装闭包，避免插件树永久变砖。
-    const closure = repairHostClosure(home);
-    if (closure.relinked || closure.pruned) {
-      ctx.log('boot', `已修复 profile 共享闭包：重链 ${closure.relinked}、清理 ${closure.pruned}`);
     }
     fs.mkdirSync(dir, { recursive: true });
     const manifest = path.join(dir, 'package.json');
@@ -125,18 +133,6 @@ export function ensureDesktopProfileInit() {
     }
     if (!fs.existsSync(path.join(dir, 'cordis.patch.yml'))) {
       fs.writeFileSync(path.join(dir, 'cordis.patch.yml'), '[]\n');
-    }
-    // 从源码运行时，插件会从 DSH_HOME/profile 的共享 node_modules 解析
-    // 宿主依赖；全新隔离 DSH_HOME 没有安装闭包，先补齐桌面依赖中的
-    // schemastery junction，避免 better-sidebar / side-session 触发整树失败。
-    const shared = path.join(home, 'profiles', 'node_modules');
-    const source = path.join(APP_ROOT, 'node_modules', 'schemastery');
-    const link = path.join(shared, 'schemastery');
-    if (fs.existsSync(source) && !fs.existsSync(link)) {
-      fs.mkdirSync(shared, { recursive: true });
-      try { fs.symlinkSync(source, link, 'junction'); } catch (err) {
-        ctx.log('boot', '创建 schemastery 共享链接失败: ' + (err as Error).message);
-      }
     }
   } catch (err) {
     ctx.log('boot', '初始化桌面 profile 失败: ' + (err as Error).message);

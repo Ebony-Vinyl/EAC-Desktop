@@ -223,7 +223,14 @@ export function repairHostClosure(home: string, root: string = APP_ROOT): { reli
     }
     if (!stat.isSymbolicLink()) continue;
     const resolved = linkTarget(link);
-    if (resolved && fs.existsSync(resolved)) continue;
+    // 无法解析目标时保守保留；目标仍可用时保留。
+    if (!resolved || fs.existsSync(resolved)) continue;
+    // 只有"当前安装闭包里的陈旧条目"或"指向另一份安装闭包"才可清理。
+    // 外部用户 link:、网络盘/移动硬盘暂时不可达的目标一律保留，
+    // 不能因为 existsSync=false 就删除用户链接。
+    const installLocal = isInsidePath(resolved, root);
+    const foreignInstall = /[\\/]dsh-desktop[\\/]node_modules[\\/]/i.test(resolved);
+    if (!installLocal && !foreignInstall) continue;
     try {
       fs.unlinkSync(link);
       result.pruned += 1;
@@ -234,9 +241,21 @@ export function repairHostClosure(home: string, root: string = APP_ROOT): { reli
   return result;
 }
 
+/** lstat 判存在：悬空 junction 也算存在，避免 bind 重复 symlink 抛 EEXIST。 */
+function entryExistsNoFollow(target: string): boolean {
+  try {
+    fs.lstatSync(target);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 export function bindFullHostClosure(home: string, root: string = APP_ROOT): void {
   const modules = path.join(root, 'node_modules');
   const shared = path.join(home, 'profiles', 'node_modules');
+  if (!fs.existsSync(modules)) return;
   for (const entry of fs.readdirSync(modules, { withFileTypes: true })) {
     if (entry.name.startsWith('.')) continue;
     const names = entry.name.startsWith('@')
@@ -245,9 +264,14 @@ export function bindFullHostClosure(home: string, root: string = APP_ROOT): void
     for (const name of names) {
       const source = path.join(modules, ...name.split('/'));
       const target = path.join(shared, ...name.split('/'));
-      if (!fs.existsSync(path.join(source, 'package.json')) || fs.existsSync(target)) continue;
+      if (!fs.existsSync(path.join(source, 'package.json')) || entryExistsNoFollow(target)) continue;
       fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.symlinkSync(source, target, 'junction');
+      try {
+        fs.symlinkSync(source, target, 'junction');
+      } catch (error) {
+        // 并发进程可能在我们 lstat 之后抢先建链接；EEXIST 交给 repair 下一次处理。
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
     }
   }
 }
