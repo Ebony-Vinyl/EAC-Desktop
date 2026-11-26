@@ -624,15 +624,9 @@ execSync('node scripts/patch-deps.js', { cwd: path.join(staged, 'dsh-desktop'), 
 console.log('[stage] 重放既有会话管理补丁（patch-session-manage）');
 execSync('node scripts/patch-session-manage.js', { cwd: path.join(staged, 'dsh-desktop'), stdio: 'inherit' });
 
-// 受控 bash 覆盖基于官方 0.2.2-rc.1，仅保留 optional-escalation 兼容差异。
-// npm ci 会恢复 registry 文件，装配时回填已重放补丁的项目副本。
-// （dsh-subprocess-local 的 pwsh 超时 vendored 修复已废弃：0.1.1-rc.2 上游以
-//  Promise.race(done, delay(graceMs)) 原生实现同类兜底，随 registry 版本走。）
-const vendoredBashFix = path.join(dd, 'node_modules', '@deepseek-ai', 'dsh-tool-bash', 'lib', 'index.js');
-if (existsSync(vendoredBashFix)) {
-  cpSync(vendoredBashFix, path.join(nmDest, '@deepseek-ai', 'dsh-tool-bash', 'lib', 'index.js'));
-  console.log('[stage] 已回填 dsh-tool-bash 的 vendored 修复');
-}
+// dsh-tool-bash 的可选升级字段补丁由 patch-deps 覆盖（与 pwsh/fs 同一目标
+// 清单），装配树不回填 vendored 副本：官方 0.2.2-rc.1 与项目所需行为的唯一
+// 差异就是那一行 optional-escalation 补丁。
 
 const sanitizedClients = sanitizeClientBuildPaths(nmDest);
 console.log(`[stage] 已清理 ${sanitizedClients} 个内核 client bundle 的构建机路径`);
