@@ -29,6 +29,7 @@ const environment = require('../lib/desktop/environment.js') as {
   environmentProductRoot(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string;
   environmentStorageRoot(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string;
   environmentRegistryHome(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string;
+  platformDefaultRegistryHome(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string;
   environmentRoot(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string;
   dpxModuleFile(env: NodeJS.ProcessEnv): string;
   ensureEacEnvironment(env: NodeJS.ProcessEnv, platform: NodeJS.Platform): {
@@ -366,6 +367,34 @@ test('B: 非空且未注册的环境目录必须拒绝认领', { skip: !dpxAvail
   );
   // 未注册目录里的内容必须原样保留（fail closed = 不动别人的数据）。
   assert.equal(fs.readFileSync(path.join(strayRoot, 'user-data.txt'), 'utf8'), '不能被静默接管');
+});
+
+test('B: 升级接管 v6.0.1 的机器级注册表（旧位置有记录 → 新位置接管，不 fail closed）', { skip: !dpxAvailable && 'third_party/dsh-dpx submodule 未初始化' }, () => {
+  const productRoot = tempRoot('legacy-registry');
+  const api = HOST_PATH;
+  // v6.0.1 不设 DSH_EAC_DPX_REGISTRY_HOME，注册表落在平台默认位置（%LOCALAPPDATA%\DSH\DPX）。
+  const legacyEnv = isolatedEnv(productRoot);
+  delete legacyEnv.DSH_EAC_DPX_REGISTRY_HOME;
+  const before = environment.ensureEacEnvironment(legacyEnv, HOST_PLATFORM);
+  const legacyFile = api.join(environment.platformDefaultRegistryHome(legacyEnv, HOST_PLATFORM), 'registry.json');
+  assert.ok(fs.existsSync(legacyFile), '旧版注册表应落在平台默认位置');
+  const legacy = JSON.parse(fs.readFileSync(legacyFile, 'utf8')) as { environments: Array<{ root: string; instance: { instanceId: string } }> };
+  assert.equal(legacy.environments.length, 1);
+
+  // 升级到本版本：注册表在数据根内，环境目录已经在 —— 接管后必须是同一个实例，不是重建。
+  const currentEnv = isolatedEnv(productRoot);
+  const ensured = environment.ensureEacEnvironment(currentEnv, HOST_PLATFORM);
+  assert.equal(api.resolve(ensured.paths.root), api.resolve(before.paths.root));
+  assert.equal(ensured.rootExistedBefore, true);
+  assert.equal(api.resolve(ensured.registryHome), api.resolve(String(currentEnv.DSH_EAC_DPX_REGISTRY_HOME)));
+
+  const migratedFile = api.join(ensured.registryHome, 'registry.json');
+  assert.ok(fs.existsSync(migratedFile), '旧记录应被接管到新注册表');
+  const migrated = JSON.parse(fs.readFileSync(migratedFile, 'utf8')) as { format: number; environments: Array<{ root: string; instance: { instanceId: string } }> };
+  assert.equal(migrated.format, 1);
+  assert.equal(migrated.environments.length, 1, '只接管 root 在本数据根下的记录');
+  assert.equal(api.resolve(migrated.environments[0].root), api.resolve(before.paths.root));
+  assert.equal(migrated.environments[0].instance.instanceId, legacy.environments[0].instance.instanceId, '必须是同一实例');
 });
 
 test('B: 宿主旧 .dsh 只做存在性提示，不迁移、不覆盖', { skip: !dpxAvailable && 'third_party/dsh-dpx submodule 未初始化' }, () => {
