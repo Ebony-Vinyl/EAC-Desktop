@@ -35,6 +35,11 @@
 ; %LOCALAPPDATA%\Deepseek Harness EAC\dpx\dsh-environments\<通道>。
 ; 两个路径都可用 /D 覆盖 —— 夹具 installer-uninstall-cleanup.test.ts 必须能在
 ; 临时目录验证清理行为，不能触碰真实用户目录。
+
+; 测试接缝：扫描“其它安装”的注册表根；生产默认使用真实 Uninstall 根。
+!ifndef DSH_SCAN_ROOT
+  !define DSH_SCAN_ROOT "Software\Microsoft\Windows\CurrentVersion\Uninstall"
+!endif
 !ifndef DSH_PRODUCT_DATA_DIR
   !define DSH_PRODUCT_DATA_DIR "$LOCALAPPDATA\Deepseek Harness EAC"
 !endif
@@ -773,7 +778,7 @@ FunctionEnd
   StrCpy ${OUT} 0
   StrCpy $R8 0
   ${Do}
-    EnumRegKey $R7 ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall" $R8
+    EnumRegKey $R7 ${HIVE} "${DSH_SCAN_ROOT}" $R8
     ${If} $R7 == ""
       ${ExitDo}
     ${EndIf}
@@ -790,7 +795,17 @@ FunctionEnd
       ${EndIf}
     ${EndIf}
     ${If} $R6 == 1
-      ReadRegStr $R4 ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall\$R7" "InstallLocation"
+      ReadRegStr $R4 ${HIVE} "${DSH_SCAN_ROOT}\$R7" "InstallLocation"
+      ; 旧版/非标准登记可能没有 InstallLocation；不能因此把“存在但登记不全的
+      ; 另一份安装”误判成“最后一份安装”，否则会清掉共享数据。
+      ${If} $R4 == ""
+        ReadRegStr $R4 ${HIVE} "${DSH_SCAN_ROOT}\$R7" "Install_Dir"
+      ${EndIf}
+      ${If} $R4 == ""
+        DetailPrint "EAC: $R7 的 InstallLocation 为空，按其它安装保守处理"
+        StrCpy ${OUT} 1
+        ${ExitDo}
+      ${EndIf}
       ${If} $R4 != ""
         StrCpy $R5 $R4 1
         ${If} $R5 == '"'
@@ -870,6 +885,22 @@ Function un.DshRemoveTreeNoFollow
   Push $4
   Push $5
   Push $7
+  ; 根目录本身也必须先判重解析点：数据根被用户重定向成 junction 时，
+  ; FindFirst 会穿透枚举目标目录并逐个 Delete，造成外部真实数据被删。
+  ; 这里只摘链接（文件重解析点用 Delete），绝不枚举目标。
+  System::Call 'kernel32::GetFileAttributesW(w "$R1") i.r4'
+  ${If} $4 != -1
+    IntOp $7 $4 & 0x400
+    ${If} $7 != 0
+      IntOp $7 $4 & 0x10
+      ${If} $7 == 0
+        Delete "$R1"
+      ${Else}
+        RMDir "$R1"
+      ${EndIf}
+      Goto dsh_remove_tree_done
+    ${EndIf}
+  ${EndIf}
   StrCpy $R6 1
   Push "W:$R1"
   ${DoWhile} $R6 > 0
@@ -908,6 +939,7 @@ Function un.DshRemoveTreeNoFollow
       FindClose $R2
     ${EndIf}
   ${Loop}
+dsh_remove_tree_done:
   Pop $7
   Pop $5
   Pop $4

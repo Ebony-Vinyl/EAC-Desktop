@@ -25,17 +25,26 @@ function execute(file:string,args:string[]):Promise<{code:number|null;output:str
  });
 }
 
-async function fixture(t:any,appDataState:0|1,assumeLastInstall=false){
+async function fixture(t:any,appDataState:0|1,assumeLastInstall=false,options:{rootJunction?:boolean;scanRoot?:string}={}){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'eac-nsis-uninst-'));
  t.after(async()=>{const resolved=path.resolve(root);assert.equal(path.dirname(resolved),path.resolve(os.tmpdir()));assert.ok(path.basename(resolved).startsWith('eac-nsis-uninst-'));await fs.rm(resolved,{recursive:true,force:true});});
 
  const installDir=path.join(root,'inst');
  const dataDir=path.join(root,'data 根','Deepseek Harness EAC');
+ const dataTarget=path.join(root,'data target','Deepseek Harness EAC');
  const roamingDir=path.join(root,'roaming 根','Deepseek Harness EAC');
  const canary=path.join(root,'canary');
 
+ if(options.rootJunction){
+  await fs.mkdir(dataTarget,{recursive:true});
+  await fs.writeFile(path.join(dataTarget,'marker.txt'),'user data');
+  await fs.mkdir(path.dirname(dataDir),{recursive:true});
+  await fs.symlink(dataTarget,dataDir,'junction');
+ } else {
+  await fs.mkdir(dataDir,{recursive:true});
+  await fs.writeFile(path.join(dataDir,'marker.txt'),'user data');
+ }
  await fs.mkdir(path.join(dataDir,'profiles','node_modules'),{recursive:true});
- await fs.writeFile(path.join(dataDir,'marker.txt'),'user data');
  await fs.mkdir(roamingDir,{recursive:true});
  await fs.writeFile(path.join(roamingDir,'locale-state.json'),'{}');
  await fs.mkdir(canary,{recursive:true});
@@ -54,6 +63,7 @@ InstallDir "${installDir}"
 !define MAINBINARYNAME "dsh-eac-shell"
 !define ESTIMATEDSIZE "1"
 !define UNINSTKEY "Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\EACUninstallFixture"
+${options.scanRoot ? `!define DSH_SCAN_ROOT "${options.scanRoot}"` : '; 使用真实 Uninstall 根扫描'}
 ${assumeLastInstall ? '!define DSH_ASSUME_LAST_INSTALL' : '; 未声明：走真实"其它安装"扫描'}
 !define DSH_PRODUCT_DATA_DIR "${dataDir}"
 !define DSH_PRODUCT_ROAMING_DIR "${roamingDir}"
@@ -95,7 +105,7 @@ FunctionEnd
  // 复制到 %TEMP% 后异步重启，spawn 提前返回导致断言读到中间态。
  const uninstalled=await execute(path.join(installDir,'uninstall.exe'),['/S','_?='+installDir]);
  assert.equal(uninstalled.code,0,uninstalled.output);
- return {root,installDir,dataDir,roamingDir,canary};
+ return {root,installDir,dataDir,dataTarget,roamingDir,canary};
 }
 
 test('勾选"删除应用数据"时清理产品数据根，且不跟进其中指向外部的 junction',{skip:unavailable},async t=>{
@@ -108,5 +118,23 @@ test('勾选"删除应用数据"时清理产品数据根，且不跟进其中指
 test('未勾选删除应用数据时保留产品数据根',{skip:unavailable},async t=>{
  const f=await fixture(t,0);
  assert.equal(existsSync(path.join(f.dataDir,'marker.txt')),true,'未勾选时不得删除用户数据');
+ assert.equal(existsSync(path.join(f.canary,'canary.txt')),true);
+});
+
+test('数据根本身是 junction 时只摘链接，不枚举删除目标内容',{skip:unavailable},async t=>{
+ const f=await fixture(t,1,true,{rootJunction:true});
+ assert.equal(existsSync(f.dataDir),false,'数据根 junction 应被摘除');
+ assert.equal(existsSync(path.join(f.dataTarget,'marker.txt')),true,'junction 目标里的用户数据不得被删除');
+ assert.equal(existsSync(path.join(f.dataTarget,'profiles','node_modules','canary-link','canary.txt')),true,'目标内的子 junction 目标同样不得被删除');
+});
+
+test('InstallLocation 为空的其它安装登记会保守保留共享数据',{skip:unavailable},async t=>{
+ const scanRoot=`Software\\EACTest\\${Date.now()}\\Uninstall`;
+ const key=`HKCU\\${scanRoot}\\Deepseek Harness EAC (Empty Location)`;
+ const added=await execute('reg.exe',['add',key,'/v','DisplayName','/t','REG_SZ','/d','Deepseek Harness EAC (Empty Location)','/f']);
+ assert.equal(added.code,0,added.output);
+ t.after(async()=>{await execute('reg.exe',['delete',key,'/f']);});
+ const f=await fixture(t,1,false,{scanRoot});
+ assert.equal(existsSync(path.join(f.dataDir,'marker.txt')),true,'存在登记不全的其它安装时不得清理共享数据');
  assert.equal(existsSync(path.join(f.canary,'canary.txt')),true);
 });
