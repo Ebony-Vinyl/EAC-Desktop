@@ -2956,6 +2956,23 @@
         "refCommit": "26d775a3a45cebeb4841e33073f20c71c9576881",
         "provenance": "固定上游 main 源码提交重建；包版本与最新预览发行 v0.0.1-p3.1 相同，另含发行后功能及兼容修复，不冒称 Release 附件原始字节。"
       }
+    },
+    {
+      "id": "C124",
+      "line": "main",
+      "name": "dsh-overlay-guard",
+      "type": "plugin",
+      "origin": "eac-original",
+      "version": "1.0.0",
+      "path": "dsh-desktop/assets/plugins/dsh-overlay-guard",
+      "registryStatus": "内置分发台账登记；不参与自动更新",
+      "audit": {
+        "verdict": "catalog-miss",
+        "compare": "EAC 原研",
+        "note": "纯客户端 CSS 覆盖守卫；dsh-plugin.json 声明 eac-private 维护且 autoUpdate=false，来源与身份元数据保持一致。",
+        "basis": "dsh-plugin.json source.repository 与 x-eac 原研声明",
+        "conflict": null
+      }
     }
   ]
 }

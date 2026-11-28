@@ -1,0 +1,66 @@
+name: 快速测试（不打包）
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: quick-tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '11.28.5'
+  KERNEL_VERSION: '0.2.1-rc.2'
+
+jobs:
+  test:
+    name: 自动化测试（windows/x64）
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: dsh-desktop
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: dsh-desktop/package-lock.json
+
+      - name: Verify dsh-dpx submodule pin
+        working-directory: ${{ github.workspace }}
+        run: node tauri-shell/check-dpx-pin.mjs
+
+      - name: Cache vendored kernel
+        id: kernel-cache
+        uses: actions/cache@v4
+        with:
+          path: dsh-desktop/vendor/kernel/${{ env.KERNEL_VERSION }}
+          key: quick-tests-${{ runner.os }}-x64-kernel-${{ env.KERNEL_VERSION }}-${{ hashFiles('dsh-desktop/scripts/fetch-kernel.ts') }}
+
+      - name: Install pinned pnpm
+        if: steps.kernel-cache.outputs.cache-hit != 'true'
+        run: npm install --global pnpm@${{ env.PNPM_VERSION }} --no-audit --no-fund
+
+      # 内核 tarball 是 npm ci 的测试依赖；这里不装配或打包桌面应用。
+      - name: Prepare vendored kernel
+        run: node scripts/fetch-kernel.js
+
+      - name: Install dependencies
+        run: npm run ci:install -- --no-audit --no-fund
+
+      - name: Fetch bundled Node and npm runtimes
+        run: npm run fetch-runtime
+
+      # npm test 的 pretest 会编译 TypeScript，同时完成类型检查。
+      - name: Typecheck and run automated tests
+        run: npm test

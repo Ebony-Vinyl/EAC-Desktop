@@ -284,6 +284,11 @@
       "id": "mojobox-manager",
       "path": "dsh-desktop/assets/plugins/dsh-plugin-mojobox",
       "patched": false
+    },
+    {
+      "id": "dsh-overlay-guard",
+      "path": "dsh-desktop/assets/plugins/dsh-overlay-guard",
+      "patched": false
     }
   ]
 }

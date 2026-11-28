@@ -1,7 +1,7 @@
 // GENERATED FILE — do not edit by hand.
 // Sources: .sync/plugins.json, plugin-distribution.json, and recommended pack registry (run generate-plugin-registry.mjs).
 // plugin-sync:update-sources {"unified-market":{"npm":"dsh-unified-market"}}
-// plugin-sync:distribution {"builtinPluginIds":["client-file-changes","compact","ds-harness-remote","dsh-boot-animation","dsh-wechat-plugin","eac-core-bridge","eac-locale-compat","easy-setup","external-links","file-changes","mojobox-manager","our-free-model","plugin-shield","settings-scroll-fix","ui-skin-deep-whale-manager","unified-market","viewport-lock","wallpaper-engine"],"recommendedPluginIds":["balance","better-sidebar","change-review","composer-dynamic-island","conversation-tweaks","dock-settings","dsh-navbar","dsh-raw-html","dsh-session-manager","message-rewind","mobile-fix","offpeak","picturereader","prompt-custom","soul-md"],"recommendedPackId":"dev.dsh-eac.desktop-recommended","pluginClasses":{"agent-teams":"external","balance":"recommended","better-sidebar":"recommended","change-review":"recommended","client-file-changes":"builtin","compact":"builtin","composer-dynamic-island":"recommended","computer-user":"external","conversation-tweaks":"recommended","dock-settings":"recommended","ds-harness-remote":"builtin","dsh-boot-animation":"builtin","dsh-dafeiyu":"external","dsh-feature-toggles":"external","dsh-navbar":"recommended","dsh-pet":"external","dsh-pet-settings":"external","dsh-raw-html":"recommended","dsh-session-manager":"recommended","dsh-stt":"external","dsh-undo":"external","dsh-webui-prompt-optimizer":"external","dsh-wechat-plugin":"builtin","dsh-whale-widget":"external","eac-core-bridge":"builtin","eac-locale-compat":"builtin","easy-setup":"builtin","external-links":"builtin","file-changes":"builtin","float-window":"external","font-custom":"external","image-paste":"external","meow-smooth":"external","message-rewind":"recommended","mobile-fix":"recommended","mojobox-manager":"builtin","offpeak":"recommended","openclaw-bridge":"external","our-free-model":"builtin","picturereader":"recommended","plugin-shield":"builtin","plugin-wizard":"external","prompt-custom":"recommended","settings-groups":"external","settings-scroll-fix":"builtin","side-session":"external","soul-md":"recommended","think-zh-expand-eac":"external","ui-skin-deep-whale-manager":"builtin","unified-market":"builtin","viewport-lock":"builtin","wallpaper-engine":"builtin"}}
+// plugin-sync:distribution {"builtinPluginIds":["client-file-changes","compact","ds-harness-remote","dsh-boot-animation","dsh-overlay-guard","dsh-wechat-plugin","eac-core-bridge","eac-locale-compat","easy-setup","external-links","file-changes","mojobox-manager","our-free-model","plugin-shield","settings-scroll-fix","ui-skin-deep-whale-manager","unified-market","viewport-lock","wallpaper-engine"],"recommendedPluginIds":["balance","better-sidebar","change-review","composer-dynamic-island","conversation-tweaks","dock-settings","dsh-navbar","dsh-raw-html","dsh-session-manager","message-rewind","mobile-fix","offpeak","picturereader","prompt-custom","soul-md"],"recommendedPackId":"dev.dsh-eac.desktop-recommended","pluginClasses":{"agent-teams":"external","balance":"recommended","better-sidebar":"recommended","change-review":"recommended","client-file-changes":"builtin","compact":"builtin","composer-dynamic-island":"recommended","computer-user":"external","conversation-tweaks":"recommended","dock-settings":"recommended","ds-harness-remote":"builtin","dsh-boot-animation":"builtin","dsh-dafeiyu":"external","dsh-feature-toggles":"external","dsh-navbar":"recommended","dsh-overlay-guard":"builtin","dsh-pet":"external","dsh-pet-settings":"external","dsh-raw-html":"recommended","dsh-session-manager":"recommended","dsh-stt":"external","dsh-undo":"external","dsh-webui-prompt-optimizer":"external","dsh-wechat-plugin":"builtin","dsh-whale-widget":"external","eac-core-bridge":"builtin","eac-locale-compat":"builtin","easy-setup":"builtin","external-links":"builtin","file-changes":"builtin","float-window":"external","font-custom":"external","image-paste":"external","meow-smooth":"external","message-rewind":"recommended","mobile-fix":"recommended","mojobox-manager":"builtin","offpeak":"recommended","openclaw-bridge":"external","our-free-model":"builtin","picturereader":"recommended","plugin-shield":"builtin","plugin-wizard":"external","prompt-custom":"recommended","settings-groups":"external","settings-scroll-fix":"builtin","side-session":"external","soul-md":"recommended","think-zh-expand-eac":"external","ui-skin-deep-whale-manager":"builtin","unified-market":"builtin","viewport-lock":"builtin","wallpaper-engine":"builtin"}}
 
 export const PLUGIN_SYNC_REGISTRY = {
   "distribution": {
@@ -10,6 +10,7 @@ export const PLUGIN_SYNC_REGISTRY = {
       "compact",
       "ds-harness-remote",
       "dsh-boot-animation",
+      "dsh-overlay-guard",
       "dsh-wechat-plugin",
       "eac-core-bridge",
       "eac-locale-compat",
@@ -41,6 +42,7 @@ export const PLUGIN_SYNC_REGISTRY = {
       "dsh-dafeiyu": "external",
       "dsh-feature-toggles": "external",
       "dsh-navbar": "recommended",
+      "dsh-overlay-guard": "builtin",
       "dsh-pet": "external",
       "dsh-pet-settings": "external",
       "dsh-raw-html": "recommended",
@@ -159,6 +161,22 @@ export const PLUGIN_SYNC_REGISTRY = {
         "kind": "github",
         "name": "NativeDog1/dsh-boot-animation",
         "repository": "https://github.com/NativeDog1/dsh-boot-animation"
+      },
+      "syncMode": "manual"
+    },
+    "dsh-overlay-guard": {
+      "class": "internal",
+      "kind": "plugin",
+      "packageName": "dsh-overlay-guard",
+      "path": "dsh-desktop/assets/plugins/dsh-overlay-guard",
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "source": {
+        "kind": "internal",
+        "name": "dsh-overlay-guard",
+        "reason": "EAC original plugin maintained in this repository; dsh-plugin.json declares eac-private maintenance"
       },
       "syncMode": "manual"
     },

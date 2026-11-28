@@ -1,7 +1,7 @@
 {
   "generatedRegistry": "dsh-desktop/lib/desktop/plugin-sync-registry.ts",
   "manifest": ".sync/plugins.json",
-  "manifestRevision": "293355dc950ddd0d8b58e0fc8d17d6b97cafea8974e7bc687c98d67ccf8e5091",
+  "manifestRevision": "68bc79ccf244421b31e68e958bdcac4a03385641e442175d3b90bfe0e03895db",
   "plugins": {
     "client-file-changes": {
       "compatibility": {},
@@ -113,6 +113,35 @@
         "repository": "https://github.com/NativeDog1/dsh-boot-animation",
         "sha256": "89da88a52b88db7837ca7c6ca1cd9fbb2ccf49d2e4231731d882c8e39d1b6f22",
         "version": "0.4.2"
+      },
+      "sourceCommit": null
+    },
+    "dsh-overlay-guard": {
+      "compatibility": {},
+      "local": {
+        "entrypoints": [
+          "lib/index.js",
+          "lib/client.js"
+        ],
+        "excludedPaths": [],
+        "fileCount": 8,
+        "license": "MIT",
+        "packageName": "dsh-overlay-guard",
+        "packageVersion": "1.0.0",
+        "path": "dsh-desktop/assets/plugins/dsh-overlay-guard",
+        "treeSha256": "7d22a7ecaa995b4b96be13265831f69d70d280f153bdf74e676f29a734981c3c"
+      },
+      "manifestEntrySha256": "e17ce258a5e502a30d4516aedb3fbc49ec10702485db120ce6c3fea0d848eb99",
+      "patchFiles": [],
+      "patchSet": "none",
+      "patchSetSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "requested": "1.0.0",
+      "runtimeUpdate": "disabled",
+      "source": {
+        "kind": "internal",
+        "name": "dsh-overlay-guard",
+        "sha256": "7d22a7ecaa995b4b96be13265831f69d70d280f153bdf74e676f29a734981c3c",
+        "version": "1.0.0"
       },
       "sourceCommit": null
     },

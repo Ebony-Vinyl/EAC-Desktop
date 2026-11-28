@@ -28,6 +28,6 @@
     "note": "EAC 原研插件（私有维护，不参与内置插件自动更新）。纯客户端 CSS/localStorage 守卫：右侧栏 fullscreen 覆盖、弹层无遮罩、标题栏按钮压叠。",
     "maintenance": "eac-private",
     "autoUpdate": false,
-    "ledger": "assets/SOURCES.json#C116"
+    "ledger": "assets/SOURCES.json#C124"
   }
 }
