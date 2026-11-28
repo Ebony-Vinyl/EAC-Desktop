@@ -46,7 +46,11 @@ function patchPickerWorker(): boolean {
 // order 50）直接裁掉且无法滚动到。给 navList 加 min-height:0 + overflow-y:auto，
 // 并给 nav 补底部内边距，条目多时左栏变为可滚动列表。CSS 类名前缀是内容哈希，
 // 用捕获组匹配以兼容上游小版本差异；幂等标记为 CSS 注释 dsh-desktop-nav-scroll。
+// 0.2.2 起上游自己给 navList 加了 min-height:0 + overflow-y:auto（panel 也从
+// flex 改成 grid，旧锚点全部失效），补丁不再需要 —— 世代无关的探测见下方的
+// UPSTREAM_NAV_SCROLL_RE，命中即报「已退役」。
 const NAV_SCROLL_MARKER = 'dsh-desktop-nav-scroll';
+const UPSTREAM_NAV_SCROLL_RE = /\.([A-Za-z0-9_-]+)_navList\{[^{}]*overflow-y:auto[^{}]*\}/;
 const NAV_RE = /\.([A-Za-z0-9_-]+)_nav\{box-sizing:border-box;flex-direction:column;flex:none;gap:18px;width:188px;padding:22px 12px 0;display:flex\}/;
 const NAVLIST_RE = /\.([A-Za-z0-9_-]+)_navList\{flex-direction:column;gap:4px;display:flex\}/;
 
@@ -61,12 +65,12 @@ function patchSettingsNavScroll(): boolean {
     console.log('[patch-deps] 设置左栏滚动补丁已应用，跳过');
     return true;
   }
-  const navMatch = NAV_RE.exec(src);
-  const navListMatch = NAVLIST_RE.exec(src);
-  if (navMatch && new RegExp(`\\.${navMatch[1]}_navList\\{[^}]*overflow-y:auto[;} ]`).test(src)) {
-    console.log('[patch-deps] 设置左栏已由上游提供滚动，旧 CSS 补丁已退役');
+  if (UPSTREAM_NAV_SCROLL_RE.test(src)) {
+    console.log('[patch-deps] 设置左栏已由上游提供滚动（navList 自带 min-height:0 + overflow-y:auto），旧 CSS 补丁已退役');
     return true;
   }
+  const navMatch = NAV_RE.exec(src);
+  const navListMatch = NAVLIST_RE.exec(src);
   if (!navMatch || !navListMatch || navMatch[1] !== navListMatch[1]) {
     console.log('[patch-deps] 设置左栏未匹配到目标 CSS（上游版本可能已修复/更新），跳过');
     return false;
@@ -104,6 +108,10 @@ const PANEL_RE =
 // display:flex;position:relative;overflow:hidden）。功能未官方化（panel 仍固定
 // 800px 宽 + overflow:hidden），只做锚点适配：宽匹配块 + 守卫（display:flex;
 // position:relative 与 max-width: 必须在块内，确保命中的是设置弹窗 panel 本体）。
+// 0.2.2 世代：panel 从 flex 换成 grid（grid-template 两列/三行 + display:grid），
+// 宽度仍是 800px、仍 overflow:hidden，功能同样未官方化。守卫因此接受两种布局：
+// flex 世代看 display:flex;position:relative，grid 世代看 display:grid +
+// position:relative + grid-template。两世代的替换动作完全相同。
 const PANEL_RE_V2 =
   /\.([A-Za-z0-9_-]+)_panel\{([^{}]*?)width:800px;([^{}]*?)overflow:hidden\}/;
 
@@ -125,9 +133,10 @@ function patchSettingsPanelResize(): boolean {
     const v2 = PANEL_RE_V2.exec(src);
     const v2Pre = v2?.[2];
     const v2Post = v2?.[3];
-    if (!v2 || !v2Pre || !v2Post
-      || !(v2Pre + v2Post).includes('display:flex;position:relative;')
-      || !(v2Pre + v2Post).includes('max-width:')) {
+    const v2Body = (v2Pre ?? '') + (v2Post ?? '');
+    const v2Flex = v2Body.includes('display:flex;position:relative;');
+    const v2Grid = v2Body.includes('display:grid') && v2Body.includes('position:relative') && v2Body.includes('grid-template:');
+    if (!v2 || !v2Pre || !v2Post || !(v2Flex || v2Grid) || !v2Body.includes('max-width:')) {
       console.log('[patch-deps] 设置弹窗未匹配到 panel CSS（上游版本可能已修复/更新），跳过');
       return false;
     }
@@ -1123,6 +1132,12 @@ const SUBMENU_BTN_ANCHOR_020 = 'l.jsxs("button",{type:"button",role:"menuitem",c
 const SUBMENU_BTN_NEW_020 = 'l.jsxs("button",{type:"button",role:"menuitem",className:Ee.item,style:{alignItems:"flex-start",flexShrink:0},disabled:he.disabled';
 const SUBMENU_LABEL_ANCHOR_020 = 'l.jsx("span",{className:Ee.itemLabel,children:he.label})';
 const SUBMENU_LABEL_NEW_020 = 'l.jsx("span",{className:Ee.itemLabel,style:{whiteSpace:"normal",overflow:"visible","' + SUBMENU_ITEM_MARKER + '":"1"},children:he.label})';
+// 0.2.2 产物形态（第四代：p.jsxs/p.jsx + 类对象 Ne + 子项 _e）。容器与 item 同用
+// Ne.item，世代只能靠 JSX 工厂前缀 + disabled 变量名区分。
+const SUBMENU_BTN_ANCHOR_022 = 'p.jsxs("button",{type:"button",role:"menuitem",className:Ne.item,disabled:_e.disabled';
+const SUBMENU_BTN_NEW_022 = 'p.jsxs("button",{type:"button",role:"menuitem",className:Ne.item,style:{alignItems:"flex-start",flexShrink:0},disabled:_e.disabled';
+const SUBMENU_LABEL_ANCHOR_022 = 'p.jsx("span",{className:Ne.itemLabel,children:_e.label})';
+const SUBMENU_LABEL_NEW_022 = 'p.jsx("span",{className:Ne.itemLabel,style:{whiteSpace:"normal",overflow:"visible","' + SUBMENU_ITEM_MARKER + '":"1"},children:_e.label})';
 
 const MENU_021_MARKER = 'dsh-desktop:menu-submenu-021';
 function patchMenuSubmenu021Source(source: string): string | undefined {
@@ -1237,23 +1252,25 @@ function patchMenuSubmenuScroll(file?: string): boolean {
     console.log('[patch-deps] 已补丁主 bundle：二级菜单悬停离开延迟关闭（移回一级菜单保持）');
   }
   if (!src.includes(SUBMENU_ITEM_MARKER)) {
-    // 三候选：0.2.0（l/Ee/he）、rc.2（Re/he/f）与 0.1.2（Pe/fe/d）三代产物形态。
-    const use020 = src.includes(SUBMENU_BTN_ANCHOR_020) && src.includes(SUBMENU_LABEL_ANCHOR_020);
-    const use012 = !use020 && src.includes(SUBMENU_BTN_ANCHOR_012) && src.includes(SUBMENU_LABEL_ANCHOR_012);
-    const btnAnchor = use020 ? SUBMENU_BTN_ANCHOR_020 : use012 ? SUBMENU_BTN_ANCHOR_012 : SUBMENU_BTN_ANCHOR;
-    const btnNew = use020 ? SUBMENU_BTN_NEW_020 : use012 ? SUBMENU_BTN_NEW_012 : SUBMENU_BTN_NEW;
-    const labelAnchor = use020 ? SUBMENU_LABEL_ANCHOR_020 : use012 ? SUBMENU_LABEL_ANCHOR_012 : SUBMENU_LABEL_ANCHOR;
-    const labelNew = use020 ? SUBMENU_LABEL_NEW_020 : use012 ? SUBMENU_LABEL_NEW_012 : SUBMENU_LABEL_NEW;
-    const btnIdx = src.indexOf(btnAnchor);
-    const labelIdx = btnIdx >= 0 ? src.indexOf(labelAnchor, btnIdx) : -1;
-    if (btnIdx < 0 || labelIdx < 0) {
+    // 压缩变量名每代都变，按「新→旧」取第一组两个锚点都唯一命中的形态
+    // （唯一性检查防止同形代码被误伤）：0.2.2（p/Ne/_e）、0.2.0（l/Ee/he）、
+    // 0.1.2（d/Pe/fe）、rc.2（f/Re/he）。
+    const generations = [
+      { name: '0.2.2', btn: SUBMENU_BTN_ANCHOR_022, btnNew: SUBMENU_BTN_NEW_022, label: SUBMENU_LABEL_ANCHOR_022, labelNew: SUBMENU_LABEL_NEW_022 },
+      { name: '0.2.0', btn: SUBMENU_BTN_ANCHOR_020, btnNew: SUBMENU_BTN_NEW_020, label: SUBMENU_LABEL_ANCHOR_020, labelNew: SUBMENU_LABEL_NEW_020 },
+      { name: '0.1.2', btn: SUBMENU_BTN_ANCHOR_012, btnNew: SUBMENU_BTN_NEW_012, label: SUBMENU_LABEL_ANCHOR_012, labelNew: SUBMENU_LABEL_NEW_012 },
+      { name: 'rc.2', btn: SUBMENU_BTN_ANCHOR, btnNew: SUBMENU_BTN_NEW, label: SUBMENU_LABEL_ANCHOR, labelNew: SUBMENU_LABEL_NEW },
+    ];
+    const hit = generations.find((g) => src.split(g.btn).length === 2 && src.split(g.label).length === 2);
+    if (!hit) {
       console.log('[patch-deps] Menu submenu item 未匹配到目标代码（版本可能已更新），跳过');
     } else {
-      src = src.slice(0, btnIdx) + btnNew + src.slice(btnIdx + btnAnchor.length);
-      const l2 = src.indexOf(labelAnchor, btnIdx);
-      src = src.slice(0, l2) + labelNew + src.slice(l2 + labelAnchor.length);
+      const btnIdx = src.indexOf(hit.btn);
+      src = src.slice(0, btnIdx) + hit.btnNew + src.slice(btnIdx + hit.btn.length);
+      const labelIdx = src.indexOf(hit.label);
+      src = src.slice(0, labelIdx) + hit.labelNew + src.slice(labelIdx + hit.label.length);
       changed = true;
-      console.log('[patch-deps] 已补丁主 bundle：submenu 项两行布局不再被裁剪');
+      console.log('[patch-deps] 已补丁主 bundle：submenu 项两行布局不再被裁剪（' + hit.name + ' 形态）');
     }
   }
   if (changed) writeFileAtomic(target, src);

@@ -339,8 +339,12 @@ function remotesEntryInsert() {
 
 function patchSessionManage(nmRoot, log = () => {}) {
   const kernelPackage = path.join(nmRoot, '@deepseek-ai', 'dsh-workspace', 'package.json');
-  if (fs.existsSync(kernelPackage) && JSON.parse(fs.readFileSync(kernelPackage, 'utf8')).version === '0.2.1-rc.2') {
+  const kernelVersion = fs.existsSync(kernelPackage) ? JSON.parse(fs.readFileSync(kernelPackage, 'utf8')).version : '';
+  if (kernelVersion === '0.2.1-rc.2') {
     return require('./patch-session-manage-021.js').patchSessionManage021(nmRoot, log);
+  }
+  if (kernelVersion === '0.2.2-rc.1') {
+    return require('./patch-session-manage-022.js').patchSessionManage022(nmRoot, log);
   }
   const targets = [
     {

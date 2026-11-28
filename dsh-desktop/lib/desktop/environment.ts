@@ -165,6 +165,20 @@ export function environmentRegistryHome(
     const binding = readEnvironmentBinding(environmentProductRoot(env, platform), environmentStorageRoot(env, platform));
     if (binding) return binding.registryHome;
   }
+  return platformDefaultRegistryHome(env, platform);
+}
+
+/**
+ * 平台默认的机器级注册表目录（dpx 的 `defaultRegistryHome` 回退值）。
+ *
+ * 这是 v6.0.1 及更早版本的注册表位置：机器级、同一台机器上所有安装位置共用。
+ * 升级到本版本后注册表收进产品数据根，既有记录要先从这里接管，见 `adoptLegacyRegistry`。
+ */
+export function platformDefaultRegistryHome(
+  env: NodeJS.ProcessEnv = process.env,
+  platform: NodeJS.Platform = process.platform,
+): string {
+  const api = platformPath(platform);
   const home = env.USERPROFILE || env.HOME || os.homedir();
   if (platform === 'win32') {
     const localAppData = env.LOCALAPPDATA || api.join(home, 'AppData', 'Local');
@@ -172,6 +186,54 @@ export function environmentRegistryHome(
   }
   const stateHome = env.XDG_STATE_HOME || api.join(home, '.local', 'state');
   return api.join(stateHome, 'dsh-dpx');
+}
+
+/**
+ * 把 v6.0.1 时期的机器级注册表接管到隔离后的注册表目录。
+ *
+ * v6.0.1 的注册表固定在 `%LOCALAPPDATA%\DSH\DPX`（机器级、同机所有安装位置共用），
+ * 本版本改为 `<产品数据根>/dpx/registry`，随数据根走。升级时新位置是空的，而环境目录
+ * `<storageRoot>/dsh-environments/<name>` 已经在：dpx 的 create 会把非空目录判成
+ * 「不是自己的」，以 `Refusing to adopt non-empty environment directory` fail closed ——
+ * 应用起不来，而且每次启动都一样。
+ *
+ * 只接管 root 落在本 storageRoot 下的记录：旧注册表是共用的，可能还登记着别的安装位置
+ * 的环境；整份复制会让 dpx 以 `already registered at <旧路径>` 拒绝启动。
+ *
+ * 幂等且只读：新注册表已存在就什么都不做；旧注册表缺失或不可解析也直接返回，交给 dpx 报错。
+ */
+function adoptLegacyRegistry(
+  registryHome: string,
+  storageRoot: string,
+  env: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): void {
+  const api = platformPath(platform);
+  const target = api.join(registryHome, 'registry.json');
+  if (fs.existsSync(target)) return;
+  const legacyHome = platformDefaultRegistryHome(env, platform);
+  if (api.resolve(legacyHome) === api.resolve(registryHome)) return;
+  const legacyFile = api.join(legacyHome, 'registry.json');
+  let parsed: { format?: unknown; revision?: unknown; environments?: unknown };
+  try {
+    parsed = JSON.parse(fs.readFileSync(legacyFile, 'utf8')) as typeof parsed;
+  } catch {
+    return;
+  }
+  if (!parsed || parsed.format !== 1 || !Array.isArray(parsed.environments)) return;
+  const prefix = api.resolve(storageRoot) + path.sep;
+  const adopted = (parsed.environments as Array<{ root?: unknown }>).filter((row) => {
+    if (!row || typeof row.root !== 'string') return false;
+    const resolved = api.resolve(row.root);
+    return platform === 'win32' ? resolved.toLowerCase().startsWith(prefix.toLowerCase()) : resolved.startsWith(prefix);
+  });
+  if (adopted.length === 0) return;
+  fs.mkdirSync(registryHome, { recursive: true });
+  fs.writeFileSync(
+    target,
+    JSON.stringify({ format: 1, revision: typeof parsed.revision === 'number' ? parsed.revision : 0, environments: adopted }, null, 2) + '\n',
+    { encoding: 'utf8', mode: 0o600 },
+  );
 }
 
 /**
@@ -341,6 +403,10 @@ export function ensureEacEnvironment(
   const name = environmentName(env);
   const expectedRoot = environmentRoot(env, platform);
   const rootExistedBefore = fs.existsSync(expectedRoot);
+
+  // 升级路径：v6.0.1 的注册表在机器级目录，本版本在数据根内 —— 先接管再调 dpx，
+  // 否则 dpx 看到「未登记的非空环境目录」会 fail closed。
+  adoptLegacyRegistry(registryHome, storageRoot, env, platform);
 
   const result = runDpxCall({
     moduleFile,

@@ -8,6 +8,12 @@ const { hasTransactionalProfileRecompose, patchAppBootReconcileGateSource, patch
 const file = new URL('../node_modules/@deepseek-ai/dsh-app-boot/lib/index.js', import.meta.url);
 const source = existsSync(file) ? readFileSync(file, 'utf8') : '';
 const native = hasTransactionalProfileRecompose(source);
+const kernelVersion: string = existsSync(new URL('../node_modules/@deepseek-ai/dsh-app-boot/package.json', import.meta.url))
+  ? JSON.parse(readFileSync(new URL('../node_modules/@deepseek-ai/dsh-app-boot/package.json', import.meta.url), 'utf8')).version
+  : '';
+// 0.2.2 把收尾的 fiber 等待从 Promise.all 换成 Promise.allSettled：某个健康 fiber
+// 的 dispose 失败不再中止重载，也不进 warnings（只有 inactiveEntries 的失败会）。
+const settledDisposal = kernelVersion === '0.2.2-rc.1';
 
 // 执行安装树中的真实事务函数；只替换 Loader/IO 边界，不重写失败判定算法。
 function harness() {
@@ -85,8 +91,15 @@ test('Loader update failure still resumes entries and propagates the original er
   assert.equal(h.counts().resumed, 1);
 });
 
-test('a healthy fiber disposal failure cannot be reported as a successful reload', { skip: !native }, async () => {
+test('a healthy fiber disposal failure cannot be reported as a successful reload', { skip: !native || (settledDisposal ? '0.2.2 上游改用 Promise.allSettled，disposal 失败不再中止重载' : false) }, async () => {
   const h = harness();
   h.disposalFails(new Error('dispose failed'));
   await assert.rejects(h.reconcile(h.ctx, [], 'dsh'), /dispose failed/);
+});
+
+test('0.2.2 settled fiber disposal keeps the reload running instead of rejecting', { skip: !native || !settledDisposal }, async () => {
+  const h = harness();
+  h.disposalFails(new Error('dispose failed'));
+  assert.deepEqual(await h.reconcile(h.ctx, [], 'dsh'), []);
+  assert.equal(h.counts().updated, 1);
 });

@@ -21,6 +21,10 @@ const files = {
   remotes: 'dsh-api-remotes/lib/client.js', ui: 'dsh-client-ui-workspace/lib/client.js',
 };
 const source = (file: string) => readFileSync(new URL(file, root), 'utf8');
+// 客户端命令与菜单的形状随内核世代变化：0.2.1 的 React 组件面在 0.2.2 已改成数据式注册，
+// 这两条结构耦合的用例只对 0.2.1 有意义，0.2.2 由 session-delete-022.test.ts 覆盖。
+const kernelVersion: string = JSON.parse(source('dsh-workspace/package.json')).version;
+const legacyClient = kernelVersion !== '0.2.1-rc.2' ? '需要 0.2.1-rc.2 内核' : false;
 
 // 从官方缓存读取原始 MIT 产物；tar 仅用于测试夹具读取，不依赖系统 tar 或新增包。
 function original(file: string): string {
@@ -188,7 +192,7 @@ test('JSONL deletion stays inside the configured root and preserves the stable w
   assert.equal(claimed, false);
 });
 
-test('client command forwards the id and preserves host rejections', async () => {
+test('client command forwards the id and preserves host rejections', { skip: legacyClient }, async () => {
   let definition: any;
   runInNewContext(source(files.client), { window: { __ModuleLoader__: { load(value: any) { definition = value; } } } });
   const client = definition.factory((name: string) => {
@@ -206,7 +210,7 @@ test('client command forwards the id and preserves host rejections', async () =>
   await assert.rejects(command.deleteSession('s'), (error: any) => error.rpcError.code === 'workspace/session-active');
 });
 
-test('delete menu cancels without calling the host and preserves the external manager confirmation flow', async () => {
+test('delete menu cancels without calling the host and preserves the external manager confirmation flow', { skip: legacyClient }, async () => {
   const ui = source(files.ui);
   const start = ui.indexOf('    function DeleteSessionMenuItem(');
   const end = ui.indexOf('\n    }', start) + '\n    }'.length;

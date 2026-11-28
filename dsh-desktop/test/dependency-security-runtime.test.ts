@@ -34,15 +34,24 @@ async function exerciseMcp(config: any): Promise<number> {
   const { default: SystemPrompt } = await loadKernel('@deepseek-ai/dsh-system-prompt');
   const { default: ToolRuntime } = await loadKernel('@deepseek-ai/dsh-tools');
   const mcp = await import(pathToFileURL(requireTarget.resolve('@deepseek-ai/dsh-mcp-client')).href);
+  // 0.2.2 起工具执行器插件化（ctx.tools.setExecutor）：最小组合不再自带执行器，
+  // ctx.tools.execute 会抛 TOOL_EXECUTOR_UNAVAILABLE。旧内核没有这个包，允许缺席。
+  const nativeExecutor: any = await loadKernel('@deepseek-ai/dsh-tool-executor-native').catch(() => undefined);
   const ctx = new Context();
   try {
     await ctx.plugin(SystemPrompt);
     await ctx.plugin(ToolRuntime);
+    if (nativeExecutor) await ctx.plugin(nativeExecutor);
     await mcp.apply(ctx, { ...config, serverName: 'audit', toolCallTimeoutMs: 3000, failOnStartupError: true,
       reconnect: { enabled: false, initialDelayMs: 10, maxDelayMs: 50, maxAttempts: 1 } });
     assert.ok(ctx.tools.schemas().some((s: { name: string }) => s.name === 'mcp__audit__echo'));
-    const result = await ctx.tools.execute({ signal: new AbortController().signal,
-      callId: 'eac-security-audit-call', name: 'mcp__audit__echo', arguments: { text: 'audit-no-model' } });
+    const signal = new AbortController().signal;
+    // 0.2.2 起 ctx.tools.execute 只收批次（calls + JSON 字符串 arguments），返回按
+    // 调用顺序的 settlement；旧内核仍是单调用形状。
+    const result = nativeExecutor
+      ? (await ctx.tools.execute({ signal,
+          calls: [{ id: 'eac-security-audit-call', name: 'mcp__audit__echo', arguments: JSON.stringify({ text: 'audit-no-model' }) }] })).results[0].result
+      : await ctx.tools.execute({ signal, callId: 'eac-security-audit-call', name: 'mcp__audit__echo', arguments: { text: 'audit-no-model' } });
     assert.notEqual(result.isError, true);
     const actual = JSON.parse(result.content[0].text);
     assert.equal(actual.echo, 'audit-no-model');

@@ -47,7 +47,7 @@ permissions:
 env:
   NODE_VERSION: '24'
   PNPM_VERSION: '11.7.0'
-  KERNEL_VERSION: '0.2.0-rc.2'
+  KERNEL_VERSION: '0.2.2-rc.1'
   # 档位写死：见上方「为什么只做 lite」。接入 full 预置层后再改成变量。
   DISTRO: lite
 
