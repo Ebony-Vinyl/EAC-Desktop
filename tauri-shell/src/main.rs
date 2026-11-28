@@ -114,9 +114,10 @@ r.setAttribute('data-windows-titlebar','');\
 r.style.setProperty('--dsh-windows-titlebar-height',h);\
 r.setAttribute('data-dsh-title-bar-height','{height}');\
 r.style.setProperty('--dsh-title-bar-height',h);\
+r.style.setProperty('--dsh-title-bar-strip',h);\
 if(!document.getElementById('{style_id}')){{var s=document.createElement('style');\
 s.id='{style_id}';\
-s.textContent='html[data-dsh-title-bar-height][data-windows-titlebar] body{{padding-top:0 !important}}html[data-dsh-title-bar-height][data-windows-titlebar] [data-control-name=\"session-root\"]>[class*=frame]{{height:100% !important;max-height:100% !important}}';\
+s.textContent='html[data-dsh-title-bar-height][data-windows-titlebar] body{{padding-top:0 !important}}html[data-dsh-title-bar-height][data-windows-titlebar] [data-control-name=\"session-root\"]>[class*=frame]{{height:100% !important;max-height:100% !important}}html[data-dsh-title-bar-height]:not(.eac-shell):not([data-fullscreen]) [data-dsh-panel-host] [class$=\"_toggleCluster\"]{{top:calc(3px + max(var(--dsh-title-bar-height,36px),var(--dsh-title-bar-strip,0px)) + env(safe-area-inset-top,0px))}}html[data-dsh-title-bar-height]:not(.eac-shell):not([data-fullscreen]) [data-dsh-panel-host]>[class$=\"_panel\"]{{padding-top:max(var(--dsh-title-bar-height,36px),var(--dsh-title-bar-strip,0px))}}html[data-dsh-title-bar-height]:not(.eac-shell):not([data-fullscreen]) [data-dsh-dock-fallback][style*=\"top: 8px\"],html[data-dsh-title-bar-height]:not(.eac-shell):not([data-fullscreen]) [data-dsh-dock-fallback][style*=\"top: 4px\"]{{top:calc(var(--dsh-title-bar-height,36px) + 8px) !important}}';\
 (document.head||r).appendChild(s)}}\
 return true}};\
 if(!d()){{if(document.readyState==='loading'){{document.addEventListener('DOMContentLoaded',d,{{once:true}})}}else{{document.addEventListener('readystatechange',function h(){{if(d()){{document.removeEventListener('readystatechange',h)}}}})}}}}}}",
