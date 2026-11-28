@@ -124,9 +124,138 @@ function seedPackageVersions(seed: string, managedPackages: string[]): Record<st
   return versions;
 }
 
+/** 目标路径是否位于 root 之内（Windows 大小写不敏感）。 */
+function isInsidePath(target: string, root: string): boolean {
+  const normalize = (value: string) => (process.platform === 'win32' ? value.toLowerCase() : value);
+  const a = normalize(path.resolve(target));
+  const b = normalize(path.resolve(root));
+  return a === b || a.startsWith(b + path.sep);
+}
+
+/** 读取 junction/符号链接的目标并绝对化；失败返回 null。 */
+function linkTarget(link: string): string | null {
+  try {
+    return path.resolve(path.dirname(link), fs.readlinkSync(link));
+  } catch {
+    return null;
+  }
+}
+
+/** profile 共享闭包里的全部链接条目：[包名, 链接路径]。@scope 目录展开到二级。 */
+function listSharedLinks(shared: string): Array<[string, string]> {
+  const out: Array<[string, string]> = [];
+  for (const entry of fs.readdirSync(shared, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const full = path.join(shared, entry.name);
+    if (entry.name.startsWith('@') && entry.isDirectory() && !entry.isSymbolicLink()) {
+      for (const child of fs.readdirSync(full, { withFileTypes: true })) {
+        out.push([`${entry.name}/${child.name}`, path.join(full, child.name)]);
+      }
+      continue;
+    }
+    out.push([entry.name, full]);
+  }
+  return out;
+}
+
+/**
+ * 修复 profile 共享闭包（`<home>/profiles/node_modules`）：
+ *   1. 缺失的包补链接；
+ *   2. 悬空（目标已删）或指向别的安装目录的链接，改指当前安装闭包；
+ *   3. 当前闭包已不提供、且目标已消失的陈旧链接清掉；
+ *   4. 真实目录（pnpm 装进 profile 的用户包）一律不动。
+ *
+ * 根因：安装环境隔离把共享闭包做成指向 `$INSTDIR/node_modules` 的 junction，
+ * 卸载/换版本后整棵树悬空（实测 383 条全断），且旧代码只在 seed/adopt 时建链接，
+ * 不会自愈。这里让每次启动都可重入地修一遍，安装目录换了也能接上。
+ */
+export function repairHostClosure(home: string, root: string = APP_ROOT): { relinked: number; pruned: number } {
+  const modules = path.join(root, 'node_modules');
+  const shared = path.join(home, 'profiles', 'node_modules');
+  const result = { relinked: 0, pruned: 0 };
+  if (!fs.existsSync(modules)) return result;
+  fs.mkdirSync(shared, { recursive: true });
+
+  const wanted = new Set<string>();
+  for (const entry of fs.readdirSync(modules, { withFileTypes: true })) {
+    if (entry.name.startsWith('.')) continue;
+    const names = entry.name.startsWith('@')
+      ? fs.readdirSync(path.join(modules, entry.name)).map((name) => `${entry.name}/${name}`)
+      : [entry.name];
+    for (const name of names) {
+      const source = path.join(modules, ...name.split('/'));
+      if (!fs.existsSync(path.join(source, 'package.json'))) continue;
+      wanted.add(name);
+      const target = path.join(shared, ...name.split('/'));
+      let stat: fs.Stats | null = null;
+      try {
+        stat = fs.lstatSync(target);
+      } catch {
+        stat = null;
+      }
+      if (!stat) {
+        fs.mkdirSync(path.dirname(target), { recursive: true });
+        fs.symlinkSync(source, target, 'junction');
+        result.relinked += 1;
+        continue;
+      }
+      if (!stat.isSymbolicLink()) continue;
+      const resolved = linkTarget(target);
+      const dangling = !resolved || !fs.existsSync(resolved);
+      // 只处理"死链"和"指向另一个安装闭包"的链。用户/开发态用 link: 指到仓库外的
+      // 真实目录时目标有效、且不在 dsh-desktop\node_modules 下，一律不动
+      // （healProfileModuleShadowing 对这类链接同样保留）。
+      const foreignInstall = !!resolved && /[\\/]dsh-desktop[\\/]node_modules[\\/]/i.test(resolved) && !isInsidePath(resolved, root);
+      if (!dangling && !foreignInstall) continue;
+      fs.unlinkSync(target);
+      fs.symlinkSync(source, target, 'junction');
+      result.relinked += 1;
+    }
+  }
+
+  for (const [name, link] of listSharedLinks(shared)) {
+    if (wanted.has(name)) continue;
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(link);
+    } catch {
+      continue;
+    }
+    if (!stat.isSymbolicLink()) continue;
+    const resolved = linkTarget(link);
+    // 无法解析目标时保守保留；目标仍可用时保留。
+    if (!resolved || fs.existsSync(resolved)) continue;
+    // 只有"当前安装闭包里的陈旧条目"或"指向另一份安装闭包"才可清理。
+    // 外部用户 link:、网络盘/移动硬盘暂时不可达的目标一律保留，
+    // 不能因为 existsSync=false 就删除用户链接。
+    const installLocal = isInsidePath(resolved, root);
+    const foreignInstall = /[\\/]dsh-desktop[\\/]node_modules[\\/]/i.test(resolved);
+    if (!installLocal && !foreignInstall) continue;
+    try {
+      fs.unlinkSync(link);
+      result.pruned += 1;
+    } catch {
+      // 非空目录等异常留给下一次启动；不能因此中断引导。
+    }
+  }
+  return result;
+}
+
+/** lstat 判存在：悬空 junction 也算存在，避免 bind 重复 symlink 抛 EEXIST。 */
+function entryExistsNoFollow(target: string): boolean {
+  try {
+    fs.lstatSync(target);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
 export function bindFullHostClosure(home: string, root: string = APP_ROOT): void {
   const modules = path.join(root, 'node_modules');
   const shared = path.join(home, 'profiles', 'node_modules');
+  if (!fs.existsSync(modules)) return;
   for (const entry of fs.readdirSync(modules, { withFileTypes: true })) {
     if (entry.name.startsWith('.')) continue;
     const names = entry.name.startsWith('@')
@@ -135,9 +264,14 @@ export function bindFullHostClosure(home: string, root: string = APP_ROOT): void
     for (const name of names) {
       const source = path.join(modules, ...name.split('/'));
       const target = path.join(shared, ...name.split('/'));
-      if (!fs.existsSync(path.join(source, 'package.json')) || fs.existsSync(target)) continue;
+      if (!fs.existsSync(path.join(source, 'package.json')) || entryExistsNoFollow(target)) continue;
       fs.mkdirSync(path.dirname(target), { recursive: true });
-      fs.symlinkSync(source, target, 'junction');
+      try {
+        fs.symlinkSync(source, target, 'junction');
+      } catch (error) {
+        // 并发进程可能在我们 lstat 之后抢先建链接；EEXIST 交给 repair 下一次处理。
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+      }
     }
   }
 }

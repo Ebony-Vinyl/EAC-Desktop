@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
-const { seedFullProfile, adoptFullProfile, packOwnsPackage, packOwnsPatchEntry, bindFullHostClosure } = require('../lib/desktop/full-composition.js');
+const { seedFullProfile, adoptFullProfile, packOwnsPackage, packOwnsPatchEntry, bindFullHostClosure, repairHostClosure } = require('../lib/desktop/full-composition.js');
 
 function fixture() {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'full-eac-test-'));
@@ -231,4 +231,70 @@ test('issue #464: a published full package receipt without versions migrates to 
   } finally { fs.rmSync(f.root, { recursive: true, force: true }); }
 });
 
+test('repairHostClosure relinks dangling/foreign-install links, keeps real dirs and external dev links, and is idempotent', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'eac-closure-'));
+  const installA = path.join(tmp, 'install-a');
+  const installB = path.join(tmp, 'install-b');
+  const home = path.join(tmp, 'home');
+  const shared = path.join(home, 'profiles', 'node_modules');
+  const pkg = (installRoot: string, name: string) => {
+    const dir = path.join(installRoot, 'dsh-desktop', 'node_modules', ...name.split('/'));
+    fs.mkdirSync(dir, {recursive: true});
+    fs.writeFileSync(path.join(dir, 'package.json'), '{}');
+  };
+  try {
+    pkg(installA, 'pkg-a');
+    pkg(installA, '@scope/pkg-b');
+    pkg(installB, 'pkg-c');
+    fs.mkdirSync(shared, {recursive: true});
+    // 悬空：旧安装目录已删
+    fs.symlinkSync(path.join(tmp, 'deleted', 'dsh-desktop', 'node_modules', 'pkg-a'), path.join(shared, 'pkg-a'), 'junction');
+    // 指向另一个安装的闭包
+    fs.mkdirSync(path.join(shared, '@scope'), {recursive: true});
+    fs.symlinkSync(path.join(installB, 'dsh-desktop', 'node_modules', 'pkg-c'), path.join(shared, '@scope', 'pkg-b'), 'junction');
+    // 真实目录（用户包）与外部 link:：都不得动
+    fs.mkdirSync(path.join(shared, 'pkg-d'), {recursive: true});
+    fs.writeFileSync(path.join(shared, 'pkg-d', 'package.json'), '{"user":true}');
+    const dev = path.join(tmp, 'dev-pkg');
+    fs.mkdirSync(dev, {recursive: true});
+    fs.writeFileSync(path.join(dev, 'package.json'), '{"dev":true}');
+    fs.symlinkSync(dev, path.join(shared, 'pkg-dev'), 'junction');
+    // 当前闭包不再提供、目标已消失：只有这种安装闭包内的死链可清理
+    fs.symlinkSync(path.join(tmp, 'gone', 'pkg-old'), path.join(shared, 'pkg-old'), 'junction');
+    const rootA = path.join(installA, 'dsh-desktop');
+    fs.symlinkSync(path.join(rootA, 'node_modules', 'pkg-stale'), path.join(shared, 'pkg-stale'), 'junction');
 
+    const linkExists = (value: string) => {try {fs.lstatSync(value); return true;} catch {return false;}};
+    assert.deepEqual(repairHostClosure(home, rootA), {relinked: 2, pruned: 1});
+    assert.equal(fs.existsSync(path.join(shared, 'pkg-a', 'package.json')), true, '悬空链接应指向当前闭包');
+    assert.equal(fs.existsSync(path.join(shared, '@scope', 'pkg-b', 'package.json')), true, '异安装链接应改指当前闭包');
+    assert.equal(fs.readFileSync(path.join(shared, 'pkg-d', 'package.json'), 'utf8'), '{"user":true}', '真实目录不得改动');
+    assert.equal(fs.readFileSync(path.join(shared, 'pkg-dev', 'package.json'), 'utf8'), '{"dev":true}', '外部 link: 不得被抢改');
+    assert.equal(linkExists(path.join(shared, 'pkg-old')), true, '外部不可达链接必须保留，不能当死链删除');
+    assert.equal(linkExists(path.join(shared, 'pkg-stale')), false, '当前安装闭包内的陈旧链接应被清理');
+    assert.deepEqual(repairHostClosure(home, rootA), {relinked: 0, pruned: 0}, '重入应无操作');
+  } finally {
+    fs.rmSync(tmp, {recursive: true, force: true});
+  }
+});
+
+test('bindFullHostClosure tolerates a dangling existing junction instead of throwing EEXIST', () => {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'eac-closure-bind-'));
+  const install = path.join(tmp, 'install');
+  const home = path.join(tmp, 'home');
+  const root = path.join(install, 'dsh-desktop');
+  const source = path.join(root, 'node_modules', 'pkg-a');
+  const shared = path.join(home, 'profiles', 'node_modules');
+  try {
+    fs.mkdirSync(source, {recursive: true});
+    fs.writeFileSync(path.join(source, 'package.json'), '{}');
+    fs.mkdirSync(shared, {recursive: true});
+    const target = path.join(shared, 'pkg-a');
+    fs.symlinkSync(path.join(tmp, 'deleted', 'dsh-desktop', 'node_modules', 'pkg-a'), target, 'junction');
+    assert.doesNotThrow(() => bindFullHostClosure(home, root), '悬空 junction 已存在时 bind 不得抛 EEXIST');
+    assert.deepEqual(repairHostClosure(home, root), {relinked: 1, pruned: 0});
+    assert.equal(fs.realpathSync(target), fs.realpathSync(source), 'repair 后应指向当前安装闭包');
+  } finally {
+    fs.rmSync(tmp, {recursive: true, force: true});
+  }
+});
