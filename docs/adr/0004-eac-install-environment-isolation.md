@@ -35,7 +35,8 @@ const runtime = dpx.runtimeEnvironment(paths, inherited, { name: record.name, re
 ### 路径布局
 
 ```text
-<产品数据根>                                Windows: %LOCALAPPDATA%\Deepseek Harness EAC
+<产品数据根>                                Windows 安装版: %LOCALAPPDATA%\Deepseek Harness EAC
+                                            Windows 便携版: <便携目录>\data（ADR 0013）
 ├── dpx\                                    ← dpx storageRoot
 │   └── dsh-environments\
 │       └── eac-beta\                       ← 环境根（dpx 的 DPXEnvironment）
@@ -44,6 +45,8 @@ const runtime = dpx.runtimeEnvironment(paths, inherited, { name: record.name, re
 │           ├── home\  appdata\  localappdata\  tmp\  xdg-*\  npm-prefix\  workspace\
 └── DSH\DPX\registry.json                   ← 机器级注册表（DPX_HOME）
 ```
+
+便携版的产品数据根选择、旧数据导入与换路径搬迁见 [ADR 0013](0013-portable-data-root.md)。
 
 非 Windows 在产品数据根下使用**同样布局**（基目录换成 `$XDG_DATA_HOME`，注册表换成 `$XDG_STATE_HOME/dsh-dpx`）。
 

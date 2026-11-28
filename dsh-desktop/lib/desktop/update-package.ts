@@ -41,7 +41,7 @@ export async function hashFile(file: string, signal?: AbortSignal): Promise<stri
   for await (const chunk of fs.createReadStream(file,signal ? {signal} : {})) hash.update(chunk);
   return hash.digest('hex');
 }
-export async function treeFiles(root: string, signal?: AbortSignal): Promise<Array<{path: string; size: number}>> {
+export async function treeFiles(root: string, signal?: AbortSignal, skipTopLevel: readonly string[] = []): Promise<Array<{path: string; size: number}>> {
   const entries: Array<{path: string; size: number}> = [];
   await plainPath(root);
   const walk = async (relative: string): Promise<void> => {
@@ -50,7 +50,12 @@ export async function treeFiles(root: string, signal?: AbortSignal): Promise<Arr
     const stat = await fsp.lstat(location);
     if (stat.isSymbolicLink()) throw new Error('update-package-tree-link');
     if (stat.isDirectory()) {
-      for (const name of (await fsp.readdir(location)).sort()) await walk(relative ? relative + '/' + name : name);
+      for (const name of (await fsp.readdir(location)).sort()) {
+        // 便携数据目录是安装树内的用户数据，不属于程序交换面：既不参与清单，
+        // 也不能因为里面的 junction/符号链接把更新准备整树拒绝掉。
+        if (!relative && skipTopLevel.includes(name)) continue;
+        await walk(relative ? relative + '/' + name : name);
+      }
     } else if (stat.isFile()) entries.push({path: safeRelative(relative), size: stat.size});
     else throw new Error('update-package-special-file');
   };
@@ -81,13 +86,13 @@ export async function verifyReleaseTree(root: string, manifest: ReleaseFiles, ad
   if (pkg.version !== manifest.version) throw new Error('update-package-version-mismatch');
 }
 
-export async function treeEmptyDirectories(root: string): Promise<string[]> {
+export async function treeEmptyDirectories(root: string, skipTopLevel: readonly string[] = []): Promise<string[]> {
   const directories: string[] = [];
   const visit = async (relative: string): Promise<void> => {
     const location = path.join(root,...relative.split('/').filter(Boolean));
     await plainPath(location); const stat = await fsp.lstat(location);
     if (!stat.isDirectory()) return;
-    const names = await fsp.readdir(location);
+    const names = (await fsp.readdir(location)).filter(name => relative || !skipTopLevel.includes(name));
     if (relative && !names.length) directories.push(safeRelative(relative));
     for (const name of names) await visit(relative ? relative+'/'+name : name);
   };

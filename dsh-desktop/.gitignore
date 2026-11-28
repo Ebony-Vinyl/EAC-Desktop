@@ -108,6 +108,7 @@ build/*
 /scripts/fetch-pnpm.js
 
 # Generated complete-package updater modules
+/lib/desktop/portable-data.js
 /lib/desktop/update-sources.js
 /lib/desktop/update-signature.js
 /lib/desktop/update-platform.js

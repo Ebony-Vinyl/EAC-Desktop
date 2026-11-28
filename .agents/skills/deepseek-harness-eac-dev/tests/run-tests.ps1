@@ -1,4 +1,4 @@
-﻿param(
+param(
     [Parameter(Mandatory = $false)]
     [string]$SkillPath,
 
@@ -205,6 +205,22 @@ Assert-Fixture -Name 'tauri-packaging-root-files' -Condition (
     'test/stage-platform-prune.test.ts' -in @($tauriPackaging.data.suggestedTests) -and
     @($tauriPackaging.data.unmatchedCodeFiles).Count -eq 0
 ) -Failure ($tauriPackaging.raw)
+
+$portableDataPackaging = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
+    '-RepoPath', $repoRoot,
+    '-FilesJsonBase64',
+    (ConvertTo-FilesJsonBase64 '["tauri-shell/portable-unzip-hint.mjs","dsh-desktop/lib/desktop/portable-data.ts","dsh-desktop/test/portable-data.test.ts"]')
+)
+Assert-Fixture -Name 'portable-data-packaging-classification' -Condition (
+    $portableDataPackaging.exitCode -eq 0 -and
+    $portableDataPackaging.data.status -eq 'ready' -and
+    $portableDataPackaging.data.minimumValidation -eq 'package' -and
+    'packaging' -in @($portableDataPackaging.data.matchedRules) -and
+    'client-update' -in @($portableDataPackaging.data.matchedRules) -and
+    'test/portable-data.test.ts' -in @($portableDataPackaging.data.suggestedTests) -and
+    'test/update-portable.test.ts' -in @($portableDataPackaging.data.suggestedTests) -and
+    @($portableDataPackaging.data.unmatchedCodeFiles).Count -eq 0
+) -Failure ($portableDataPackaging.raw)
 
 $clientFullUpdate = Invoke-JsonFixture -Script 'classify-change.ps1' -Arguments @(
     '-RepoPath', $repoRoot,

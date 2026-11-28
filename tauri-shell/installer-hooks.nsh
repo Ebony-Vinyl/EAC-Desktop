@@ -856,15 +856,21 @@ FunctionEnd
     ${If} $R6 == 1
       DetailPrint "EAC: 检测到其它版本安装，保留共享环境（复选框只删本版本数据）"
     ${Else}
-      DetailPrint "EAC: 最后一份安装，删除共享产品数据根"
-      Push $R1
-      StrCpy $R1 "${DSH_PRODUCT_DATA_DIR}"
-      Call un.DshRemoveTreeNoFollow
-      RMDir "${DSH_PRODUCT_DATA_DIR}"
-      StrCpy $R1 "${DSH_PRODUCT_ROAMING_DIR}"
-      Call un.DshRemoveTreeNoFollow
-      RMDir "${DSH_PRODUCT_ROAMING_DIR}"
-      Pop $R1
+      ; 便携版仍处于「沿用旧数据根」过渡模式时，共享环境是它的活数据；
+      ; 平台由 portable-data.ts 写入，卸载器只读不改，见到就保留。
+      ${If} ${FileExists} "${DSH_PRODUCT_DATA_DIR}\eac-portable-share.json"
+        DetailPrint "EAC: 检测到便携版仍在使用共享数据根，保留"
+      ${Else}
+        DetailPrint "EAC: 最后一份安装，删除共享产品数据根"
+        Push $R1
+        StrCpy $R1 "${DSH_PRODUCT_DATA_DIR}"
+        Call un.DshRemoveTreeNoFollow
+        RMDir "${DSH_PRODUCT_DATA_DIR}"
+        StrCpy $R1 "${DSH_PRODUCT_ROAMING_DIR}"
+        Call un.DshRemoveTreeNoFollow
+        RMDir "${DSH_PRODUCT_ROAMING_DIR}"
+        Pop $R1
+      ${EndIf}
     ${EndIf}
   ${EndIf}
 !macroend

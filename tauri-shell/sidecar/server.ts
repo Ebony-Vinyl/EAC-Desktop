@@ -55,6 +55,33 @@ const mount = (name: string): Mod => require(LIB(name)) as Mod;
 // 失败语义是 **fail closed**：初始化不了就退场，绝不回退宿主 `~/.dsh` ——
 // 那正是旧 profile 污染（旧插件 pending / 白屏）的根因。退场由壳层 reader
 // 广播 boot.server-died，走既有恢复/诊断链。
+// ---- 便携数据根准备（P2/P3/P4）：必须早于 ensureEacEnvironment --------------
+//
+// L1 只决定「模式 + 目标根 + 来源根」并在原生对话框里取得用户选择；复制、
+// 搬迁、旧元数据隔离全部在这里完成（L2）。失败即 fail closed：旧数据保持
+// 原样，不静默改用另一个根。
+const portableMode = process.env.DSH_EAC_PORTABLE === '1';
+let portableRuntime: import('../../dsh-desktop/lib/desktop/portable-data').PortableRuntime | null = null;
+const portableDataModule = (): typeof import('../../dsh-desktop/lib/desktop/portable-data') => require(LIB('portable-data')) as typeof import('../../dsh-desktop/lib/desktop/portable-data');
+if (portableMode && process.env.DSH_EAC_DATA_ROOT) {
+  try {
+    portableRuntime = portableDataModule().preparePortableData({
+      dataRoot: process.env.DSH_EAC_DATA_ROOT,
+      programRoot: DSH_DESKTOP_ROOT,
+      installRoot: process.env.DSH_SHELL_EXE ? path.dirname(process.env.DSH_SHELL_EXE) : path.dirname(DSH_DESKTOP_ROOT),
+      mode: process.env.DSH_EAC_PORTABLE_MODE,
+      sourceRoot: process.env.DSH_EAC_PORTABLE_SOURCE,
+      channel: process.env.DSH_EAC_CHANNEL,
+      log,
+    });
+    say('[portable] 数据准备完成 mode=' + portableRuntime.mode + ' root=' + portableRuntime.dataRoot
+      + (portableRuntime.migrated ? '（已迁移/隔离旧数据）' : ''));
+  } catch (error) {
+    say('[portable] 数据准备失败（fail closed，旧数据保持原样）: ' + String((error as Error)?.stack || error));
+    process.exit(3);
+  }
+}
+
 const isolatedMode = Boolean(process.env.DSH_EAC_DATA_ROOT || process.env.DSH_EAC_DPX_ROOT);
 type EnsuredEnvironment = import('../../dsh-desktop/lib/desktop/environment').EnsuredEnvironment;
 
@@ -92,6 +119,14 @@ if (isolatedMode) {
   say('[environment] 隔离已生效：name=' + ensuredEnvironment.name
     + ' root=' + ensuredEnvironment.paths.root
     + (ensuredEnvironment.rootExistedBefore ? '（复用既有环境实例）' : '（新建环境实例）'));
+  if (portableRuntime) {
+    try {
+      portableDataModule().finishPortableData({...portableRuntime, ensured: ensuredEnvironment});
+      say('[portable] 数据所有权/指针已更新 mode=' + portableRuntime.mode);
+    } catch (error) {
+      say('[portable] 数据所有权/指针写入失败（不影响本次启动）: ' + String((error as Error)?.message || error));
+    }
+  }
 }
 
 const procMod = mount('proc');
@@ -350,7 +385,8 @@ const { ClientUpdate: ClientUpdateClass } = require(LIB('client-update')) as typ
 const { updateTarget } = require(LIB('update-platform')) as typeof import('../../dsh-desktop/lib/desktop/update-platform');
 const {hostIdentity} = require(LIB('update-host')) as typeof import('../../dsh-desktop/lib/desktop/update-host');
 const {UpdateHostControl} = require(LIB('update-host-control')) as typeof import('../../dsh-desktop/lib/desktop/update-host-control');
-const {captureBackup, assertInstallBoundary, writeDurableJson, protectedLinkTargets} = require(LIB('update-backup')) as typeof import('../../dsh-desktop/lib/desktop/update-backup');
+const {captureBackup, assertInstallBoundary, assertExchangeBoundary, writeDurableJson, protectedLinkTargets} = require(LIB('update-backup')) as typeof import('../../dsh-desktop/lib/desktop/update-backup');
+const {PORTABLE_ITEMS} = require(LIB('update-package')) as typeof import('../../dsh-desktop/lib/desktop/update-package');
 const updateStateDir = path.join(userDataDir, 'client-updates');
 const updateHost = new UpdateHostControl(updateStateDir, dshHome, desktopProfileFn());
 let uiCheckpoint: {nonce: string; resolve(value: Record<string, unknown>): void} | null = null;
@@ -456,14 +492,19 @@ const clientUpdate: ClientUpdate = new ClientUpdateClass({
       const configRoot = process.env.DSH_SHELL_CONFIG_ROOT;
       if (!webviewRoot || !configRoot) throw new Error('update-shell-storage-unidentified');
       roots.push({id: 'shell-settings', path: path.join(configRoot, 'window-state.json'), required: false});
-      await assertInstallBoundary(installPath, [...roots.map(root => root.path), webviewRoot, configRoot, process.env.DSH_SHELL_GUEST_ROOT || '']);
+      // 便携数据根允许位于安装树内的非交换目录（如 <install>/data）；安装版
+      // 仍要求所有数据根在安装树之外。
+      const assertBoundary = (protectedPaths: string[]): Promise<void> => installKind === 'portable'
+        ? assertExchangeBoundary(installPath, protectedPaths, PORTABLE_ITEMS)
+        : assertInstallBoundary(installPath, protectedPaths);
+      await assertBoundary([...roots.map(root => root.path), webviewRoot, configRoot, process.env.DSH_SHELL_GUEST_ROOT || '']);
       const receipt = await updateHost.prepare(kernel, transactionId, signal,
         (proc, timeout) => (procMod.waitForProcExit as (p: import('node:child_process').ChildProcess, t: number) => Promise<boolean>)(proc, timeout));
-      await assertInstallBoundary(installPath, receipt.workspaceRoots);
+      await assertBoundary(receipt.workspaceRoots);
       progress('正在备份持久数据');
       const backup = await captureBackup(roots, path.join(transactionDir, 'backup-' + require('node:crypto').randomUUID()), signal);
       const userLinkTargets = protectedLinkTargets(backup.manifest,dshHome,DSH_DESKTOP_ROOT);
-      await assertInstallBoundary(installPath, userLinkTargets);
+      await assertBoundary(userLinkTargets);
       await writeDurableJson(path.join(transactionDir, 'data-binding.json'), {receipt, environment: ensuredEnvironment?.record || null,
         paths: ensuredEnvironment?.paths || null, protectedWorkspaceRoots: receipt.workspaceRoots, protectedLinkTargets: userLinkTargets, backupDirectory: backup.directory, dshHome, profile: desktopProfileFn(), userDataDir, webPort: Number(loadSettings().webPort) || 0});
       if (typeof receipt.sessionDigest !== 'string') throw new Error('update-session-read-unavailable');
@@ -474,7 +515,8 @@ const clientUpdate: ClientUpdate = new ClientUpdateClass({
       for (const key of ['DSH_EAC_DATA_ROOT', 'DSH_EAC_CHANNEL', 'DSH_EAC_WEBVIEW_DATA_DIR', 'DSH_EAC_SHELL_CONFIG_DIR', 'DSH_EAC_GUEST_DATA_DIR', 'DPX_HOME']) if (process.env[key]) launchEnv[key] = process.env[key]!;
       if (installKind === 'portable') {
         portableJournal = await preparePortable({installRoot: path.dirname(shellExe), stageRoot, transactionId,
-          version: plan.update.manifest.version, target: plan.update.artifact.target, dataBinding: plan.binding, signal, protectedRoots});
+          version: plan.update.manifest.version, target: plan.update.artifact.target, dataBinding: plan.binding, signal, protectedRoots,
+          ...(process.env.DSH_EAC_DATA_ROOT ? {dataRoot: process.env.DSH_EAC_DATA_ROOT} : {})});
         progress('正在等待独立更新程序接管');
         helper = await startPortableHelper({journal: portableJournal, packageFile: plan.packageFile, artifact: plan.update.artifact,
           trustedKey: updateDefaults.trustedKeys[plan.update.keyId]!, signal, binding: plan.binding, owners: [shellPid, process.pid], dataBackupDirectory: backup.directory, launchEnv});

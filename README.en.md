@@ -172,9 +172,9 @@ EAC organizes desktop data in **separate DPX environments**, using the `web-desk
     └── workspace/                # environment workspace
 ```
 
-Windows defaults to `%LOCALAPPDATA%\Deepseek Harness EAC`; other platforms derive their system data directory. Host `~/.dsh` is detected and reported, not automatically migrated, deleted or overwritten.
+Windows defaults to `%LOCALAPPDATA%\Deepseek Harness EAC`; other platforms derive their system data directory. **The portable build (`.dsh-portable` next to the executable) uses `<portable>\data` as its product data root** and keeps the WebView2 profile, window state, locale state and browser guest profiles inside it, so product data, configuration, logs and browser profiles no longer live on the C: drive. After moving the portable folder, the first launch asks whether to relocate the data or start empty; on a machine with an installed copy, the first portable launch asks whether to import the existing data as a copy (the source is left untouched). Host `~/.dsh` is detected and reported, not automatically migrated, deleted or overwritten.
 
-Quit the application before backing up the actual product data root and separate project directories. Portable describes the application distribution format; environment configuration determines where data lives.
+Quit the application before backing up the actual product data root and separate project directories. Portable data follows the `data\` folder; program updates never touch it, and moving the portable folder must go through the relocation prompt instead of moving `data\` or replacing only the exe.
 
 DPX redirects default paths and environment variables; **it does not provide filesystem sandboxing**. Operating-system permissions still govern access to explicit absolute paths. See [environment.ts](dsh-desktop/lib/desktop/environment.ts).
 

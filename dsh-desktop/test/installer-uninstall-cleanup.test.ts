@@ -11,7 +11,9 @@ import {spawn} from 'node:child_process';
 //     故 hooks 增加 NSIS_HOOK_POSTUNINSTALL 把官方语义补到产品数据根；
 //   - 勾选（$DeleteAppDataCheckboxState = 1）才删；未勾选 / 静默卸载一律保留；
 //   - 数据根内的 profiles\node_modules 是指向安装目录的 junction，RmDir /r 不得跟进
-//     目标（canary 目录钉住这条，防卸载误删安装树之外的用户文件）。
+//     目标（canary 目录钉住这条，防卸载误删安装树之外的用户文件）；
+//   - 数据根本身也可能是 junction（便携/迁移现场），只摘链接不枚举目标；
+//   - 便携版仍在共享旧数据根时留下 eac-portable-share.json，卸载器见到必须保留。
 
 const makensis=process.env.EAC_TEST_MAKENSIS||path.join(os.homedir(),'AppData/Local/tauri/nsis-3.11/makensis.exe');
 const hooks=path.resolve(import.meta.dirname,'../../tauri-shell/installer-hooks.nsh');
@@ -25,7 +27,7 @@ function execute(file:string,args:string[]):Promise<{code:number|null;output:str
  });
 }
 
-async function fixture(t:any,appDataState:0|1,assumeLastInstall=false,options:{rootJunction?:boolean;scanRoot?:string}={}){
+async function fixture(t:any,appDataState:0|1,assumeLastInstall=false,options:{rootJunction?:boolean;scanRoot?:string;portableShare?:boolean}={}){
  const root=await fs.mkdtemp(path.join(os.tmpdir(),'eac-nsis-uninst-'));
  t.after(async()=>{const resolved=path.resolve(root);assert.equal(path.dirname(resolved),path.resolve(os.tmpdir()));assert.ok(path.basename(resolved).startsWith('eac-nsis-uninst-'));await fs.rm(resolved,{recursive:true,force:true});});
 
@@ -44,6 +46,7 @@ async function fixture(t:any,appDataState:0|1,assumeLastInstall=false,options:{r
   await fs.mkdir(dataDir,{recursive:true});
   await fs.writeFile(path.join(dataDir,'marker.txt'),'user data');
  }
+ if(options.portableShare)await fs.writeFile(path.join(dataDir,'eac-portable-share.json'),JSON.stringify({schemaVersion:1,product:'eac-desktop',reason:'portable-pointer',portableRoot:path.join(root,'portable'),updatedAt:'2026-11-24T00:00:00.000Z'}));
  await fs.mkdir(path.join(dataDir,'profiles','node_modules'),{recursive:true});
  await fs.mkdir(roamingDir,{recursive:true});
  await fs.writeFile(path.join(roamingDir,'locale-state.json'),'{}');
@@ -137,4 +140,13 @@ test('InstallLocation 为空的其它安装登记会保守保留共享数据',{s
  const f=await fixture(t,1,false,{scanRoot});
  assert.equal(existsSync(path.join(f.dataDir,'marker.txt')),true,'存在登记不全的其它安装时不得清理共享数据');
  assert.equal(existsSync(path.join(f.canary,'canary.txt')),true);
+});
+
+test('便携版仍在使用共享数据根时，最后一份安装的卸载也不删除它',{skip:unavailable},async t=>{
+ // 便携版沿用旧 C 盘根时会在该根写 eac-portable-share.json；卸载器见到必须保留，
+ // 否则会把仍在运行的便携数据一起删掉。
+ const f=await fixture(t,1,true,{portableShare:true});
+ assert.equal(existsSync(path.join(f.dataDir,'marker.txt')),true,'存在共享标记时产品数据根必须保留');
+ assert.equal(existsSync(path.join(f.dataDir,'eac-portable-share.json')),true);
+ assert.equal(existsSync(f.roamingDir),true,'共享标记场景下 Roaming 目录也保留');
 });

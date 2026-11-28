@@ -29,7 +29,7 @@ function createStageFixture(): string {
     'plugin-copy.js', 'bundle-identity.js']) {
     writeFileSync(join(desktop, 'lib', file), 'module.exports = {};\n');
   }
-  for (const file of ['proc.js', 'platform.js', 'runtime-paths.js', 'package-manager.js', 'plugin-remove.js', 'profile.js', 'full-composition.js', 'runtime-patches.js', 'boot-server.js',
+  for (const file of ['proc.js', 'platform.js', 'runtime-paths.js', 'package-manager.js', 'plugin-remove.js', 'environment.js', 'portable-data.js', 'profile.js', 'full-composition.js', 'runtime-patches.js', 'boot-server.js',
     // v6 Task 3.3：插件治理三件套 + lib/desktop 依赖
     'guard-box.js', 'companion-sync.js', 'plugin-ops.js', 'install-profile.js', 'plugin-sync-registry.js',
     // v6 Task 3.3 阶段 3：files.* 白名单根
@@ -75,8 +75,8 @@ test('staged runtime verifier accepts the minimal runtime closure', () => {
   try {
     const result = verifyStagedRuntime(root);
     assert.equal(result.bundle.ok, true);
-    // 包含 profile 顶层依赖 full-composition.js。
-    assert.equal(result.requiredFiles, 44);
+    // 包含 profile 顶层依赖 full-composition.js 与便携数据模块 environment/portable-data。
+    assert.equal(result.requiredFiles, 46);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

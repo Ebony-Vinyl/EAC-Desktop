@@ -31,7 +31,7 @@
         @{
             Name = 'client-update'
             Domain = 'updates-packaging'
-            Pattern = '^dsh-desktop/test/fixtures/nsis-repair-dialog-probe\.ps1$|native-update-relay|create-update-manifest|client-updater|lib/desktop/(client-update|update-(sources|signature|platform|backup|host|host-control|data-binding|package|portable|archive|restart|nsis|linux|appimage|helper-process|process-owners))|client-update-defaults\.json$|^tauri-shell/src/(client-update\.html|update-ui-checkpoint\.js|update-boot-ui\.js)$|update-smoke'
+            Pattern = '^dsh-desktop/test/fixtures/nsis-repair-dialog-probe\.ps1$|native-update-relay|create-update-manifest|client-updater|lib/desktop/(client-update|portable-data|update-(sources|signature|platform|backup|host|host-control|data-binding|package|portable|archive|restart|nsis|linux|appimage|helper-process|process-owners))|client-update-defaults\.json$|^tauri-shell/src/(client-update\.html|update-ui-checkpoint\.js|update-boot-ui\.js)$|update-smoke'
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(
@@ -352,7 +352,7 @@
         @{
             Name = 'packaging'
             Domain = 'updates-packaging'
-            Pattern = '^tauri-shell/distro\.mjs$|stage-resources|stage-platform-(?:cache|prune)|stage-node-modules|audit-linux-bundle|name-lite-installers|lite-artifact-names|make-portable|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
+            Pattern = '^tauri-shell/distro\.mjs$|stage-resources|stage-platform-(?:cache|prune)|stage-node-modules|audit-linux-bundle|name-lite-installers|lite-artifact-names|make-portable|portable-unzip-hint|portable-data|tauri(?:\.[^.]+)?\.conf\.json|^tauri-shell/gen/schemas/.*\.json$|installer|electron-builder|bundle-integrity|verify-dist'
             Reference = 'references/updates-and-packaging.md'
             Level = 'package'
             Tests = @(

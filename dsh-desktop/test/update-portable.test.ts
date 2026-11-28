@@ -48,8 +48,9 @@ import crypto from 'node:crypto';
 import {spawn} from 'node:child_process';
 import {createRequire} from 'node:module';
 const require=createRequire(import.meta.url);
-const {makeReleaseFiles,parseReleaseFiles,verifyReleaseTree,safeRelative}=require('../lib/desktop/update-package.js');
-const {preparePortable,exchangePortable,recoverPortable,readPortableJournal}=require('../lib/desktop/update-portable.js');
+const {makeReleaseFiles,parseReleaseFiles,verifyReleaseTree,safeRelative,PORTABLE_ITEMS}=require('../lib/desktop/update-package.js');
+const {preparePortable,exchangePortable,recoverPortable,readPortableJournal,portableDataTopLevel}=require('../lib/desktop/update-portable.js');
+const {assertExchangeBoundary}=require('../lib/desktop/update-backup.js');
 const {inspectPortableArchive,extractPortableArchive}=require('../lib/desktop/update-archive.js');
 const TARGET='windows-x86_64-portable';
 const BASE_FILES=['dsh-eac-shell.exe','.dsh-portable','sidecar/server.js','sidecar/bridge.js','dpx/src/index.js','ui-skin-manager/resolved/system.default/snapshot.json'];
@@ -178,8 +179,46 @@ test('empty user directories survive the exchange and directory-to-file conflict
  await assert.rejects(prepare(g),/user-file-conflict/);assert.equal(await version(g.install),'6.0.0');
 });
 
-async function helperFixture(t:any,variant='',nativeShell?:Buffer){
+test('portable data inside the install tree stays outside the exchange surface',{skip:process.platform!=='win32'},async t=>{
+ // issue #477：便携数据根 = <install>/data。它不是 PORTABLE_ITEMS 交换项，
+ // prepare 必须跳过它，交换后原样保留，且不能进入 preserved 清单（否则每次
+ // 更新都会哈希/复制 GB 级用户数据）。
+ const f=await fixture(t);const data=path.join(f.install,'data');
+ await fs.mkdir(path.join(data,'dpx','dsh-environments','eac-stable'),{recursive:true});
+ await fs.writeFile(path.join(data,'session.json'),'便携 会话');
+ const journal=await preparePortable({installRoot:f.install,stageRoot:f.stage,transactionId:crypto.randomUUID(),version:'6.0.1',target:TARGET,dataBinding:{home:data},protectedRoots:[data],dataRoot:data});
+ assert.equal(journal.preserved.length,0,'data 不是交换面，不能进入 preserved');
+ assert.ok(!journal.items.some((item:any)=>item.name==='data'));
+ await exchangePortable(journal,async()=>true,async()=>true);
+ assert.equal(await version(f.install),'6.0.1');
+ assert.equal(await fs.readFile(path.join(data,'session.json'),'utf8'),'便携 会话');
+ assert.ok(!(await fs.stat(path.join(journal.transactionDir,'old','data')).then(()=>true,()=>false)),'data 不应被 rename 进事务目录');
+});
+test('portable data root must not overlap an exchanged top-level item',{skip:process.platform!=='win32'},async t=>{
  const f=await fixture(t);
+ assert.equal(portableDataTopLevel(f.install,path.join(f.install,'data')),'data');
+ assert.equal(portableDataTopLevel(f.install,f.data),null);
+ assert.throws(()=>portableDataTopLevel(f.install,path.join(f.install,'dpx')),/data-root-invalid/);
+ assert.throws(()=>portableDataTopLevel(f.install,path.join(f.install,'sidecar','data')),/data-root-invalid/);
+ for(const bad of [path.join(f.install,'dpx','data'),path.join(f.install,'sidecar','extra')]){
+  await assert.rejects(preparePortable({installRoot:f.install,stageRoot:f.stage,transactionId:crypto.randomUUID(),version:'6.0.1',target:TARGET,dataBinding:{home:bad},protectedRoots:[bad],dataRoot:bad}),/data-root-invalid/);
+ }
+ await assert.rejects(assertExchangeBoundary(f.install,[path.join(f.install,'dpx')],PORTABLE_ITEMS),/data-overlap/);
+ await assert.rejects(assertExchangeBoundary(f.install,[f.install],PORTABLE_ITEMS),/data-overlap/);
+ await assertExchangeBoundary(f.install,[path.join(f.install,'data')],PORTABLE_ITEMS);
+});
+test('user junctions inside portable data do not block update preparation',{skip:process.platform!=='win32'},async t=>{
+ const f=await fixture(t);const data=path.join(f.install,'data');const links=path.join(data,'links');
+ await fs.mkdir(links,{recursive:true});await fs.writeFile(path.join(data,'session.json'),'durable');
+ await fs.symlink(data,path.join(links,'self'),'junction');
+ const journal=await preparePortable({installRoot:f.install,stageRoot:f.stage,transactionId:crypto.randomUUID(),version:'6.0.1',target:TARGET,dataBinding:{home:data},protectedRoots:[data],dataRoot:data});
+ await exchangePortable(journal,async()=>true,async()=>true);
+ assert.equal(await fs.readFile(path.join(data,'session.json'),'utf8'),'durable');
+});
+
+async function helperFixture(t:any,variant='',nativeShell?:Buffer,insideData=false){
+ const f=await fixture(t);
+ if(insideData){f.data=path.join(f.install,'data');await fs.mkdir(f.data,{recursive:true});}
  if(variant)await fs.writeFile(path.join(f.stage,'sidecar/server.js'),variant);
  if(nativeShell)await fs.writeFile(path.join(f.stage,'dsh-eac-shell.exe'),nativeShell);
  if(variant||nativeShell)await makeReleaseFiles(f.stage,'6.0.1',TARGET);
@@ -193,6 +232,15 @@ async function helperFixture(t:any,variant='',nativeShell?:Buffer){
  return {...f,journal,packageFile,artifact,trustedKey,binding};
 }
 async function waitFile(file:string){const deadline=Date.now()+15000;while(Date.now()<deadline){try{return JSON.parse(await fs.readFile(file,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code!=='ENOENT')throw error;}await new Promise(resolve=>setTimeout(resolve,100));}throw new Error('helper result timed out');}
+test('helper accepts portable binding roots inside the unexchanged data directory',{skip:process.platform!=='win32'},async t=>{
+ // 与上一条相反：<install>/data 不是交换项，helper 的边界检查必须放行，
+ // 否则便携版的数据根一旦落进安装树，内置更新会被自己拒绝。
+ const {startPortableHelper}=require('../lib/desktop/update-portable-helper.js');const f=await helperFixture(t,'',undefined,true);
+ const handle=await startPortableHelper({...f,owners:[process.pid],healthTimeoutMs:1000});await handle.commit();await handle.waitForExit();
+ const result=await waitFile(path.join(f.journal.transactionDir,'helper-result.json'));
+ assert.notEqual(result.error,'update-helper-binding-invalid');
+ assert.equal(await version(f.install),'6.0.0');
+});
 test('standalone copied helper acknowledges a verified ZIP and cancellation changes no installed file',async t=>{
  const {startPortableHelper}=require('../lib/desktop/update-portable-helper.js');const f=await helperFixture(t);
  const handle=await startPortableHelper({...f,owners:[process.pid]});assert.ok(handle.pid>0);assert.notEqual(handle.pid,process.pid);
