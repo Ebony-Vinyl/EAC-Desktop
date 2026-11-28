@@ -19,21 +19,72 @@ import {
 const MACHO64 = Buffer.from([0xcf, 0xfa, 0xed, 0xfe, 0x00, 0x00]);
 const ELF = Buffer.from([0x7f, 0x45, 0x4c, 0x46, 0x00, 0x00]);
 
-test('安装载荷裁剪嵌套 Zod 自测和 source maps，保留运行时类型、源文件和其他包资源', (t) => {
+test('安装载荷裁剪 v3：特征前置、引用豁免、规则桶与许可保留', (t) => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'prune-development-'));
   t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const removed = ['pkg/lib/index.js.map', 'pkg/node_modules/zod/src/v4/core/tests/check.test.ts'];
-  const retained = ['pkg/lib/index.js', 'pkg/lib/index.d.ts', 'pkg/lib/typert.host.js',
-    'pkg/node_modules/zod/src/v4/core/check.ts', 'pkg/node_modules/zod/v4/core/check.js',
-    'other/src/tests/runtime.js', 'pkg/assets/key.map'];
+  // 每项恰好一个文件；目录命中时其内部文件一并计入。
+  const removed = [
+    'pkg/lib/index.js.map',
+    'pkg/tests/alpha.test.js', // 有测试特征 → 整删
+    'pkg/tests/fixture.json', // 同目录连带
+    'pkg/CHANGELOG.md',
+    'pkg/CHANGES.md', // 文档扩展名 → 元数据（changes.js 运行模块不在此列）
+    'pkg/lib/index.d.ts',
+    'pkg/dist/deep/nested.d.cts',
+    'pkg/.eslintrc.json',
+    'pkg/docs/guide/intro.md', // docs 无条件整删
+    'pkg/docs/other.md',
+    'pkg/coverage/lcov.info',
+    'pkg/Examples/demo.spec.js', // 大小写不敏感 + 有特征
+    'pkg2/Specs/api.spec.js', // specs 名同样大小写不敏感
+  ];
+  const retained = [
+    'pkg/lib/index.js',
+    'pkg/lib/typert.host.js',
+    'pkg/node_modules/zod/src/v4/core/check.ts', // 运行期 TS 源码保留（L2-C 另行验证）
+    'pkg/node_modules/zod/v4/core/check.js',
+    'pkg/data/key.map', // 非映射命名的数据文件
+    'pkg/prompts/system.md', // 非元数据命名的 .md（可能是运行期模板）
+    'pkg/test-suite/helpers.js', // 无测试特征 → 整目录保留（特征前置）
+    'pkg2/tests/only.data', // 无特征 → 保留（独立包避免 Windows 大小写不敏感目录合并）
+    'pkg/changes.js', // 运行模块：changes 元数据规则只认文档扩展名
+    'pkg2/lib2/doc/Document.js', // yaml/dist/doc 教训：doc 目录含 JS → 整目录保留
+    'pkg2/lib2/doc/runtime.js',
+    'pkg/docs/data.json', // 被保留 JS 显式引用 → 引用豁免
+    'pkg/LICENSE',
+    'pkg/NOTICE.md',
+    'pkg/package.json',
+  ];
   for (const file of [...removed, ...retained]) {
     fs.mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
     fs.writeFileSync(path.join(root, file), 'fixture');
   }
-  assert.equal(pruneDevelopmentPayloads(root), removed.length);
+  fs.writeFileSync(
+    path.join(root, 'pkg/lib/loader.js'),
+    'const data = require("../docs/data.json");\nmodule.exports = data;\n',
+  );
+
+  const result = pruneDevelopmentPayloads(root);
+  assert.equal(result.removed, removed.length);
+  assert.equal(result.journal.totalRemoved, removed.length);
+  assert.equal(result.journal.referenceScan.exemptedFiles, 1);
+  assert.deepEqual(result.journal.exemptions, [
+    { path: 'pkg/docs/data.json', referencedBy: 'pkg/lib/loader.js' },
+  ]);
+  assert.equal(result.journal.byRule.maps, 1);
+  assert.equal(result.journal.byRule.metadata, 3); // CHANGELOG.md + CHANGES.md + .eslintrc.json
+  assert.equal(result.journal.byRule.declarations, 2);
+  assert.equal(result.journal.directories.docs, 2); // data.json 豁免不计入删除
+  assert.equal(result.journal.directories.tests, 2);
+  assert.equal(result.journal.directories.specs, 1);
+  assert.equal(result.journal.emptyDirsRemoved, 4); // tests/Examples/coverage/Specs 清空后被删；docs 因豁免保留
+
   for (const file of removed) assert.equal(fs.existsSync(path.join(root, file)), false, file);
   for (const file of retained) assert.equal(fs.existsSync(path.join(root, file)), true, file);
-  assert.equal(pruneDevelopmentPayloads(root), 0);
+  assert.equal(fs.existsSync(path.join(root, 'pkg/coverage')), false, '清空的规则目录应被删除');
+  assert.equal(fs.existsSync(path.join(root, 'pkg/docs')), true, '含豁免文件的目录保留');
+
+  assert.equal(pruneDevelopmentPayloads(root).removed, 0); // 幂等
 });
 
 function elf64(machine: number): Buffer {
