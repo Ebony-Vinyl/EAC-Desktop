@@ -10,6 +10,7 @@ import path = require('node:path');
 import os = require('node:os');
 import fs = require('node:fs');
 import { APP_ROOT } from './runtime-paths';
+import { writeFileAtomic } from '../atomic-json.js';
 // scripts/patch-session-manage.js 尚未类型化（工具链脚本，暂不收编）。
 const { patchSessionManage } = require('../../scripts/patch-session-manage') as {
   patchSessionManage(root: string, log: (m: string) => void): number;
@@ -127,3 +128,160 @@ export function applyKernelTagToneFix(): void {
 // 正确做法是改设置项 `centerSettings` 的默认值（作者实现好了两种布局），
 // 落在精简版的播种流程里：见 lite-skins.ts 的 applyOrcaCenterSettingsDefault。
 // 只对 lite 生效，full 不动。
+
+// ---------------------------------------------------------------------------
+// Issue #439：旧会话未知 Agent Preset（如 5.x 遗留的 anchored-standard）恢复兼容
+//
+// 背景：EAC 5.x（0.1.x 内核）随包通过 .agent-presets 目录分发 anchored-standard 等
+// 社区预设并设为默认，老用户的历史会话日志与设置中普遍记录了该预设 ID。升级至 6.x
+// （0.2.x 注册制内核 @deepseek-ai/dsh-agent-preset-registry）后，内核不再扫描
+// .agent-presets 目录：
+//   1. 若用户残留 selectedDefault='anchored-standard'，defaultId 会指向未注册预设，
+//      导致新建会话或默认回退直接抛 `Unknown agent preset`；
+//   2. ApiSessionAgentController.resumeObserved 与 fork 严格调用 composeAgent(recordedPreset)，
+//      不像 SessionSkillCatalog.scopeFor 那样对未知历史预设降级回退，导致旧对话无法打开、
+//      无法切换模型（而显式 createSession / agentPresets.select 指定未知预设的 API 报错契约
+//      必须原样保留，不能在 resolve/retain 底层一刀切吞错）。
+// ---------------------------------------------------------------------------
+
+export const LEGACY_PRESET_DEFAULT_MARKER = 'dsh-desktop:legacy-preset-default-v1';
+export const LEGACY_PRESET_RESUME_MARKER = 'dsh-desktop:legacy-preset-resume-v1';
+
+const PRESET_REGISTRY_DEFAULT_ANCHOR = [
+  '\t\tget defaultId() {',
+  '\t\t\treturn this.config.selectedDefault.get() ?? this.config.default;',
+  '\t\t}',
+].join('\n');
+
+const PRESET_REGISTRY_DEFAULT_REPLACEMENT = [
+  '\t\tget defaultId() {',
+  `\t\t\t/* ${LEGACY_PRESET_DEFAULT_MARKER} */`,
+  '\t\t\tconst selected = this.config.selectedDefault.get();',
+  '\t\t\tif (selected !== void 0 && (this.definitions.size === 0 || this.definitions.has(selected))) return selected;',
+  '\t\t\treturn this.config.default;',
+  '\t\t}',
+].join('\n');
+
+const SESSION_COMPOSE_HEAD_ANCHOR = [
+  '\tasync composeAgent(presetId) {',
+  '\t\tconst presets = this.ctx.get("agentPresets");',
+].join('\n');
+
+const SESSION_COMPOSE_OBSERVED_HELPER = [
+  `\t/* ${LEGACY_PRESET_RESUME_MARKER} */`,
+  '\tasync composeObservedAgent(presetId, sessionId) {',
+  '\t\ttry {',
+  '\t\t\treturn await this.composeAgent(presetId);',
+  '\t\t} catch (error) {',
+  '\t\t\tif (presetId === void 0 || remoteErrorOf(error)?.code !== "agent-preset/not-found") throw error;',
+  '\t\t\tconst log = typeof this.ctx.logger === "function" ? this.ctx.logger("api-session") : this.ctx.logger;',
+  '\t\t\tlog?.warn?.(`api-session: session "${sessionId}" recorded unknown agent preset "${presetId}", falling back to default preset`);',
+  '\t\t\treturn await this.composeAgent(void 0);',
+  '\t\t}',
+  '\t}',
+].join('\n');
+
+const SESSION_RESUME_ANCHOR = '\t\tconst composition = await this.composeAgent(this.presetForObservation(observation));';
+const SESSION_RESUME_REPLACEMENT = '\t\tconst composition = await this.composeObservedAgent(this.presetForObservation(observation), sessionId);';
+
+const SESSION_FORK_ANCHOR = '\t\t\tconst composition = await this.agents.composeAgent(this.agents.presetForObservation(source));';
+const SESSION_FORK_REPLACEMENT = '\t\t\tconst composition = await this.agents.composeObservedAgent(this.agents.presetForObservation(source), source.header.id);';
+
+export function patchLegacyAgentPresetRegistrySource(source: string): string | undefined {
+  if (source.includes(LEGACY_PRESET_DEFAULT_MARKER)) return source;
+  if (source.split(PRESET_REGISTRY_DEFAULT_ANCHOR).length !== 2) return undefined;
+  return source.replace(PRESET_REGISTRY_DEFAULT_ANCHOR, () => PRESET_REGISTRY_DEFAULT_REPLACEMENT);
+}
+
+export function patchLegacySessionPresetResumeSource(source: string): string | undefined {
+  if (source.includes(LEGACY_PRESET_RESUME_MARKER)) return source;
+  if (
+    source.split(SESSION_COMPOSE_HEAD_ANCHOR).length !== 2
+    || source.split(SESSION_RESUME_ANCHOR).length !== 2
+    || source.split(SESSION_FORK_ANCHOR).length !== 2
+  ) {
+    return undefined;
+  }
+  return source
+    .replace(SESSION_COMPOSE_HEAD_ANCHOR, () => `${SESSION_COMPOSE_OBSERVED_HELPER}\n${SESSION_COMPOSE_HEAD_ANCHOR}`)
+    .replace(SESSION_RESUME_ANCHOR, () => SESSION_RESUME_REPLACEMENT)
+    .replace(SESSION_FORK_ANCHOR, () => SESSION_FORK_REPLACEMENT);
+}
+
+export function applyLegacyAgentPresetCompatToNodeModules(
+  nmRoot: string,
+  log: (msg: string) => void = () => {},
+): number {
+  let changed = 0;
+  const targets: Array<{
+    rel: string;
+    patch: (src: string) => string | undefined;
+    label: string;
+  }> = [
+    {
+      rel: path.join('@deepseek-ai', 'dsh-agent-preset-registry', 'lib', 'index.js'),
+      patch: patchLegacyAgentPresetRegistrySource,
+      label: 'agent-preset-registry defaultId 自愈',
+    },
+    {
+      rel: path.join('@deepseek-ai', 'dsh-api-session-controller', 'lib', 'index.js'),
+      patch: patchLegacySessionPresetResumeSource,
+      label: 'api-session-controller 旧会话未知预设恢复回退',
+    },
+  ];
+  for (const item of targets) {
+    const file = path.join(nmRoot, item.rel);
+    if (!fs.existsSync(file)) continue;
+    let original: string;
+    try {
+      original = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    const next = item.patch(original);
+    if (next === undefined) {
+      log(`跳过 ${item.label}（锚点未匹配: ${file}）`);
+      continue;
+    }
+    if (next === original) continue;
+    writeFileAtomic(file, next);
+    changed += 1;
+    log(`已应用 ${item.label}: ${file}`);
+  }
+  return changed;
+}
+
+export function assertLegacyAgentPresetCompatApplied(nmRoot: string): void {
+  const registryFile = path.join(nmRoot, '@deepseek-ai', 'dsh-agent-preset-registry', 'lib', 'index.js');
+  const controllerFile = path.join(nmRoot, '@deepseek-ai', 'dsh-api-session-controller', 'lib', 'index.js');
+  const hasRegistry = fs.existsSync(registryFile);
+  const hasController = fs.existsSync(controllerFile);
+  // 0.1.x 目录扫描内核不存在 dsh-agent-preset-registry，直接放行；
+  // 只要任一 0.2.x 目标包在位，就必须分别断言两端补丁 marker 同时落盘，杜绝半生效状态。
+  if (!hasRegistry && !hasController) return;
+  if (!hasRegistry) {
+    throw new Error(`[legacy-preset-compat] missing ${registryFile} while ${controllerFile} exists`);
+  }
+  if (!hasController) {
+    throw new Error(`[legacy-preset-compat] missing ${controllerFile} while ${registryFile} exists`);
+  }
+  const registryContent = fs.readFileSync(registryFile, 'utf8');
+  if (!registryContent.includes(LEGACY_PRESET_DEFAULT_MARKER)) {
+    throw new Error(`[legacy-preset-compat] missing marker ${LEGACY_PRESET_DEFAULT_MARKER} in ${registryFile}`);
+  }
+  const controllerContent = fs.readFileSync(controllerFile, 'utf8');
+  if (!controllerContent.includes(LEGACY_PRESET_RESUME_MARKER)) {
+    throw new Error(`[legacy-preset-compat] missing marker ${LEGACY_PRESET_RESUME_MARKER} in ${controllerFile}`);
+  }
+}
+
+export function applyLegacyAgentPresetCompatFix(): void {
+  for (const root of runtimePatchRoots()) {
+    if (!root || !fs.existsSync(root)) continue;
+    try {
+      applyLegacyAgentPresetCompatToNodeModules(root, (m) => ctx.log('boot', m));
+    } catch (err) {
+      ctx.log('boot', '旧会话预设兼容补丁失败(' + root + '): ' + (err as Error).message);
+    }
+  }
+}

@@ -26,7 +26,7 @@ import { isLiteDisabled, readInstallProfile } from './install-profile';
 import { seedLiteBundledSkins, applyOrcaSettingsLayoutFix, LITE_BUNDLED_SKINS } from './lite-skins';
 import { desktopProfile, desktopProfileDir, ensureDesktopProfileInit, BUNDLED_BUILTIN_PLUGINS } from './profile';
 import { ensureGuard } from './guard-box';
-import { applySessionManageFix, applyKernelTagToneFix } from './runtime-patches';
+import { applySessionManageFix, applyKernelTagToneFix, applyLegacyAgentPresetCompatFix } from './runtime-patches';
 import { pluginCapabilityDetails } from './platform';
 import { writeFileAtomic } from '../atomic-json.js';
 import { explicitDisabledEntryIds, parsePatchData, removeDisabledRow, resolveBundleIdentities, resolveBundleIdentity, toggleBundleInPatch } from '../bundle-identity';
@@ -985,6 +985,8 @@ export function syncCompanionPlugins(): void {
     applySessionManageFix();
     //  · 内核前端 CSS：反色标签把背景层色当文字色用，字看不见（详见模块头注释）。
     applyKernelTagToneFix();
+    //  · 0.2.x 注册制内核下恢复 5.x 旧会话未知预设（如 anchored-standard）的安全回退（Issue #439）。
+    applyLegacyAgentPresetCompatFix();
     const profileDirP = desktopProfileDir();
     // 内置社区 agent preset（anchored-standard：首请求锚定 Minimal 工具对，
     // 首次工具调用/回复后开放完整 Standard 目录）：安装到用户 preset 根。
@@ -1020,11 +1022,17 @@ export function syncCompanionPlugins(): void {
       if (routerPersonaMigrated.length) {
         ctx.log('boot', '已修复内置 Router preset 的人设卡组合: ' + routerPersonaMigrated.join(', '));
       }
-      // 默认 preset 指到内置的 anchored-standard（用户已在 settings.yaml 写过
-      // default 则一律保留）。失败只降级为官方默认 preset，不影响启动。
-      const defaultResult = ensureDefaultAgentPreset(home, 'anchored-standard', (m) => ctx.log('boot', m));
-      if (defaultResult === 'set') ctx.log('boot', '已设置默认 agent preset: anchored-standard');
-      else if (defaultResult === 'kept') ctx.log('boot', '用户已设置默认 agent preset，保持不变');
+      // 0.1.x 目录扫描内核下，默认 preset 指到内置的 anchored-standard；
+      // 0.2.x 已切换为 @deepseek-ai/dsh-agent-preset-registry 插件声明注册制，不再扫描
+      // .agent-presets 目录，此时不得再向 settings.yaml 写入未注册的 anchored-standard（Issue #439）。
+      const usesDeclarativePresetRegistry =
+        fs.existsSync(path.join(APP_ROOT, 'node_modules', '@deepseek-ai', 'dsh-agent-preset-registry'))
+        && !fs.existsSync(path.join(APP_ROOT, 'node_modules', '@deepseek-ai', 'dsh-agent-presets'));
+      if (!usesDeclarativePresetRegistry) {
+        const defaultResult = ensureDefaultAgentPreset(home, 'anchored-standard', (m) => ctx.log('boot', m));
+        if (defaultResult === 'set') ctx.log('boot', '已设置默认 agent preset: anchored-standard');
+        else if (defaultResult === 'kept') ctx.log('boot', '用户已设置默认 agent preset，保持不变');
+      }
     } else {
       ctx.log('boot', 'Linux 使用上游默认 agent preset；未同步 Windows PowerShell/Git Bash 调优 preset');
     }
