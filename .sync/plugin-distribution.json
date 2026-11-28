@@ -535,6 +535,16 @@
         "target": "bundled",
         "state": "migrated"
       }
+    },
+    {
+      "id": "dsh-overlay-guard",
+      "distributionClass": "builtin",
+      "delivery": "bundled",
+      "migration": {
+        "current": "bundled",
+        "target": "bundled",
+        "state": "migrated"
+      }
     }
   ]
 }

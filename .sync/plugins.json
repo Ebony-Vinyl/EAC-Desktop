@@ -654,6 +654,45 @@
         "reviewOnChange": true
       },
       "owner": "desktop-plugins"
+    },
+    {
+      "id": "dsh-overlay-guard",
+      "kind": "plugin",
+      "path": "dsh-desktop/assets/plugins/dsh-overlay-guard",
+      "packageName": "dsh-overlay-guard",
+      "class": "internal",
+      "source": {
+        "kind": "internal",
+        "name": "dsh-overlay-guard",
+        "reason": "EAC original plugin maintained in this repository; dsh-plugin.json declares eac-private maintenance"
+      },
+      "request": {
+        "mode": "exact",
+        "version": "1.0.0"
+      },
+      "sync": {
+        "mode": "manual",
+        "patches": [],
+        "preservePaths": []
+      },
+      "runtimeUpdate": {
+        "allowed": false,
+        "defaultAction": "prompt"
+      },
+      "validation": {
+        "entrypoints": [
+          "lib/index.js",
+          "lib/client.js"
+        ],
+        "commands": [
+          "node tests/smoke.mjs"
+        ]
+      },
+      "license": {
+        "expected": "MIT",
+        "reviewOnChange": true
+      },
+      "owner": "desktop-plugins"
     }
   ],
   "skins": [],

@@ -26,6 +26,19 @@ test('plugin-sync.mjs validate passes across inventory, distribution, lock, and 
   assert.match(output, /^lock valid: entries=\d+/m);
 });
 
+test('overlay guard identity points to its own source ledger entry', () => {
+  const identity = JSON.parse(readFileSync(
+    join(desktopRoot, 'assets', 'plugins', 'dsh-overlay-guard', 'dsh-plugin.json'), 'utf8',
+  ));
+  const ledger = JSON.parse(readFileSync(join(desktopRoot, 'assets', 'SOURCES.json'), 'utf8'));
+  const component = ledger.components.find(
+    (entry: { id: string }) => identity['x-eac'].ledger === `assets/SOURCES.json#${entry.id}`,
+  );
+  assert.equal(component?.name, 'dsh-overlay-guard');
+  assert.equal(component?.path, 'dsh-desktop/assets/plugins/dsh-overlay-guard');
+  assert.equal(component?.version, identity.version);
+});
+
 test('ADR 0008 delegates distribution counts to .sync/plugin-distribution.json without stale hardcoded totals', () => {
   const adr = readFileSync(
     join(repoRoot, 'docs', 'adr', '0008-plugin-distribution-boundary.md'),
