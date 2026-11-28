@@ -28,6 +28,69 @@
 ; （NSIS DeleteRegKey 无错误返回）。该路径为 best-effort：尽力卸载旧文件并
 ; 提示，避免「两个版本并存 + 旧条目打开报错」；HKCU 场景才是全覆盖清理。
 
+; ---- 产品数据根（卸载期"删除应用数据"的清理目标） ---------------------------
+; Tauri 模板的"删除应用数据"只清 $APPDATA/$LOCALAPPDATA\${BUNDLEID}
+; （com.deepseek.dsh.desktop.tauri），而 EAC 的真实用户数据在产品名目录下：
+; 安装环境隔离把 dpx 环境、插件 profile、会话与凭据都放在
+; %LOCALAPPDATA%\Deepseek Harness EAC\dpx\dsh-environments\<通道>。
+; 两个路径都可用 /D 覆盖 —— 夹具 installer-uninstall-cleanup.test.ts 必须能在
+; 临时目录验证清理行为，不能触碰真实用户目录。
+
+; 测试接缝：扫描“其它安装”的注册表根；生产默认使用真实 Uninstall 根。
+!ifndef DSH_SCAN_ROOT
+  !define DSH_SCAN_ROOT "Software\Microsoft\Windows\CurrentVersion\Uninstall"
+!endif
+!ifndef DSH_PRODUCT_DATA_DIR
+  !define DSH_PRODUCT_DATA_DIR "$LOCALAPPDATA\Deepseek Harness EAC"
+!endif
+!ifndef DSH_PRODUCT_ROAMING_DIR
+  !define DSH_PRODUCT_ROAMING_DIR "$APPDATA\Deepseek Harness EAC"
+!endif
+
+; ---- 旧版登记保留（异目录并存场景） ----------------------------------------
+; 被保留的旧版在"应用和功能"里的登记必须留在旧版自己的卸载器上：模板随后会用新
+; $INSTDIR 覆写同一个 ${UNINSTKEY}，所以 PREINSTALL 先把旧值暂存，POSTINSTALL 再
+; 写回带版本后缀的独立键。以下变量由 PREINSTALL 清空、由接管宏按需填充。
+Var DshKeptInstallDir
+Var DshKeptUninstallString
+Var DshKeptKeyName
+Var DshKeptVersion
+
+; 目录归一化：去尾反斜杠（盘符根除外）。NSIS 的 StrCmp 本身大小写不敏感，
+; 因此 (归一化 + StrCmp) 即"去尾斜杠 + 大小写不敏感"的路径比较。
+!macro DSH_NormalizeDir SRC OUT
+  StrCpy ${OUT} "${SRC}"
+  StrLen $R9 ${OUT}
+  ${If} $R9 > 3
+    StrCpy $R8 ${OUT} 1 -1
+    ${If} $R8 == "\"
+      StrCpy ${OUT} ${OUT} -1
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+; 注册表键名片段净化：只去掉反斜杠（Windows 注册表键名唯一非法字符），
+; 空值退化为 unknown。
+!macro DSH_SanitizeKeyPart SRC OUT
+  StrCpy ${OUT} ""
+  StrCpy $R8 0
+  StrLen $R9 "${SRC}"
+  ${DoWhile} $R8 < $R9
+    StrCpy $R7 "${SRC}" 1 $R8
+    IntOp $R8 $R8 + 1
+    ${If} $R7 != "\"
+      StrCpy ${OUT} "${OUT}$R7"
+    ${EndIf}
+  ${Loop}
+  ${If} ${OUT} == ""
+    StrCpy ${OUT} "unknown"
+  ${EndIf}
+!macroend
+
+; 暂存被保留旧版的登记由接管宏内联完成（宏参数无法携带含空格的键名，
+; 而 ${KEYNAME} 只在 DSH_TakeoverOldShell 展开期有效）。
+
+
 !macro DSH_TakeoverOldShell HIVE KEYNAME
   ReadRegStr $0 ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEYNAME}" "UninstallString"
   ${If} $0 != ""
@@ -73,32 +136,49 @@
       ${EndIf}
     ${EndIf}
     ${If} ${FileExists} "$3"
-      DetailPrint "DSH EAC: 检测到旧壳（${KEYNAME} @ ${HIVE}），静默卸载以接管安装（数据不受影响）"
-      ; 程序路径必须用剥过引号的 $3：内嵌原始 $0 展开成 ""path" 会导致
-      ; spawn 失败（R6 实测复现）。_?= 必须裸写不加引号：NSIS 卸载器原样
-      ; 取命令行剩余串当安装目录，带引号会内嵌字面 " 而静默失效（实测退出码 2、
-      ; 零删除）；也正因原样取剩余，含空格目录无需引号（官方文档示例 _?=$INSTDIR）。
-      ; $1（InstallLocation）为空时 _?= 空目录行为未定义 —— 跳过卸载器调用，
-      ; 保留登记，不能把未知安装目录当作安全卸载目标。
+      ; 目录判定先于一切搬运：只有旧装目录与本次安装目录相同才算"原地升级"，才允许
+      ; 静默接管卸载；异目录说明用户在装第二个版本（或刻意保留旧版），不得代其卸载。
+      ; 比较前两侧都做归一化（去尾反斜杠；StrCmp 本身大小写不敏感）。
+      !insertmacro DSH_NormalizeDir "$1" $R2
+      !insertmacro DSH_NormalizeDir "$INSTDIR" $R3
       ${If} $1 == ""
         DetailPrint "DSH EAC: 旧壳 InstallLocation 为空，跳过卸载器调用并保留登记"
+      ${ElseIf} $R2 != $R3
+        ; 只在"新安装与旧登记同一 hive"时补写保留键：currentUser 安装写 HKCU，
+        ; 模板会覆写 HKCU 的同名键；HKLM 的旧登记不会被覆写，再补一份 HKCU 键
+        ; 只会在"应用和功能"里出现重复条目。
+        !if "${HIVE}" == "HKCU"
+          ${If} $DshKeptInstallDir == ""
+            StrCpy $DshKeptInstallDir "$1"
+            StrCpy $DshKeptUninstallString "$3"
+            StrCpy $DshKeptKeyName "${KEYNAME}"
+            ReadRegStr $DshKeptVersion ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEYNAME}" "DisplayVersion"
+            ${If} $DshKeptVersion == ""
+              StrCpy $DshKeptVersion "unknown"
+            ${EndIf}
+          ${EndIf}
+        !endif
+        DetailPrint "DSH EAC: 旧版位于另一目录（$1），保留安装与登记，不接管"
+      ${ElseIf} ${FileExists} "$1\dsh-eac-shell.exe"
+        DetailPrint "EAC: native installation handled by Tauri reinstall; skipping legacy takeover"
       ${Else}
-        ${If} ${FileExists} "$1\dsh-eac-shell.exe"
-          DetailPrint "EAC: native installation handled by Tauri reinstall; skipping legacy takeover"
-        ${Else}
-          !insertmacro DSH_RequireClosed "$1\Deepseek Harness EAC.exe"
-          ClearErrors
-          ExecWait '"$3" /S /UPDATE _?=$1' $R0
-          ${If} ${Errors}
-            SetErrorLevel 2
-            Quit
-          ${EndIf}
-          ${If} $R0 <> 0
-            SetErrorLevel 2
-            Quit
-          ${EndIf}
-          DeleteRegKey ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEYNAME}"
+        DetailPrint "DSH EAC: 检测到旧壳（${KEYNAME} @ ${HIVE}），静默卸载以接管安装（数据不受影响）"
+        ; 程序路径必须用剥过引号的 $3：内嵌原始 $0 展开成 ""path" 会导致
+        ; spawn 失败（R6 实测复现）。_?= 必须裸写不加引号：NSIS 卸载器原样
+        ; 取命令行剩余串当安装目录，带引号会内嵌字面 " 而静默失效（实测退出码 2、
+        ; 零删除）；也正因原样取剩余，含空格目录无需引号（官方文档示例 _?=$INSTDIR）。
+        !insertmacro DSH_RequireClosed "$1\Deepseek Harness EAC.exe"
+        ClearErrors
+        ExecWait '"$3" /S /UPDATE _?=$1' $R0
+        ${If} ${Errors}
+          SetErrorLevel 2
+          Quit
         ${EndIf}
+        ${If} $R0 <> 0
+          SetErrorLevel 2
+          Quit
+        ${EndIf}
+        DeleteRegKey ${HIVE} "Software\Microsoft\Windows\CurrentVersion\Uninstall\${KEYNAME}"
       ${EndIf}
     ${Else}
       DetailPrint "DSH EAC: 旧壳卸载键为脏值（卸载器缺失），仅清理注册表"
@@ -170,6 +250,10 @@ Var DshProfileChoice
   ${If} $UpdateMode <> 1
     ; current Tauri updates belong to the generated reinstall page; takeover only
     ; handles legacy registered shells and never runs twice in UPDATE mode.
+    StrCpy $DshKeptInstallDir ""
+    StrCpy $DshKeptUninstallString ""
+    StrCpy $DshKeptKeyName ""
+    StrCpy $DshKeptVersion ""
     !insertmacro DSH_TakeoverOldShell HKCU "Deepseek Harness EAC"
     !insertmacro DSH_TakeoverOldShell HKCU "com.deepseek.dsh.desktop"
     !insertmacro DSH_TakeoverOldShell HKCU "com.deepseek.dsh.desktop.tauri"
@@ -206,6 +290,17 @@ Var DshProfileChoice
     Quit
   ${EndIf}
   FileClose $R8
+  ; 异目录存活的旧版：模板已把 ${UNINSTKEY} 覆写为新安装，这里把旧登记写回独立键，
+  ; 让"应用和功能"仍能卸载被保留的旧版（UninstallString 指向旧版自己的卸载器）。
+  ${If} $DshKeptInstallDir != ""
+    !insertmacro DSH_SanitizeKeyPart "$DshKeptVersion" $R4
+    WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\$DshKeptKeyName ($R4)" "DisplayName" "Deepseek Harness EAC ($R4)"
+    WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\$DshKeptKeyName ($R4)" "DisplayVersion" "$DshKeptVersion"
+    WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\$DshKeptKeyName ($R4)" "InstallLocation" "$\"$DshKeptInstallDir$\""
+    WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\$DshKeptKeyName ($R4)" "UninstallString" "$\"$DshKeptUninstallString$\""
+    WriteRegStr SHCTX "Software\Microsoft\Windows\CurrentVersion\Uninstall\$DshKeptKeyName ($R4)" "Publisher" "Deepseek Harness EAC"
+    DetailPrint "DSH EAC: 已保留旧版登记 $DshKeptKeyName ($R4) -> $DshKeptInstallDir"
+  ${EndIf}
 !macroend
 ; ===========================================================================
 ; 官方安装器 UI 复用（s7，2026-09-26）
@@ -667,3 +762,191 @@ FunctionEnd
     MessageBox MB_ICONINFORMATION "$(DSH_STR_PER_USER)" /SD IDOK
   ${EndIf}
 !macroend
+
+; ---- 卸载期清理：勾选"删除应用数据"时才清理产品数据根 --------------------
+; 模板在 Section Uninstall 内插入本宏（模板 installer.nsi 的 NSIS_HOOK_POSTUNINSTALL
+; 位置），此时 $DeleteAppDataCheckboxState 已由模板的确认页写入：
+;   = 1 → 用户明确勾选"删除应用数据"，按官方语义连产品数据根一起清；
+;   ≠ 1（含 /S 静默卸载，确认页不显示、变量为空）→ 默认保留，绝不误删会话与凭据。
+; 数据根内的 profiles\node_modules 是指向安装目录的包 junction：RmDir /r 会跟进重解析点
+; （实测把链接目标里的文件一起删掉），因此这里用 DshRemoveTreeNoFollow 逐项判定：
+; 文件 Delete、重解析点 RMDir（只删链接）、真实目录递归。
+; 回归测试用 canary 目录把"不得删除链接目标"这条钉住。
+; 枚举 Uninstall 键，判断是否还有其它 EAC 安装（产品名键或 identifier 键，
+; 且 InstallLocation 归一化后不等于本次 $INSTDIR）。命中时 ${OUT}=1。
+!macro DSH_ScanOtherInstall HIVE OUT
+  StrCpy ${OUT} 0
+  StrCpy $R8 0
+  ${Do}
+    EnumRegKey $R7 ${HIVE} "${DSH_SCAN_ROOT}" $R8
+    ${If} $R7 == ""
+      ${ExitDo}
+    ${EndIf}
+    IntOp $R8 $R8 + 1
+    StrCpy $R5 $R7 20
+    ${If} $R5 == "Deepseek Harness EAC"
+      StrCpy $R6 1
+    ${Else}
+      StrCpy $R5 $R7 24
+      ${If} $R5 == "com.deepseek.dsh.desktop"
+        StrCpy $R6 1
+      ${Else}
+        StrCpy $R6 0
+      ${EndIf}
+    ${EndIf}
+    ${If} $R6 == 1
+      ReadRegStr $R4 ${HIVE} "${DSH_SCAN_ROOT}\$R7" "InstallLocation"
+      ; 旧版/非标准登记可能没有 InstallLocation；不能因此把“存在但登记不全的
+      ; 另一份安装”误判成“最后一份安装”，否则会清掉共享数据。
+      ${If} $R4 == ""
+        ReadRegStr $R4 ${HIVE} "${DSH_SCAN_ROOT}\$R7" "Install_Dir"
+      ${EndIf}
+      ${If} $R4 == ""
+        DetailPrint "EAC: $R7 的 InstallLocation 为空，按其它安装保守处理"
+        StrCpy ${OUT} 1
+        ${ExitDo}
+      ${EndIf}
+      ${If} $R4 != ""
+        StrCpy $R5 $R4 1
+        ${If} $R5 == '"'
+          StrCpy $R4 $R4 "" 1
+          StrCpy $R4 $R4 -1
+        ${EndIf}
+        StrCpy $R6 $INSTDIR
+        StrLen $R5 $INSTDIR
+        ${If} $R5 > 3
+          StrCpy $R5 $INSTDIR 1 -1
+          ${If} $R5 == "\"
+            StrCpy $R6 $INSTDIR -1
+          ${EndIf}
+        ${EndIf}
+        StrLen $R5 $R4
+        ${If} $R5 > 3
+          StrCpy $R5 $R4 1 -1
+          ${If} $R5 == "\"
+            StrCpy $R4 $R4 -1
+          ${EndIf}
+        ${EndIf}
+        ${If} $R4 != $R6
+          StrCpy ${OUT} 1
+          ${ExitDo}
+        ${EndIf}
+      ${EndIf}
+    ${EndIf}
+  ${Loop}
+!macroend
+
+!macro NSIS_HOOK_POSTUNINSTALL
+  ${If} $DeleteAppDataCheckboxState = 1
+    ; 方案 2：复选框只删"本版本"数据，共享环境（产品数据根 = 多版本共享的 dpx
+    ; 环境/插件/会话/凭据）留给"最后一份安装"卸载时清理。当前产品还没有按版本
+    ; 分账的用户数据目录，因此其它版本仍在时这里不删任何用户数据。
+    ; 测试接缝：夹具可用 /DDSH_ASSUME_LAST_INSTALL=1 显式模拟"最后一份安装"，
+    ; 否则开发机上的真实 EAC 安装会让该用例变成环境相关（CI 干净机器上不暴露）。
+    !ifdef DSH_ASSUME_LAST_INSTALL
+      StrCpy $R6 0
+    !else
+      !insertmacro DSH_ScanOtherInstall HKCU $R2
+      StrCpy $R6 $R2
+      ${If} $R6 == 0
+        !insertmacro DSH_ScanOtherInstall HKLM $R2
+        StrCpy $R6 $R2
+      ${EndIf}
+    !endif
+    ${If} $R6 == 1
+      DetailPrint "EAC: 检测到其它版本安装，保留共享环境（复选框只删本版本数据）"
+    ${Else}
+      DetailPrint "EAC: 最后一份安装，删除共享产品数据根"
+      Push $R1
+      StrCpy $R1 "${DSH_PRODUCT_DATA_DIR}"
+      Call un.DshRemoveTreeNoFollow
+      RMDir "${DSH_PRODUCT_DATA_DIR}"
+      StrCpy $R1 "${DSH_PRODUCT_ROAMING_DIR}"
+      Call un.DshRemoveTreeNoFollow
+      RMDir "${DSH_PRODUCT_ROAMING_DIR}"
+      Pop $R1
+    ${EndIf}
+  ${EndIf}
+!macroend
+
+; 递归删除目录树，但绝不进入重解析点（junction / 符号链接只删链接本身）。
+; 参数：$R1 = 目标目录。
+; 用运行时栈做后序删除：先压目录的删除标记，再压各子项工作项，子内容因此总在目录
+; 本身之前处理。不使用自递归 —— NSIS 的 FindFirst/FindNext 状态绑定在同一组变量上，
+; 嵌套枚举会覆盖外层遍历状态（实测只删到第一层就中断）。
+; 属性判定走 kernel32::GetFileAttributesW（目录位 0x10、重解析点位 0x400），不经 shell。
+Function un.DshRemoveTreeNoFollow
+  Push $R1
+  Push $R2
+  Push $R3
+  Push $R5
+  Push $R6
+  Push $R7
+  Push $4
+  Push $5
+  Push $7
+  ; 根目录本身也必须先判重解析点：数据根被用户重定向成 junction 时，
+  ; FindFirst 会穿透枚举目标目录并逐个 Delete，造成外部真实数据被删。
+  ; 这里只摘链接（文件重解析点用 Delete），绝不枚举目标。
+  System::Call 'kernel32::GetFileAttributesW(w "$R1") i.r4'
+  ${If} $4 != -1
+    IntOp $7 $4 & 0x400
+    ${If} $7 != 0
+      IntOp $7 $4 & 0x10
+      ${If} $7 == 0
+        Delete "$R1"
+      ${Else}
+        RMDir "$R1"
+      ${EndIf}
+      Goto dsh_remove_tree_done
+    ${EndIf}
+  ${EndIf}
+  StrCpy $R6 1
+  Push "W:$R1"
+  ${DoWhile} $R6 > 0
+    Pop $R5
+    IntOp $R6 $R6 - 1
+    StrCpy $R7 $R5 2
+    StrCpy $R1 $R5 "" 2
+    ${If} $R7 == "D:"
+      RMDir "$R1"
+    ${Else}
+      Push "D:$R1"
+      IntOp $R6 $R6 + 1
+      FindFirst $R2 $R3 "$R1\*.*"
+      ${DoWhile} $R3 != ""
+        ${If} $R3 != "."
+        ${AndIf} $R3 != ".."
+          StrCpy $5 "$R1\$R3"
+          System::Call 'kernel32::GetFileAttributesW(w r5) i.r4'
+          ${If} $4 != -1
+            IntOp $7 $4 & 0x10
+            ${If} $7 == 0
+              Delete "$R1\$R3"
+            ${Else}
+              IntOp $7 $4 & 0x400
+              ${If} $7 != 0
+                RMDir "$R1\$R3"
+              ${Else}
+                Push "W:$R1\$R3"
+                IntOp $R6 $R6 + 1
+              ${EndIf}
+            ${EndIf}
+          ${EndIf}
+        ${EndIf}
+        FindNext $R2 $R3
+      ${Loop}
+      FindClose $R2
+    ${EndIf}
+  ${Loop}
+dsh_remove_tree_done:
+  Pop $7
+  Pop $5
+  Pop $4
+  Pop $R7
+  Pop $R6
+  Pop $R5
+  Pop $R3
+  Pop $R2
+  Pop $R1
+FunctionEnd
